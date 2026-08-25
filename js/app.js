@@ -1,32 +1,33 @@
 // =========================================================
 // Family Dashboard
 // app.js
-// v1.0
+// v2.0
 //
-// 家計ルール
+// ・ホーム
+// ・レシート
+// ・レポート
+// ・夫婦カレンダー
+// ・設定
 //
-// 毎月の生活費予算：250,000円
-//
-// 当月
-// 250,000 - 支出 = 残り
-//
-// 終了した月
-// 残りを「現在の貯蓄」へ加算
-//
-// 前月残金を翌月生活費には繰り越さない
+// 家計開始：2026年8月
+// 月予算：250,000円
 // =========================================================
 
 
 // =========================================================
-// 1. API
+// API
 // =========================================================
 
-const API_URL =
-  "https://script.google.com/macros/s/AKfycbxfmSB9YZCQ5aWsU5yyl3DB2dB6egoz5Y5noF0zGM2cc7ID3jl0DuMh0uNWlguM67s/exec?mode=dashboard";
+const API_BASE =
+  "https://script.google.com/macros/s/AKfycbxfmSB9YZCQ5aWsU5yyl3DB2dB6egoz5Y5noF0zGM2cc7ID3jl0DuMh0uNWlguM67s/exec";
+
+
+const DASHBOARD_API =
+  `${API_BASE}?mode=dashboard`;
 
 
 // =========================================================
-// 2. SETTINGS
+// SETTINGS
 // =========================================================
 
 const SETTINGS = {
@@ -34,20 +35,47 @@ const SETTINGS = {
   refreshInterval:
     60000,
 
-  recentLimit:
-    5,
+  monthlyBudget:
+    250000,
 
-  categoryLimit:
-    20
+  startYear:
+    2026,
+
+  startMonth:
+    8
 
 };
 
 
 // =========================================================
-// 3. STATE
+// STATE
 // =========================================================
 
 let dashboardData =
+  null;
+
+
+let receiptData =
+  [];
+
+
+let scheduleData =
+  [];
+
+
+let currentPage =
+  "home";
+
+
+let receiptDate =
+  new Date();
+
+
+let calendarDate =
+  new Date();
+
+
+let selectedCalendarDate =
   null;
 
 
@@ -56,106 +84,17 @@ let refreshTimer =
 
 
 // =========================================================
-// 4. DOM
-// =========================================================
-
-function getElements() {
-
-  return {
-
-    greeting:
-      document.getElementById(
-        "greeting"
-      ),
-
-    currentMonth:
-      document.getElementById(
-        "currentMonth"
-      ),
-
-    totalMoney:
-      document.getElementById(
-        "totalMoney"
-      ),
-
-    budgetMoney:
-      document.getElementById(
-        "budgetMoney"
-      ),
-
-    balanceMoney:
-      document.getElementById(
-        "balanceMoney"
-      ),
-
-    budgetPercent:
-      document.getElementById(
-        "budgetPercent"
-      ),
-
-    budgetProgress:
-      document.getElementById(
-        "budgetProgress"
-      ),
-
-    progressBar:
-      document.getElementById(
-        "progressBar"
-      ),
-
-    savingActual:
-      document.getElementById(
-        "savingActual"
-      ),
-
-    categoryList:
-      document.getElementById(
-        "categoryList"
-      ),
-
-    recentList:
-      document.getElementById(
-        "recentList"
-      ),
-
-    aiAdvice:
-      document.getElementById(
-        "aiAdvice"
-      ),
-
-    lastUpdated:
-      document.getElementById(
-        "lastUpdated"
-      ),
-
-    errorToast:
-      document.getElementById(
-        "errorToast"
-      ),
-
-    errorMessage:
-      document.getElementById(
-        "errorMessage"
-      )
-
-  };
-
-}
-
-
-// =========================================================
-// 5. MONEY
+// MONEY
 // =========================================================
 
 function yen(value) {
 
-  const number =
-    Number(value) || 0;
-
-
   return (
     "¥" +
-    number.toLocaleString(
+    (
+      Number(value) ||
+      0
+    ).toLocaleString(
       "ja-JP"
     )
   );
@@ -164,7 +103,7 @@ function yen(value) {
 
 
 // =========================================================
-// 6. HTML ESCAPE
+// HTML ESCAPE
 // =========================================================
 
 function escapeHTML(value) {
@@ -197,7 +136,7 @@ function escapeHTML(value) {
 
 
 // =========================================================
-// 7. COLOR
+// COLOR
 // =========================================================
 
 function safeColor(value) {
@@ -211,15 +150,7 @@ function safeColor(value) {
   if (
     /^#[0-9a-fA-F]{6}$/.test(
       color
-    )
-  ) {
-
-    return color;
-
-  }
-
-
-  if (
+    ) ||
     /^#[0-9a-fA-F]{3}$/.test(
       color
     )
@@ -236,112 +167,65 @@ function safeColor(value) {
 
 
 // =========================================================
-// 8. HEADER
+// LOCAL DATE
 // =========================================================
 
-function setHeaderDate(
-  data = null
-) {
-
-  const el =
-    getElements();
-
-
-  const now =
-    new Date();
-
+function localDateKey(date) {
 
   const year =
-    Number(
-      data?.year
-    ) ||
-    now.getFullYear();
+    date.getFullYear();
 
 
   const month =
-    Number(
-      data?.month
-    ) ||
-    now.getMonth() + 1;
+    String(
+      date.getMonth() + 1
+    ).padStart(
+      2,
+      "0"
+    );
 
 
-  if (
-    el.currentMonth
-  ) {
-
-    el.currentMonth.textContent =
-      `${year}年${month}月`;
-
-  }
-
-
-  if (
-    !el.greeting
-  ) {
-
-    return;
-
-  }
+  const day =
+    String(
+      date.getDate()
+    ).padStart(
+      2,
+      "0"
+    );
 
 
-  const hour =
-    now.getHours();
-
-
-  let icon =
-    "🌿";
-
-
-  let greeting =
-    "こんにちは";
-
-
-  if (
-    hour >= 5 &&
-    hour < 11
-  ) {
-
-    icon =
-      "☀️";
-
-
-    greeting =
-      "おはよう";
-
-  }
-
-  else if (
-    hour >= 18 ||
-    hour < 5
-  ) {
-
-    icon =
-      "🌙";
-
-
-    greeting =
-      "こんばんは";
-
-  }
-
-
-  el.greeting.textContent =
-    `${icon} ${greeting}、市川さん`;
+  return (
+    `${year}-${month}-${day}`
+  );
 
 }
 
 
 // =========================================================
-// 9. DATE FORMAT
+// FORMAT DATE
 // =========================================================
 
 function formatDate(value) {
 
-  if (
-    !value
-  ) {
+  if (!value) {
 
     return "";
+
+  }
+
+
+  const match =
+    String(value)
+      .match(
+        /^(\d{4})-(\d{2})-(\d{2})/
+      );
+
+
+  if (match) {
+
+    return (
+      `${Number(match[2])}/${Number(match[3])}`
+    );
 
   }
 
@@ -358,9 +242,7 @@ function formatDate(value) {
     )
   ) {
 
-    return String(
-      value
-    );
+    return String(value);
 
   }
 
@@ -373,218 +255,170 @@ function formatDate(value) {
 
 
 // =========================================================
-// 10. IMAGE URL
+// FETCH JSON
 // =========================================================
 
-function safeImageUrl(value) {
+async function fetchJson(url) {
 
-  if (
-    !value
-  ) {
-
-    return "";
-
-  }
+  const separator =
+    url.includes("?")
+      ? "&"
+      : "?";
 
 
-  try {
+  const response =
+    await fetch(
+      `${url}${separator}_=${Date.now()}`,
+      {
 
-    const url =
-      new URL(
-        String(value)
-      );
+        method:
+          "GET",
 
+        cache:
+          "no-store",
 
-    if (
-      url.protocol === "https:" ||
-      url.protocol === "http:"
-    ) {
+        redirect:
+          "follow"
 
-      return url.href;
-
-    }
-
-  }
-
-  catch (error) {
-
-    return "";
-
-  }
-
-
-  return "";
-
-}
-
-
-// =========================================================
-// 11. LOADING
-// =========================================================
-
-function setLoading() {
-
-  const el =
-    getElements();
-
-
-  if (
-    el.lastUpdated
-  ) {
-
-    el.lastUpdated.textContent =
-      "データを取得しています";
-
-  }
-
-}
-
-
-// =========================================================
-// 12. LOAD DASHBOARD
-// =========================================================
-
-async function loadDashboard(
-  options = {}
-) {
-
-  const silent =
-    Boolean(
-      options.silent
+      }
     );
 
 
+  if (
+    !response.ok
+  ) {
+
+    throw new Error(
+      `HTTP ${response.status}`
+    );
+
+  }
+
+
+  return await response.json();
+
+}
+
+
+// =========================================================
+// LOAD DASHBOARD
+// =========================================================
+
+async function loadDashboard() {
+
   try {
-
-    if (
-      !silent
-    ) {
-
-      setLoading();
-
-    }
-
-
-    // キャッシュ回避
-    const separator =
-      API_URL.includes("?")
-        ? "&"
-        : "?";
-
-
-    const requestUrl =
-      `${API_URL}${separator}_=${Date.now()}`;
-
-
-    const response =
-      await fetch(
-        requestUrl,
-        {
-
-          method:
-            "GET",
-
-          cache:
-            "no-store",
-
-          redirect:
-            "follow"
-
-        }
-      );
-
-
-    if (
-      !response.ok
-    ) {
-
-      throw new Error(
-        `HTTP ${response.status}`
-      );
-
-    }
-
 
     const data =
-      await response.json();
-
-
-    validateData(
-      data
-    );
+      await fetchJson(
+        DASHBOARD_API
+      );
 
 
     dashboardData =
       data;
 
 
-    renderDashboard(
-      data
-    );
+    renderHome();
+
+    renderReport();
 
 
     setUpdatedTime();
-
-
-    console.log(
-      "Family Dashboard:",
-      data
-    );
 
   }
 
   catch (error) {
 
     console.error(
-      "Family Dashboard API Error:",
       error
     );
 
 
-    showError(
-      "データを取得できませんでした"
+    showToast(
+      "家計データを取得できませんでした"
     );
+
+  }
+
+}
+
+
+// =========================================================
+// LOAD RECEIPTS
+// =========================================================
+
+async function loadReceipts() {
+
+  try {
+
+    const year =
+      receiptDate.getFullYear();
+
+
+    const month =
+      receiptDate.getMonth() + 1;
+
+
+    const data =
+      await fetchJson(
+        `${API_BASE}?mode=receipts&year=${year}&month=${month}`
+      );
 
 
     if (
-      !dashboardData
+      Array.isArray(data)
     ) {
 
-      renderError();
+      receiptData =
+        data;
+
+    }
+
+    else if (
+      Array.isArray(
+        data.receipts
+      )
+    ) {
+
+      receiptData =
+        data.receipts;
+
+    }
+
+    else {
+
+      receiptData =
+        [];
+
+    }
+
+
+    renderReceiptPage();
+
+
+    if (
+      currentPage === "calendar"
+    ) {
+
+      renderCalendar();
 
     }
 
   }
 
-}
+  catch (error) {
 
-
-// =========================================================
-// 13. VALIDATE
-// =========================================================
-
-function validateData(data) {
-
-  if (
-    !data ||
-    typeof data !== "object"
-  ) {
-
-    throw new Error(
-      "API response is invalid"
+    console.error(
+      "Receipt Error:",
+      error
     );
 
-  }
+
+    receiptData =
+      [];
 
 
-  if (
-    !data.living &&
-    typeof data.budget === "undefined"
-  ) {
-
-    throw new Error(
-      "living budget is missing"
-    );
+    renderReceiptPage();
 
   }
 
@@ -592,85 +426,210 @@ function validateData(data) {
 
 
 // =========================================================
-// 14. RENDER ALL
+// LOAD SCHEDULE
 // =========================================================
 
-function renderDashboard(data) {
+async function loadSchedules() {
 
-  setHeaderDate(
-    data
-  );
+  try {
 
-
-  renderLiving(
-    data
-  );
+    const year =
+      calendarDate.getFullYear();
 
 
-  renderSavings(
-    data
-  );
+    const month =
+      calendarDate.getMonth() + 1;
 
 
-  renderCategories(
-    Array.isArray(
-      data.categories
-    )
-      ? data.categories
-      : []
-  );
+    const data =
+      await fetchJson(
+        `${API_BASE}?mode=schedules&year=${year}&month=${month}`
+      );
 
 
-  renderRecent(
-    Array.isArray(
-      data.recent
-    )
-      ? data.recent
-      : []
-  );
+    scheduleData =
+      Array.isArray(
+        data.schedules
+      )
+        ? data.schedules
+        : [];
 
 
-  renderAdvice(
-    data
-  );
+    renderCalendar();
+
+  }
+
+  catch (error) {
+
+    console.error(
+      "Schedule Error:",
+      error
+    );
+
+
+    scheduleData =
+      [];
+
+
+    renderCalendar();
+
+  }
 
 }
 
 
 // =========================================================
-// 15. LIVING
+// HEADER
 // =========================================================
 
-function renderLiving(data) {
+function setHeader() {
 
-  const el =
-    getElements();
+  const greeting =
+    document.getElementById(
+      "greeting"
+    );
+
+
+  const title =
+    document.getElementById(
+      "pageTitle"
+    );
+
+
+  const month =
+    document.getElementById(
+      "currentMonth"
+    );
+
+
+  const now =
+    new Date();
+
+
+  let hello =
+    "こんにちは";
+
+
+  let icon =
+    "🌿";
+
+
+  if (
+    now.getHours() >= 5 &&
+    now.getHours() < 11
+  ) {
+
+    hello =
+      "おはよう";
+
+    icon =
+      "☀️";
+
+  }
+
+  else if (
+    now.getHours() >= 18 ||
+    now.getHours() < 5
+  ) {
+
+    hello =
+      "こんばんは";
+
+    icon =
+      "🌙";
+
+  }
+
+
+  greeting.textContent =
+    `${icon} ${hello}、市川さん`;
+
+
+  const titles = {
+
+    home:
+      "ふたりの家計簿",
+
+    receipt:
+      "レシート",
+
+    report:
+      "レポート",
+
+    calendar:
+      "ふたりの予定",
+
+    settings:
+      "設定"
+
+  };
+
+
+  title.textContent =
+    titles[currentPage] ||
+    "ふたりの家計簿";
+
+
+  let target =
+    new Date();
+
+
+  if (
+    currentPage === "receipt"
+  ) {
+
+    target =
+      receiptDate;
+
+  }
+
+
+  if (
+    currentPage === "calendar"
+  ) {
+
+    target =
+      calendarDate;
+
+  }
+
+
+  month.textContent =
+    `${target.getFullYear()}年${target.getMonth() + 1}月`;
+
+}
+
+
+// =========================================================
+// HOME
+// =========================================================
+
+function renderHome() {
+
+  if (!dashboardData) {
+
+    return;
+
+  }
+
+
+  const data =
+    dashboardData;
 
 
   const living =
-    (
-      data.living &&
-      typeof data.living === "object"
-    )
-      ? data.living
-      : {};
+    data.living ||
+    {};
 
-
-  // =======================================================
-  // 予算
-  // =======================================================
 
   const budget =
     Number(
       living.budget ??
       data.budget ??
-      250000
-    ) || 250000;
+      SETTINGS.monthlyBudget
+    ) ||
+    SETTINGS.monthlyBudget;
 
-
-  // =======================================================
-  // 支出
-  // =======================================================
 
   const expense =
     Number(
@@ -679,10 +638,6 @@ function renderLiving(data) {
       0
     ) || 0;
 
-
-  // =======================================================
-  // 残り
-  // =======================================================
 
   const remaining =
     Number(
@@ -695,340 +650,173 @@ function renderLiving(data) {
     );
 
 
-  // =======================================================
-  // 使用率
-  // =======================================================
+  const rate =
+    budget > 0
+      ? (
+          expense /
+          budget
+        ) * 100
+      : 0;
 
-  let rate =
-    Number(
-      living.rate
+
+  document.getElementById(
+    "totalMoney"
+  ).textContent =
+    yen(
+      expense
     );
 
 
-  if (
-    !Number.isFinite(
-      rate
-    )
-  ) {
-
-    rate =
-      budget > 0
-        ? (
-            expense /
-            budget
-          ) * 100
-        : 0;
-
-  }
-
-
-  // =======================================================
-  // 支出表示
-  // =======================================================
-
-  if (
-    el.totalMoney
-  ) {
-
-    el.totalMoney.textContent =
-      yen(
-        expense
-      );
-
-  }
-
-
-  // =======================================================
-  // 予算表示
-  // =======================================================
-
-  if (
-    el.budgetMoney
-  ) {
-
-    el.budgetMoney.textContent =
-      yen(
-        budget
-      );
-
-  }
-
-
-  // =======================================================
-  // 残り表示
-  // =======================================================
-
-  if (
-    el.balanceMoney
-  ) {
-
-    el.balanceMoney.textContent =
-      yen(
-        remaining
-      );
-
-
-    el.balanceMoney.classList.remove(
-      "is-warning",
-      "is-danger"
+  document.getElementById(
+    "budgetMoney"
+  ).textContent =
+    yen(
+      budget
     );
 
 
-    if (
-      remaining < 0
-    ) {
-
-      el.balanceMoney.classList.add(
-        "is-danger"
-      );
-
-    }
-
-    else if (
-      rate >= 80
-    ) {
-
-      el.balanceMoney.classList.add(
-        "is-warning"
-      );
-
-    }
-
-  }
-
-
-  // =======================================================
-  // %
-  // =======================================================
-
-  const roundedRate =
-    Math.round(
-      rate
+  document.getElementById(
+    "balanceMoney"
+  ).textContent =
+    yen(
+      remaining
     );
 
 
-  if (
-    el.budgetPercent
-  ) {
-
-    el.budgetPercent.textContent =
-      `${roundedRate}%`;
-
-  }
+  document.getElementById(
+    "budgetPercent"
+  ).textContent =
+    `${Math.round(rate)}%`;
 
 
-  if (
-    el.budgetProgress
-  ) {
+  const progress =
+    document.getElementById(
+      "progressBar"
+    );
 
-    el.budgetProgress.setAttribute(
-      "aria-valuenow",
-      String(
+
+  progress.style.width =
+    `${Math.min(
+      100,
+      Math.max(
+        0,
+        rate
+      )
+    )}%`;
+
+
+  document.getElementById(
+    "budgetProgress"
+  ).setAttribute(
+    "aria-valuenow",
+    String(
+      Math.round(
         Math.min(
           100,
           Math.max(
             0,
-            roundedRate
+            rate
           )
         )
       )
-    );
-
-  }
+    )
+  );
 
 
   // =======================================================
-  // Progress
+  // SAVING
   // =======================================================
-
-  if (
-    el.progressBar
-  ) {
-
-    const width =
-      Math.min(
-        100,
-        Math.max(
-          0,
-          rate
-        )
-      );
-
-
-    el.progressBar.style.width =
-      `${width}%`;
-
-
-    el.progressBar.classList.remove(
-      "is-warning",
-      "is-danger"
-    );
-
-
-    if (
-      rate >= 100
-    ) {
-
-      el.progressBar.classList.add(
-        "is-danger"
-      );
-
-    }
-
-    else if (
-      rate >= 80
-    ) {
-
-      el.progressBar.classList.add(
-        "is-warning"
-      );
-
-    }
-
-  }
-
-}
-
-
-// =========================================================
-// 16. CURRENT SAVINGS
-//
-// ここで重要なのは
-//
-// 「今月の残り」ではなく
-// 「終了済み月の残金累積」
-//
-// を表示すること
-// =========================================================
-
-function renderSavings(data) {
-
-  const el =
-    getElements();
-
-
-  if (
-    !el.savingActual
-  ) {
-
-    return;
-
-  }
-
 
   const saving =
-    (
-      data.saving &&
-      typeof data.saving === "object"
-    )
-      ? data.saving
-      : {};
-
-
-  let currentSavings =
     Number(
-      saving.current ??
-      saving.actual ??
+      data.saving?.current ??
+      data.saving?.actual ??
       0
-    );
+    ) || 0;
 
 
-  if (
-    !Number.isFinite(
-      currentSavings
-    )
-  ) {
-
-    currentSavings =
-      0;
-
-  }
-
-
-  el.savingActual.textContent =
+  document.getElementById(
+    "savingActual"
+  ).textContent =
     yen(
-      currentSavings
+      saving
     );
+
+
+  // =======================================================
+  // CATEGORY
+  // =======================================================
+
+  renderCategoryList(
+    document.getElementById(
+      "categoryList"
+    ),
+    Array.isArray(
+      data.categories
+    )
+      ? data.categories
+      : []
+  );
+
+
+  // =======================================================
+  // RECENT
+  // =======================================================
+
+  renderReceiptList(
+    document.getElementById(
+      "recentList"
+    ),
+    Array.isArray(
+      data.recent
+    )
+      ? data.recent
+      : [],
+    5
+  );
+
+
+  renderAdvice();
 
 }
 
 
 // =========================================================
-// 17. CATEGORIES
+// CATEGORY LIST
 // =========================================================
 
-function renderCategories(
+function renderCategoryList(
+  container,
   categories
 ) {
 
-  const el =
-    getElements();
-
-
-  if (
-    !el.categoryList
-  ) {
+  if (!container) {
 
     return;
 
   }
 
 
-  const livingCategories =
-    categories
-      .filter(
-        category =>
-          !category.group ||
-          category.group === "生活費"
-      )
-      .slice(
-        0,
-        SETTINGS.categoryLimit
+  if (
+    categories.length === 0
+  ) {
+
+    container.innerHTML =
+      emptyState(
+        "pie_chart",
+        "カテゴリがありません"
       );
 
 
-  if (
-    livingCategories.length === 0
-  ) {
-
-    el.categoryList.innerHTML = `
-
-      <div class="empty-state">
-
-        <span class="material-symbols-rounded">
-          pie_chart
-        </span>
-
-        <strong>
-          カテゴリがありません
-        </strong>
-
-        <p>
-          設定シートの生活費カテゴリが
-          ここに表示されます。
-        </p>
-
-      </div>
-
-    `;
-
-
     return;
 
   }
 
 
-  el.categoryList.innerHTML =
-    livingCategories
+  container.innerHTML =
+    categories
       .map(
         category => {
-
-          const name =
-            escapeHTML(
-              category.name ||
-              "🧾 雑費"
-            );
-
 
           const budget =
             Number(
@@ -1043,96 +831,21 @@ function renderCategories(
 
 
           const remaining =
-            Number(
-              category.remaining ??
-              (
-                budget -
-                amount
-              )
-            );
+            budget -
+            amount;
 
 
-          const color =
-            safeColor(
-              category.color
-            );
-
-
-          let rate =
-            0;
-
-
-          if (
+          const rate =
             budget > 0
-          ) {
-
-            rate =
-              (
-                amount /
-                budget
-              ) * 100;
-
-          }
-
-          else if (
-            amount > 0
-          ) {
-
-            rate =
-              100;
-
-          }
-
-
-          const visualRate =
-            Math.min(
-              100,
-              Math.max(
-                0,
-                rate
-              )
-            );
-
-
-          const amountText =
-            budget > 0
-              ? `${yen(amount)} / ${yen(budget)}`
-              : yen(amount);
-
-
-          let remainingText =
-            "予算未設定";
-
-
-          let remainingColor =
-            "#8e8e93";
-
-
-          if (
-            budget > 0
-          ) {
-
-            if (
-              remaining >= 0
-            ) {
-
-              remainingText =
-                `残り ${yen(remaining)}`;
-
-            }
-
-            else {
-
-              remainingText =
-                `${yen(Math.abs(remaining))} オーバー`;
-
-
-              remainingColor =
-                "#ff3b30";
-
-            }
-
-          }
+              ? (
+                  amount /
+                  budget
+                ) * 100
+              : (
+                  amount > 0
+                    ? 100
+                    : 0
+                );
 
 
           return `
@@ -1142,12 +855,15 @@ function renderCategories(
               <div class="category-top">
 
                 <span class="category-name">
-                  ${name}
+                  ${escapeHTML(category.name)}
                 </span>
 
-
                 <strong class="category-amount">
-                  ${amountText}
+                  ${
+                    budget > 0
+                      ? `${yen(amount)} / ${yen(budget)}`
+                      : yen(amount)
+                  }
                 </strong>
 
               </div>
@@ -1158,8 +874,8 @@ function renderCategories(
                 <div
                   class="category-progress-bar"
                   style="
-                    width:${visualRate}%;
-                    background:${color};
+                    width:${Math.min(100, rate)}%;
+                    background:${safeColor(category.color)};
                   "
                 ></div>
 
@@ -1167,14 +883,23 @@ function renderCategories(
 
 
               <div
-                style="
-                  margin-top:6px;
-                  text-align:right;
-                  font-size:11px;
-                  color:${remainingColor};
-                "
+                class="category-remaining ${
+                  remaining < 0
+                    ? "danger"
+                    : ""
+                }"
               >
-                ${remainingText}
+
+                ${
+                  budget > 0
+                    ? (
+                        remaining >= 0
+                          ? `残り ${yen(remaining)}`
+                          : `${yen(Math.abs(remaining))} オーバー`
+                      )
+                    : "予算未設定"
+                }
+
               </div>
 
             </div>
@@ -1189,50 +914,40 @@ function renderCategories(
 
 
 // =========================================================
-// 18. RECENT RECEIPTS
+// RECEIPT LIST
 // =========================================================
 
-function renderRecent(
-  recent
+function renderReceiptList(
+  container,
+  receipts,
+  limit = null
 ) {
 
-  const el =
-    getElements();
-
-
-  if (
-    !el.recentList
-  ) {
+  if (!container) {
 
     return;
 
   }
 
 
+  const items =
+    limit
+      ? receipts.slice(
+          0,
+          limit
+        )
+      : receipts;
+
+
   if (
-    recent.length === 0
+    items.length === 0
   ) {
 
-    el.recentList.innerHTML = `
-
-      <div class="empty-state">
-
-        <span class="material-symbols-rounded">
-          receipt_long
-        </span>
-
-        <strong>
-          今月のレシートはありません
-        </strong>
-
-        <p>
-          LINEからレシートを登録すると、
-          ここに表示されます。
-        </p>
-
-      </div>
-
-    `;
+    container.innerHTML =
+      emptyState(
+        "receipt_long",
+        "支出はありません"
+      );
 
 
     return;
@@ -1240,131 +955,49 @@ function renderRecent(
   }
 
 
-  el.recentList.innerHTML =
-    recent
-      .slice(
-        0,
-        SETTINGS.recentLimit
-      )
+  container.innerHTML =
+    items
       .map(
         item => {
-
-          const shop =
-            escapeHTML(
-              item.shop ||
-              "店舗名なし"
-            );
-
-
-          const category =
-            escapeHTML(
-              item.category ||
-              "🧾 雑費"
-            );
-
-
-          const date =
-            escapeHTML(
-              formatDate(
-                item.date
-              )
-            );
-
-
-          const amount =
-            Number(
-              item.amount
-            ) || 0;
-
-
-          const payer =
-            escapeHTML(
-              item.payer || ""
-            );
-
-
-          const imageUrl =
-            safeImageUrl(
-              item.imageUrl
-            );
-
-
-          const image =
-            imageUrl
-              ? `
-
-                <div class="receipt-thumbnail">
-
-                  <img
-                    src="${escapeHTML(imageUrl)}"
-                    alt="レシート"
-                    loading="lazy"
-                    onerror="
-                      this.style.display='none';
-                      this.nextElementSibling.style.display='inline-block';
-                    "
-                  >
-
-                  <span
-                    class="material-symbols-rounded"
-                    style="display:none;"
-                  >
-                    receipt_long
-                  </span>
-
-                </div>
-
-              `
-              : `
-
-                <div class="receipt-thumbnail">
-
-                  <span class="material-symbols-rounded">
-                    receipt_long
-                  </span>
-
-                </div>
-
-              `;
-
 
           return `
 
             <div class="receipt-item">
 
-              ${image}
+              <div class="receipt-thumbnail">
+
+                <span class="material-symbols-rounded">
+                  receipt_long
+                </span>
+
+              </div>
 
 
               <div class="receipt-info">
 
                 <div class="receipt-shop">
-                  ${shop}
+                  ${escapeHTML(item.shop || "支出")}
                 </div>
 
 
                 <div class="receipt-meta">
 
-                  <span class="receipt-category">
-                    ${category}
+                  <span>
+                    ${escapeHTML(item.category || "🧾 雑費")}
                   </span>
 
+                  <span>•</span>
+
+                  <span>
+                    ${escapeHTML(formatDate(item.date))}
+                  </span>
 
                   ${
-                    date
+                    item.payer
                       ? `
-                        <span>•</span>
-                        <span>${date}</span>
-                      `
-                      : ""
-                  }
-
-
-                  ${
-                    payer
-                      ? `
-                        <span>•</span>
-                        <span>${payer}</span>
-                      `
+                          <span>•</span>
+                          <span>${escapeHTML(item.payer)}</span>
+                        `
                       : ""
                   }
 
@@ -1374,7 +1007,7 @@ function renderRecent(
 
 
               <strong class="receipt-amount">
-                ${yen(amount)}
+                ${yen(item.amount)}
               </strong>
 
             </div>
@@ -1389,19 +1022,20 @@ function renderRecent(
 
 
 // =========================================================
-// 19. AI ADVICE
+// ADVICE
 // =========================================================
 
-function renderAdvice(
-  data
-) {
+function renderAdvice() {
 
-  const el =
-    getElements();
+  const element =
+    document.getElementById(
+      "aiAdvice"
+    );
 
 
   if (
-    !el.aiAdvice
+    !element ||
+    !dashboardData
   ) {
 
     return;
@@ -1410,33 +1044,27 @@ function renderAdvice(
 
 
   const living =
-    data.living || {};
-
-
-  const saving =
-    data.saving || {};
+    dashboardData.living ||
+    {};
 
 
   const budget =
     Number(
-      living.budget ??
-      data.budget ??
-      250000
-    ) || 250000;
+      living.budget ||
+      SETTINGS.monthlyBudget
+    );
 
 
   const expense =
     Number(
-      living.expense ??
-      data.expense ??
+      living.expense ||
       0
-    ) || 0;
+    );
 
 
   const remaining =
     Number(
       living.remaining ??
-      data.balance ??
       (
         budget -
         expense
@@ -1444,12 +1072,214 @@ function renderAdvice(
     );
 
 
-  const currentSavings =
-    Number(
-      saving.current ??
-      saving.actual ??
+  if (
+    remaining < 0
+  ) {
+
+    element.textContent =
+      `生活費予算を${yen(Math.abs(remaining))}超えています。支出を確認してみましょう。`;
+
+
+    return;
+
+  }
+
+
+  const categories =
+    Array.isArray(
+      dashboardData.categories
+    )
+      ? dashboardData.categories
+      : [];
+
+
+  const top =
+    [...categories]
+      .filter(
+        item =>
+          Number(
+            item.amount
+          ) > 0
+      )
+      .sort(
+        (a, b) =>
+          Number(
+            b.amount
+          ) -
+          Number(
+            a.amount
+          )
+      )[0];
+
+
+  if (top) {
+
+    element.textContent =
+      `今月は「${top.name}」が最も多く${yen(top.amount)}です。生活費はあと${yen(remaining)}使えます。`;
+
+
+    return;
+
+  }
+
+
+  element.textContent =
+    `今月は${yen(budget)}からスタートです。`;
+
+}
+
+
+// =========================================================
+// RECEIPT PAGE
+// =========================================================
+
+async function renderReceiptPage() {
+
+  const label =
+    document.getElementById(
+      "receiptMonthLabel"
+    );
+
+
+  if (!label) {
+
+    return;
+
+  }
+
+
+  label.textContent =
+    `${receiptDate.getFullYear()}年${receiptDate.getMonth() + 1}月`;
+
+
+  const year =
+    receiptDate.getFullYear();
+
+
+  const month =
+    receiptDate.getMonth() + 1;
+
+
+  const filtered =
+    receiptData
+      .filter(
+        item => {
+
+          const match =
+            String(
+              item.date || ""
+            ).match(
+              /^(\d{4})-(\d{2})/
+            );
+
+
+          if (!match) {
+
+            return true;
+
+          }
+
+
+          return (
+            Number(match[1]) === year &&
+            Number(match[2]) === month
+          );
+
+        }
+      )
+      .sort(
+        (a, b) =>
+          String(
+            b.date || ""
+          ).localeCompare(
+            String(
+              a.date || ""
+            )
+          )
+      );
+
+
+  const total =
+    filtered.reduce(
+      (
+        sum,
+        item
+      ) =>
+        sum +
+        (
+          Number(
+            item.amount
+          ) ||
+          0
+        ),
       0
-    ) || 0;
+    );
+
+
+  document.getElementById(
+    "receiptMonthTotal"
+  ).textContent =
+    yen(
+      total
+    );
+
+
+  document.getElementById(
+    "receiptCount"
+  ).textContent =
+    `${filtered.length}件`;
+
+
+  renderReceiptList(
+    document.getElementById(
+      "receiptFullList"
+    ),
+    filtered
+  );
+
+}
+
+
+// =========================================================
+// REPORT
+// =========================================================
+
+function renderReport() {
+
+  if (!dashboardData) {
+
+    return;
+
+  }
+
+
+  const living =
+    dashboardData.living ||
+    {};
+
+
+  const budget =
+    Number(
+      living.budget ||
+      SETTINGS.monthlyBudget
+    );
+
+
+  const expense =
+    Number(
+      living.expense ||
+      0
+    );
+
+
+  const remaining =
+    Number(
+      living.remaining ??
+      (
+        budget -
+        expense
+      )
+    );
 
 
   const rate =
@@ -1461,179 +1291,360 @@ function renderAdvice(
       : 0;
 
 
+  document.getElementById(
+    "reportExpense"
+  ).textContent =
+    yen(
+      expense
+    );
+
+
+  document.getElementById(
+    "reportBudget"
+  ).textContent =
+    yen(
+      budget
+    );
+
+
+  document.getElementById(
+    "reportRemaining"
+  ).textContent =
+    yen(
+      remaining
+    );
+
+
+  document.getElementById(
+    "reportRate"
+  ).textContent =
+    `${Math.round(rate)}%`;
+
+
+  document.getElementById(
+    "reportSaving"
+  ).textContent =
+    yen(
+      dashboardData.saving?.current ||
+      0
+    );
+
+
   const categories =
     Array.isArray(
-      data.categories
+      dashboardData.categories
     )
-      ? data.categories
+      ? [...dashboardData.categories]
       : [];
 
 
-  // =======================================================
-  // 予算オーバー
-  // =======================================================
-
-  if (
-    remaining < 0
-  ) {
-
-    el.aiAdvice.textContent =
-      `生活費予算を${yen(Math.abs(remaining))}超えています。今月の支出を確認してみましょう。`;
-
-
-    return;
-
-  }
-
-
-  // =======================================================
-  // 80%以上
-  // =======================================================
-
-  if (
-    rate >= 80
-  ) {
-
-    el.aiAdvice.textContent =
-      `今月は生活費予算の${Math.round(rate)}%を使っています。残りは${yen(remaining)}です。`;
-
-
-    return;
-
-  }
-
-
-  // =======================================================
-  // 一番大きいカテゴリ
-  // =======================================================
-
-  const topCategory =
-    [...categories]
-      .filter(
-        item =>
-          !item.group ||
-          item.group === "生活費"
+  categories.sort(
+    (a, b) =>
+      Number(
+        b.amount
+      ) -
+      Number(
+        a.amount
       )
-      .filter(
-        item =>
-          Number(
-            item.amount
-          ) > 0
-      )
-      .sort(
-        (a, b) =>
-          (
-            Number(
-              b.amount
-            ) || 0
-          ) -
-          (
-            Number(
-              a.amount
-            ) || 0
-          )
-      )[0];
+  );
 
 
-  if (
-    topCategory
-  ) {
-
-    el.aiAdvice.textContent =
-      `今月は「${topCategory.name}」が最も多く${yen(topCategory.amount)}です。生活費はあと${yen(remaining)}使えます。現在の貯蓄は${yen(currentSavings)}です。`;
-
-
-    return;
-
-  }
-
-
-  // =======================================================
-  // 支出なし
-  // =======================================================
-
-  if (
-    expense === 0
-  ) {
-
-    el.aiAdvice.textContent =
-      `今月の生活費は${yen(budget)}からスタートです。現在の貯蓄は${yen(currentSavings)}です。`;
-
-
-    return;
-
-  }
-
-
-  // =======================================================
-  // 通常
-  // =======================================================
-
-  el.aiAdvice.textContent =
-    `今月は${yen(expense)}使っています。残りは${yen(remaining)}、現在の貯蓄は${yen(currentSavings)}です。`;
+  renderCategoryList(
+    document.getElementById(
+      "reportCategoryList"
+    ),
+    categories
+  );
 
 }
 
 
 // =========================================================
-// 20. UPDATED TIME
+// CALENDAR
 // =========================================================
 
-function setUpdatedTime() {
+async function renderCalendar() {
 
-  const el =
-    getElements();
+  const grid =
+    document.getElementById(
+      "calendarGrid"
+    );
 
 
-  if (
-    !el.lastUpdated
-  ) {
+  if (!grid) {
 
     return;
 
   }
 
 
-  const now =
-    new Date();
+  const year =
+    calendarDate.getFullYear();
 
 
-  const time =
-    now.toLocaleTimeString(
-      "ja-JP",
-      {
+  const month =
+    calendarDate.getMonth();
 
-        hour:
-          "2-digit",
 
-        minute:
-          "2-digit"
+  document.getElementById(
+    "calendarMonthLabel"
+  ).textContent =
+    `${year}年${month + 1}月`;
+
+
+  const firstDay =
+    new Date(
+      year,
+      month,
+      1
+    );
+
+
+  const lastDay =
+    new Date(
+      year,
+      month + 1,
+      0
+    );
+
+
+  const startWeekday =
+    firstDay.getDay();
+
+
+  const days =
+    lastDay.getDate();
+
+
+  let html =
+    "";
+
+
+  for (
+    let i = 0;
+    i < startWeekday;
+    i++
+  ) {
+
+    html +=
+      `<div class="calendar-day empty"></div>`;
+
+  }
+
+
+  for (
+    let day = 1;
+    day <= days;
+    day++
+  ) {
+
+    const date =
+      new Date(
+        year,
+        month,
+        day
+      );
+
+
+    const key =
+      localDateKey(
+        date
+      );
+
+
+    const schedules =
+      scheduleData.filter(
+        item =>
+          item.date === key
+      );
+
+
+    const expenses =
+      getExpensesForDate(
+        key
+      );
+
+
+    const total =
+      expenses.reduce(
+        (
+          sum,
+          item
+        ) =>
+          sum +
+          (
+            Number(
+              item.amount
+            ) ||
+            0
+          ),
+        0
+      );
+
+
+    const isToday =
+      key ===
+      localDateKey(
+        new Date()
+      );
+
+
+    const selected =
+      key ===
+      selectedCalendarDate;
+
+
+    html += `
+
+      <button
+        class="
+          calendar-day
+          ${isToday ? "today" : ""}
+          ${selected ? "selected" : ""}
+        "
+        type="button"
+        data-date="${key}"
+      >
+
+        <span class="calendar-number">
+          ${day}
+        </span>
+
+
+        <div class="calendar-markers">
+
+          ${
+            schedules
+              .slice(
+                0,
+                2
+              )
+              .map(
+                schedule => {
+
+                  const icon =
+                    schedule.target === "さとる"
+                      ? "🌿"
+                      : (
+                          schedule.target === "かな"
+                            ? "🌸"
+                            : "👫"
+                        );
+
+
+                  return `
+                    <span class="calendar-schedule-dot">
+                      ${icon}
+                    </span>
+                  `;
+
+                }
+              )
+              .join("")
+          }
+
+        </div>
+
+
+        ${
+          total > 0
+            ? `
+                <span class="calendar-money">
+                  ${compactYen(total)}
+                </span>
+              `
+            : ""
+        }
+
+      </button>
+
+    `;
+
+  }
+
+
+  grid.innerHTML =
+    html;
+
+
+  grid
+    .querySelectorAll(
+      ".calendar-day:not(.empty)"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          () => {
+
+            selectedCalendarDate =
+              button.dataset.date;
+
+
+            renderCalendar();
+
+            renderSelectedDay();
+
+          }
+        );
 
       }
     );
 
 
-  el.lastUpdated.textContent =
-    `${time} 更新`;
+  if (
+    selectedCalendarDate
+  ) {
+
+    renderSelectedDay();
+
+  }
 
 }
 
 
 // =========================================================
-// 21. ERROR TOAST
+// EXPENSES FOR DATE
 // =========================================================
 
-function showError(
-  message
+function getExpensesForDate(
+  date
 ) {
 
-  const el =
-    getElements();
+  const source =
+    receiptData.length
+      ? receiptData
+      : (
+          Array.isArray(
+            dashboardData?.recent
+          )
+            ? dashboardData.recent
+            : []
+        );
 
+
+  return source.filter(
+    item =>
+      String(
+        item.date || ""
+      ).slice(
+        0,
+        10
+      ) === date
+  );
+
+}
+
+
+// =========================================================
+// SELECTED DAY
+// =========================================================
+
+function renderSelectedDay() {
 
   if (
-    !el.errorToast ||
-    !el.errorMessage
+    !selectedCalendarDate
   ) {
 
     return;
@@ -1641,11 +1652,783 @@ function showError(
   }
 
 
-  el.errorMessage.textContent =
+  const title =
+    document.getElementById(
+      "selectedDateTitle"
+    );
+
+
+  const list =
+    document.getElementById(
+      "selectedDayList"
+    );
+
+
+  const date =
+    new Date(
+      `${selectedCalendarDate}T00:00:00`
+    );
+
+
+  title.textContent =
+    `${date.getMonth() + 1}月${date.getDate()}日`;
+
+
+  const schedules =
+    scheduleData.filter(
+      item =>
+        item.date ===
+        selectedCalendarDate
+    );
+
+
+  const expenses =
+    getExpensesForDate(
+      selectedCalendarDate
+    );
+
+
+  let html =
+    "";
+
+
+  schedules.forEach(
+    item => {
+
+      const icon =
+        item.target === "さとる"
+          ? "🌿"
+          : (
+              item.target === "かな"
+                ? "🌸"
+                : "👫"
+            );
+
+
+      html += `
+
+        <button
+          class="schedule-list-item"
+          type="button"
+          data-schedule-id="${escapeHTML(item.id)}"
+        >
+
+          <div class="schedule-icon">
+            ${icon}
+          </div>
+
+
+          <div class="schedule-info">
+
+            <strong>
+              ${escapeHTML(item.title)}
+            </strong>
+
+            <span>
+
+              ${
+                item.start
+                  ? escapeHTML(item.start)
+                  : "時間未設定"
+              }
+
+              ${
+                item.end
+                  ? `〜${escapeHTML(item.end)}`
+                  : ""
+              }
+
+              ・${escapeHTML(item.target)}
+
+            </span>
+
+          </div>
+
+        </button>
+
+      `;
+
+    }
+  );
+
+
+  expenses.forEach(
+    item => {
+
+      html += `
+
+        <div class="day-expense-item">
+
+          <div class="day-expense-icon">
+            💰
+          </div>
+
+          <div>
+
+            <strong>
+              ${escapeHTML(item.shop || item.category)}
+            </strong>
+
+            <span>
+              ${escapeHTML(item.category || "支出")}
+            </span>
+
+          </div>
+
+          <strong class="day-expense-money">
+            ${yen(item.amount)}
+          </strong>
+
+        </div>
+
+      `;
+
+    }
+  );
+
+
+  if (!html) {
+
+    html =
+      emptyState(
+        "event_available",
+        "予定・支出はありません"
+      );
+
+  }
+
+
+  list.innerHTML =
+    html;
+
+
+  list
+    .querySelectorAll(
+      "[data-schedule-id]"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          () => {
+
+            const schedule =
+              scheduleData.find(
+                item =>
+                  item.id ===
+                  button.dataset.scheduleId
+              );
+
+
+            if (schedule) {
+
+              openScheduleModal(
+                schedule
+              );
+
+            }
+
+          }
+        );
+
+      }
+    );
+
+}
+
+
+// =========================================================
+// COMPACT YEN
+// =========================================================
+
+function compactYen(value) {
+
+  const number =
+    Number(
+      value
+    ) || 0;
+
+
+  if (
+    number >= 10000
+  ) {
+
+    return (
+      `¥${Math.round(number / 1000)}k`
+    );
+
+  }
+
+
+  return (
+    `¥${number.toLocaleString("ja-JP")}`
+  );
+
+}
+
+
+// =========================================================
+// SCHEDULE MODAL
+// =========================================================
+
+function openScheduleModal(
+  schedule = null
+) {
+
+  const modal =
+    document.getElementById(
+      "scheduleModal"
+    );
+
+
+  const deleteButton =
+    document.getElementById(
+      "deleteScheduleButton"
+    );
+
+
+  modal.classList.add(
+    "show"
+  );
+
+
+  document.body.classList.add(
+    "modal-open"
+  );
+
+
+  if (schedule) {
+
+    document.getElementById(
+      "scheduleModalTitle"
+    ).textContent =
+      "予定を編集";
+
+
+    document.getElementById(
+      "scheduleId"
+    ).value =
+      schedule.id || "";
+
+
+    document.getElementById(
+      "scheduleDate"
+    ).value =
+      schedule.date || "";
+
+
+    document.getElementById(
+      "scheduleStart"
+    ).value =
+      schedule.start || "";
+
+
+    document.getElementById(
+      "scheduleEnd"
+    ).value =
+      schedule.end || "";
+
+
+    document.getElementById(
+      "scheduleTitle"
+    ).value =
+      schedule.title || "";
+
+
+    document.getElementById(
+      "scheduleTarget"
+    ).value =
+      schedule.target ||
+      "ふたり";
+
+
+    document.getElementById(
+      "scheduleMemo"
+    ).value =
+      schedule.memo || "";
+
+
+    deleteButton.classList.remove(
+      "hidden"
+    );
+
+  }
+
+  else {
+
+    document.getElementById(
+      "scheduleModalTitle"
+    ).textContent =
+      "予定を追加";
+
+
+    document.getElementById(
+      "scheduleId"
+    ).value =
+      "";
+
+
+    document.getElementById(
+      "scheduleDate"
+    ).value =
+      selectedCalendarDate ||
+      localDateKey(
+        new Date()
+      );
+
+
+    document.getElementById(
+      "scheduleStart"
+    ).value =
+      "";
+
+
+    document.getElementById(
+      "scheduleEnd"
+    ).value =
+      "";
+
+
+    document.getElementById(
+      "scheduleTitle"
+    ).value =
+      "";
+
+
+    document.getElementById(
+      "scheduleTarget"
+    ).value =
+      "ふたり";
+
+
+    document.getElementById(
+      "scheduleMemo"
+    ).value =
+      "";
+
+
+    deleteButton.classList.add(
+      "hidden"
+    );
+
+  }
+
+}
+
+
+// =========================================================
+// CLOSE MODAL
+// =========================================================
+
+function closeScheduleModal() {
+
+  document.getElementById(
+    "scheduleModal"
+  ).classList.remove(
+    "show"
+  );
+
+
+  document.body.classList.remove(
+    "modal-open"
+  );
+
+}
+
+
+// =========================================================
+// SAVE SCHEDULE
+// =========================================================
+
+async function saveSchedule() {
+
+  const id =
+    document.getElementById(
+      "scheduleId"
+    ).value.trim();
+
+
+  const date =
+    document.getElementById(
+      "scheduleDate"
+    ).value;
+
+
+  const title =
+    document.getElementById(
+      "scheduleTitle"
+    ).value.trim();
+
+
+  if (
+    !date ||
+    !title
+  ) {
+
+    showToast(
+      "日付と予定を入力してください"
+    );
+
+
+    return;
+
+  }
+
+
+  const params =
+    new URLSearchParams();
+
+
+  params.set(
+    "action",
+    id
+      ? "updateSchedule"
+      : "addSchedule"
+  );
+
+
+  if (id) {
+
+    params.set(
+      "id",
+      id
+    );
+
+  }
+
+
+  params.set(
+    "date",
+    date
+  );
+
+
+  params.set(
+    "start",
+    document.getElementById(
+      "scheduleStart"
+    ).value
+  );
+
+
+  params.set(
+    "end",
+    document.getElementById(
+      "scheduleEnd"
+    ).value
+  );
+
+
+  params.set(
+    "title",
+    title
+  );
+
+
+  params.set(
+    "target",
+    document.getElementById(
+      "scheduleTarget"
+    ).value
+  );
+
+
+  params.set(
+    "memo",
+    document.getElementById(
+      "scheduleMemo"
+    ).value
+  );
+
+
+  params.set(
+    "registeredBy",
+    "Web"
+  );
+
+
+  try {
+
+    const result =
+      await fetchJson(
+        `${API_BASE}?${params.toString()}`
+      );
+
+
+    if (
+      result.success !== true
+    ) {
+
+      throw new Error(
+        result.error ||
+        "保存失敗"
+      );
+
+    }
+
+
+    closeScheduleModal();
+
+
+    selectedCalendarDate =
+      date;
+
+
+    calendarDate =
+      new Date(
+        `${date}T00:00:00`
+      );
+
+
+    await loadSchedules();
+
+
+    showToast(
+      id
+        ? "予定を変更しました"
+        : "予定を追加しました"
+    );
+
+  }
+
+  catch (error) {
+
+    console.error(
+      error
+    );
+
+
+    showToast(
+      "予定を保存できませんでした"
+    );
+
+  }
+
+}
+
+
+// =========================================================
+// DELETE SCHEDULE
+// =========================================================
+
+async function deleteSchedule() {
+
+  const id =
+    document.getElementById(
+      "scheduleId"
+    ).value.trim();
+
+
+  if (!id) {
+
+    return;
+
+  }
+
+
+  if (
+    !window.confirm(
+      "この予定を削除しますか？"
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  try {
+
+    const result =
+      await fetchJson(
+        `${API_BASE}?action=deleteSchedule&id=${encodeURIComponent(id)}`
+      );
+
+
+    if (
+      result.success !== true
+    ) {
+
+      throw new Error(
+        result.error ||
+        "削除失敗"
+      );
+
+    }
+
+
+    closeScheduleModal();
+
+
+    await loadSchedules();
+
+
+    showToast(
+      "予定を削除しました"
+    );
+
+  }
+
+  catch (error) {
+
+    console.error(
+      error
+    );
+
+
+    showToast(
+      "予定を削除できませんでした"
+    );
+
+  }
+
+}
+
+
+// =========================================================
+// NAVIGATION
+// =========================================================
+
+async function switchPage(page) {
+
+  currentPage =
+    page;
+
+
+  document
+    .querySelectorAll(
+      ".page"
+    )
+    .forEach(
+      element => {
+
+        element.classList.toggle(
+          "active",
+          element.id ===
+          `page-${page}`
+        );
+
+      }
+    );
+
+
+  document
+    .querySelectorAll(
+      ".nav-button"
+    )
+    .forEach(
+      button => {
+
+        button.classList.toggle(
+          "active",
+          button.dataset.page ===
+          page
+        );
+
+      }
+    );
+
+
+  setHeader();
+
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+
+
+  if (
+    page === "receipt"
+  ) {
+
+    await loadReceipts();
+
+  }
+
+
+  if (
+    page === "report"
+  ) {
+
+    renderReport();
+
+  }
+
+
+  if (
+    page === "calendar"
+  ) {
+
+    receiptDate =
+      new Date(
+        calendarDate.getFullYear(),
+        calendarDate.getMonth(),
+        1
+      );
+
+
+    await loadReceipts();
+
+    await loadSchedules();
+
+  }
+
+}
+
+
+// =========================================================
+// EMPTY STATE
+// =========================================================
+
+function emptyState(
+  icon,
+  text
+) {
+
+  return `
+
+    <div class="empty-state">
+
+      <span class="material-symbols-rounded">
+        ${icon}
+      </span>
+
+      <strong>
+        ${escapeHTML(text)}
+      </strong>
+
+    </div>
+
+  `;
+
+}
+
+
+// =========================================================
+// TOAST
+// =========================================================
+
+function showToast(message) {
+
+  const toast =
+    document.getElementById(
+      "errorToast"
+    );
+
+
+  const text =
+    document.getElementById(
+      "errorMessage"
+    );
+
+
+  text.textContent =
     message;
 
 
-  el.errorToast.classList.add(
+  toast.classList.add(
     "show"
   );
 
@@ -1653,153 +2436,294 @@ function showError(
   window.setTimeout(
     () => {
 
-      el.errorToast.classList.remove(
+      toast.classList.remove(
         "show"
       );
 
     },
-    3500
+    2800
   );
 
 }
 
 
 // =========================================================
-// 22. ERROR VIEW
+// UPDATE TIME
 // =========================================================
 
-function renderError() {
+function setUpdatedTime() {
 
-  const el =
-    getElements();
-
-
-  if (
-    el.categoryList
-  ) {
-
-    el.categoryList.innerHTML = `
-
-      <div class="empty-state">
-
-        <span class="material-symbols-rounded">
-          cloud_off
-        </span>
-
-        <strong>
-          データを取得できませんでした
-        </strong>
-
-        <p>
-          画面を更新して、
-          もう一度お試しください。
-        </p>
-
-      </div>
-
-    `;
-
-  }
+  const now =
+    new Date();
 
 
-  if (
-    el.recentList
-  ) {
-
-    el.recentList.innerHTML = `
-
-      <div class="empty-state">
-
-        <span class="material-symbols-rounded">
-          cloud_off
-        </span>
-
-        <strong>
-          読み込みに失敗しました
-        </strong>
-
-      </div>
-
-    `;
-
-  }
-
-
-  if (
-    el.aiAdvice
-  ) {
-
-    el.aiAdvice.textContent =
-      "家計データを取得できませんでした。";
-
-  }
-
-
-  if (
-    el.lastUpdated
-  ) {
-
-    el.lastUpdated.textContent =
-      "更新に失敗しました";
-
-  }
+  document.getElementById(
+    "lastUpdated"
+  ).textContent =
+    `${now.toLocaleTimeString(
+      "ja-JP",
+      {
+        hour:
+          "2-digit",
+        minute:
+          "2-digit"
+      }
+    )} 更新`;
 
 }
 
 
 // =========================================================
-// 23. NAVIGATION
+// EVENTS
 // =========================================================
 
-function setupNavigation() {
+function setupEvents() {
 
-  const buttons =
-    document.querySelectorAll(
+  // NAV
+
+  document
+    .querySelectorAll(
       ".nav-button"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          () => {
+
+            switchPage(
+              button.dataset.page
+            );
+
+          }
+        );
+
+      }
     );
 
 
-  buttons.forEach(
-    button => {
+  // HOME → REPORT
 
-      button.addEventListener(
-        "click",
-        () => {
+  document.getElementById(
+    "categoryDetailButton"
+  ).addEventListener(
+    "click",
+    () => {
 
-          const page =
-            button.dataset.page;
+      switchPage(
+        "report"
+      );
 
-
-          if (
-            page !== "home"
-          ) {
-
-            showError(
-              "このページは現在準備中です"
-            );
+    }
+  );
 
 
-            return;
+  // HOME → RECEIPT
 
-          }
+  document.getElementById(
+    "receiptDetailButton"
+  ).addEventListener(
+    "click",
+    () => {
+
+      switchPage(
+        "receipt"
+      );
+
+    }
+  );
 
 
-          buttons.forEach(
-            item => {
+  // RECEIPT MONTH
 
-              item.classList.remove(
-                "active"
-              );
+  document.getElementById(
+    "receiptPrevMonth"
+  ).addEventListener(
+    "click",
+    async () => {
 
-            }
-          );
+      receiptDate.setMonth(
+        receiptDate.getMonth() - 1
+      );
 
 
-          button.classList.add(
-            "active"
-          );
+      await loadReceipts();
 
-        }
+      setHeader();
+
+    }
+  );
+
+
+  document.getElementById(
+    "receiptNextMonth"
+  ).addEventListener(
+    "click",
+    async () => {
+
+      receiptDate.setMonth(
+        receiptDate.getMonth() + 1
+      );
+
+
+      await loadReceipts();
+
+      setHeader();
+
+    }
+  );
+
+
+  // CALENDAR MONTH
+
+  document.getElementById(
+    "calendarPrevMonth"
+  ).addEventListener(
+    "click",
+    async () => {
+
+      calendarDate =
+        new Date(
+          calendarDate.getFullYear(),
+          calendarDate.getMonth() - 1,
+          1
+        );
+
+
+      selectedCalendarDate =
+        null;
+
+
+      receiptDate =
+        new Date(
+          calendarDate.getFullYear(),
+          calendarDate.getMonth(),
+          1
+        );
+
+
+      await loadReceipts();
+
+      await loadSchedules();
+
+      setHeader();
+
+    }
+  );
+
+
+  document.getElementById(
+    "calendarNextMonth"
+  ).addEventListener(
+    "click",
+    async () => {
+
+      calendarDate =
+        new Date(
+          calendarDate.getFullYear(),
+          calendarDate.getMonth() + 1,
+          1
+        );
+
+
+      selectedCalendarDate =
+        null;
+
+
+      receiptDate =
+        new Date(
+          calendarDate.getFullYear(),
+          calendarDate.getMonth(),
+          1
+        );
+
+
+      await loadReceipts();
+
+      await loadSchedules();
+
+      setHeader();
+
+    }
+  );
+
+
+  // ADD SCHEDULE
+
+  document.getElementById(
+    "addScheduleButton"
+  ).addEventListener(
+    "click",
+    () => {
+
+      openScheduleModal();
+
+    }
+  );
+
+
+  // CLOSE
+
+  document.getElementById(
+    "scheduleModalClose"
+  ).addEventListener(
+    "click",
+    closeScheduleModal
+  );
+
+
+  // BACKDROP
+
+  document.getElementById(
+    "scheduleModal"
+  ).addEventListener(
+    "click",
+    event => {
+
+      if (
+        event.target.id ===
+        "scheduleModal"
+      ) {
+
+        closeScheduleModal();
+
+      }
+
+    }
+  );
+
+
+  // SAVE
+
+  document.getElementById(
+    "saveScheduleButton"
+  ).addEventListener(
+    "click",
+    saveSchedule
+  );
+
+
+  // DELETE
+
+  document.getElementById(
+    "deleteScheduleButton"
+  ).addEventListener(
+    "click",
+    deleteSchedule
+  );
+
+
+  // NOTIFICATION
+
+  document.getElementById(
+    "notificationButton"
+  ).addEventListener(
+    "click",
+    () => {
+
+      showToast(
+        "お知らせはありません"
       );
 
     }
@@ -1809,87 +2733,7 @@ function setupNavigation() {
 
 
 // =========================================================
-// 24. BUTTONS
-// =========================================================
-
-function setupButtons() {
-
-  const categoryButton =
-    document.getElementById(
-      "categoryDetailButton"
-    );
-
-
-  const receiptButton =
-    document.getElementById(
-      "receiptDetailButton"
-    );
-
-
-  const notificationButton =
-    document.getElementById(
-      "notificationButton"
-    );
-
-
-  if (
-    categoryButton
-  ) {
-
-    categoryButton.addEventListener(
-      "click",
-      () => {
-
-        showError(
-          "カテゴリ詳細は現在準備中です"
-        );
-
-      }
-    );
-
-  }
-
-
-  if (
-    receiptButton
-  ) {
-
-    receiptButton.addEventListener(
-      "click",
-      () => {
-
-        showError(
-          "レシート一覧は現在準備中です"
-        );
-
-      }
-    );
-
-  }
-
-
-  if (
-    notificationButton
-  ) {
-
-    notificationButton.addEventListener(
-      "click",
-      () => {
-
-        showError(
-          "お知らせ機能は現在準備中です"
-        );
-
-      }
-    );
-
-  }
-
-}
-
-
-// =========================================================
-// 25. AUTO REFRESH
+// AUTO REFRESH
 // =========================================================
 
 function startAutoRefresh() {
@@ -1907,16 +2751,26 @@ function startAutoRefresh() {
 
   refreshTimer =
     setInterval(
-      () => {
+      async () => {
 
         if (
-          document.visibilityState ===
+          document.visibilityState !==
           "visible"
         ) {
 
-          loadDashboard({
-            silent: true
-          });
+          return;
+
+        }
+
+
+        await loadDashboard();
+
+
+        if (
+          currentPage === "calendar"
+        ) {
+
+          await loadSchedules();
 
         }
 
@@ -1928,48 +2782,35 @@ function startAutoRefresh() {
 
 
 // =========================================================
-// 26. VISIBILITY REFRESH
-// =========================================================
-
-function setupVisibilityRefresh() {
-
-  document.addEventListener(
-    "visibilitychange",
-    () => {
-
-      if (
-        document.visibilityState ===
-        "visible"
-      ) {
-
-        loadDashboard({
-          silent: true
-        });
-
-      }
-
-    }
-  );
-
-}
-
-
-// =========================================================
-// 27. START
+// START
 // =========================================================
 
 async function initializeApp() {
 
-  setHeaderDate();
+  const now =
+    new Date();
 
 
-  setupNavigation();
+  receiptDate =
+    new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1
+    );
 
 
-  setupButtons();
+  calendarDate =
+    new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1
+    );
 
 
-  setupVisibilityRefresh();
+  setHeader();
+
+
+  setupEvents();
 
 
   await loadDashboard();
