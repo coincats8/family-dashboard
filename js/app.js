@@ -1,16 +1,18 @@
 // =========================================================
 // Family Dashboard
 // app.js
-// v2.0
+// v3.0
 //
+// ・5画面完全分離
 // ・ホーム
 // ・レシート
 // ・レポート
-// ・夫婦カレンダー
+// ・夫婦共有カレンダー
 // ・設定
+// ・予定追加 / 編集 / 削除
+// ・日別支出表示
+// ・画面切替時に必ずページ上部へ移動
 //
-// 家計開始：2026年8月
-// 月予算：250,000円
 // =========================================================
 
 
@@ -22,18 +24,11 @@ const API_BASE =
   "https://script.google.com/macros/s/AKfycbxfmSB9YZCQ5aWsU5yyl3DB2dB6egoz5Y5noF0zGM2cc7ID3jl0DuMh0uNWlguM67s/exec";
 
 
-const DASHBOARD_API =
-  `${API_BASE}?mode=dashboard`;
-
-
 // =========================================================
 // SETTINGS
 // =========================================================
 
 const SETTINGS = {
-
-  refreshInterval:
-    60000,
 
   monthlyBudget:
     250000,
@@ -42,7 +37,10 @@ const SETTINGS = {
     2026,
 
   startMonth:
-    8
+    8,
+
+  refreshInterval:
+    60000
 
 };
 
@@ -67,12 +65,24 @@ let currentPage =
   "home";
 
 
-let receiptDate =
+const now =
   new Date();
+
+
+let receiptDate =
+  new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    1
+  );
 
 
 let calendarDate =
-  new Date();
+  new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    1
+  );
 
 
 let selectedCalendarDate =
@@ -84,17 +94,33 @@ let refreshTimer =
 
 
 // =========================================================
+// ELEMENT
+// =========================================================
+
+function el(id) {
+
+  return document.getElementById(
+    id
+  );
+
+}
+
+
+// =========================================================
 // MONEY
 // =========================================================
 
 function yen(value) {
 
+  const number =
+    Number(
+      value
+    ) || 0;
+
+
   return (
     "¥" +
-    (
-      Number(value) ||
-      0
-    ).toLocaleString(
+    number.toLocaleString(
       "ja-JP"
     )
   );
@@ -103,7 +129,7 @@ function yen(value) {
 
 
 // =========================================================
-// HTML ESCAPE
+// ESCAPE
 // =========================================================
 
 function escapeHTML(value) {
@@ -167,7 +193,7 @@ function safeColor(value) {
 
 
 // =========================================================
-// LOCAL DATE
+// LOCAL DATE KEY
 // =========================================================
 
 function localDateKey(date) {
@@ -202,29 +228,45 @@ function localDateKey(date) {
 
 
 // =========================================================
-// FORMAT DATE
+// PARSE DATE
 // =========================================================
 
-function formatDate(value) {
+function parseDateValue(value) {
 
   if (!value) {
 
-    return "";
+    return null;
 
   }
 
 
+  if (
+    value instanceof Date
+  ) {
+
+    return value;
+
+  }
+
+
+  const text =
+    String(
+      value
+    ).trim();
+
+
   const match =
-    String(value)
-      .match(
-        /^(\d{4})-(\d{2})-(\d{2})/
-      );
+    text.match(
+      /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/
+    );
 
 
   if (match) {
 
-    return (
-      `${Number(match[2])}/${Number(match[3])}`
+    return new Date(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3])
     );
 
   }
@@ -232,7 +274,7 @@ function formatDate(value) {
 
   const date =
     new Date(
-      value
+      text
     );
 
 
@@ -242,13 +284,76 @@ function formatDate(value) {
     )
   ) {
 
-    return String(value);
+    return null;
+
+  }
+
+
+  return date;
+
+}
+
+
+// =========================================================
+// FORMAT SHORT DATE
+// =========================================================
+
+function formatShortDate(value) {
+
+  const date =
+    parseDateValue(
+      value
+    );
+
+
+  if (!date) {
+
+    return "";
 
   }
 
 
   return (
     `${date.getMonth() + 1}/${date.getDate()}`
+  );
+
+}
+
+
+// =========================================================
+// JAPANESE DATE
+// =========================================================
+
+function formatJapaneseDate(value) {
+
+  const date =
+    parseDateValue(
+      value
+    );
+
+
+  if (!date) {
+
+    return "";
+
+  }
+
+
+  const weekdays = [
+    "日",
+    "月",
+    "火",
+    "水",
+    "木",
+    "金",
+    "土"
+  ];
+
+
+  return (
+    `${date.getMonth() + 1}月` +
+    `${date.getDate()}日` +
+    `（${weekdays[date.getDay()]}）`
   );
 
 }
@@ -266,9 +371,13 @@ async function fetchJson(url) {
       : "?";
 
 
+  const requestUrl =
+    `${url}${separator}_=${Date.now()}`;
+
+
   const response =
     await fetch(
-      `${url}${separator}_=${Date.now()}`,
+      requestUrl,
       {
 
         method:
@@ -295,27 +404,51 @@ async function fetchJson(url) {
   }
 
 
-  return await response.json();
+  const text =
+    await response.text();
+
+
+  const trimmed =
+    String(
+      text || ""
+    ).trim();
+
+
+  if (
+    trimmed.startsWith(
+      "<!DOCTYPE"
+    ) ||
+    trimmed.startsWith(
+      "<html"
+    )
+  ) {
+
+    throw new Error(
+      "APIからHTMLが返されました"
+    );
+
+  }
+
+
+  return JSON.parse(
+    trimmed
+  );
 
 }
 
 
 // =========================================================
-// LOAD DASHBOARD
+// DASHBOARD LOAD
 // =========================================================
 
 async function loadDashboard() {
 
   try {
 
-    const data =
-      await fetchJson(
-        DASHBOARD_API
-      );
-
-
     dashboardData =
-      data;
+      await fetchJson(
+        `${API_BASE}?mode=dashboard`
+      );
 
 
     renderHome();
@@ -323,13 +456,14 @@ async function loadDashboard() {
     renderReport();
 
 
-    setUpdatedTime();
+    updateLastUpdated();
 
   }
 
   catch (error) {
 
     console.error(
+      "Dashboard Error:",
       error
     );
 
@@ -344,20 +478,15 @@ async function loadDashboard() {
 
 
 // =========================================================
-// LOAD RECEIPTS
+// RECEIPTS LOAD
 // =========================================================
 
-async function loadReceipts() {
+async function loadReceiptsFor(
+  year,
+  month
+) {
 
   try {
-
-    const year =
-      receiptDate.getFullYear();
-
-
-    const month =
-      receiptDate.getMonth() + 1;
-
 
     const data =
       await fetchJson(
@@ -366,7 +495,9 @@ async function loadReceipts() {
 
 
     if (
-      Array.isArray(data)
+      Array.isArray(
+        data
+      )
     ) {
 
       receiptData =
@@ -385,6 +516,17 @@ async function loadReceipts() {
 
     }
 
+    else if (
+      Array.isArray(
+        data.data
+      )
+    ) {
+
+      receiptData =
+        data.data;
+
+    }
+
     else {
 
       receiptData =
@@ -393,16 +535,7 @@ async function loadReceipts() {
     }
 
 
-    renderReceiptPage();
-
-
-    if (
-      currentPage === "calendar"
-    ) {
-
-      renderCalendar();
-
-    }
+    return receiptData;
 
   }
 
@@ -418,7 +551,7 @@ async function loadReceipts() {
       [];
 
 
-    renderReceiptPage();
+    return [];
 
   }
 
@@ -426,20 +559,15 @@ async function loadReceipts() {
 
 
 // =========================================================
-// LOAD SCHEDULE
+// SCHEDULE LOAD
 // =========================================================
 
-async function loadSchedules() {
+async function loadSchedulesFor(
+  year,
+  month
+) {
 
   try {
-
-    const year =
-      calendarDate.getFullYear();
-
-
-    const month =
-      calendarDate.getMonth() + 1;
-
 
     const data =
       await fetchJson(
@@ -455,7 +583,7 @@ async function loadSchedules() {
         : [];
 
 
-    renderCalendar();
+    return scheduleData;
 
   }
 
@@ -471,7 +599,7 @@ async function loadSchedules() {
       [];
 
 
-    renderCalendar();
+    return [];
 
   }
 
@@ -479,98 +607,91 @@ async function loadSchedules() {
 
 
 // =========================================================
-// HEADER
+// PAGE HEADER
 // =========================================================
 
-function setHeader() {
+function updatePageHeader() {
 
-  const greeting =
-    document.getElementById(
-      "greeting"
+  const kicker =
+    el(
+      "pageKicker"
     );
 
 
   const title =
-    document.getElementById(
+    el(
       "pageTitle"
     );
 
 
   const month =
-    document.getElementById(
+    el(
       "currentMonth"
     );
 
 
-  const now =
-    new Date();
+  const configs = {
 
+    home: {
+      kicker:
+        "🌿 FAMILY HOUSEHOLD",
+      title:
+        "ふたりの家計簿"
+    },
 
-  let hello =
-    "こんにちは";
+    receipt: {
+      kicker:
+        "🧾 HISTORY",
+      title:
+        "レシート"
+    },
 
+    report: {
+      kicker:
+        "📊 ANALYSIS",
+      title:
+        "レポート"
+    },
 
-  let icon =
-    "🌿";
+    calendar: {
+      kicker:
+        "👫 FAMILY CALENDAR",
+      title:
+        "ふたりの予定"
+    },
 
-
-  if (
-    now.getHours() >= 5 &&
-    now.getHours() < 11
-  ) {
-
-    hello =
-      "おはよう";
-
-    icon =
-      "☀️";
-
-  }
-
-  else if (
-    now.getHours() >= 18 ||
-    now.getHours() < 5
-  ) {
-
-    hello =
-      "こんばんは";
-
-    icon =
-      "🌙";
-
-  }
-
-
-  greeting.textContent =
-    `${icon} ${hello}、市川さん`;
-
-
-  const titles = {
-
-    home:
-      "ふたりの家計簿",
-
-    receipt:
-      "レシート",
-
-    report:
-      "レポート",
-
-    calendar:
-      "ふたりの予定",
-
-    settings:
-      "設定"
+    settings: {
+      kicker:
+        "⚙️ MANAGE",
+      title:
+        "設定"
+    }
 
   };
 
 
-  title.textContent =
-    titles[currentPage] ||
-    "ふたりの家計簿";
+  const config =
+    configs[currentPage] ||
+    configs.home;
 
 
-  let target =
+  if (kicker) {
+
+    kicker.textContent =
+      config.kicker;
+
+  }
+
+
+  if (title) {
+
+    title.textContent =
+      config.title;
+
+  }
+
+
+  let targetDate =
     new Date();
 
 
@@ -578,7 +699,7 @@ function setHeader() {
     currentPage === "receipt"
   ) {
 
-    target =
+    targetDate =
       receiptDate;
 
   }
@@ -588,14 +709,215 @@ function setHeader() {
     currentPage === "calendar"
   ) {
 
-    target =
+    targetDate =
       calendarDate;
 
   }
 
 
-  month.textContent =
-    `${target.getFullYear()}年${target.getMonth() + 1}月`;
+  if (month) {
+
+    month.textContent =
+      `${targetDate.getFullYear()}年${targetDate.getMonth() + 1}月`;
+
+  }
+
+}
+
+
+// =========================================================
+// ★ PAGE SWITCH
+//
+// ここが今回の重要修正
+//
+// hidden属性を直接切り替える。
+// CSSだけに依存しない。
+// =========================================================
+
+async function switchPage(page) {
+
+  const validPages = [
+    "home",
+    "receipt",
+    "report",
+    "calendar",
+    "settings"
+  ];
+
+
+  if (
+    !validPages.includes(
+      page
+    )
+  ) {
+
+    page =
+      "home";
+
+  }
+
+
+  currentPage =
+    page;
+
+
+  // =======================================================
+  // 全ページを一度完全に隠す
+  // =======================================================
+
+  document
+    .querySelectorAll(
+      "[data-page-panel]"
+    )
+    .forEach(
+      panel => {
+
+        panel.hidden =
+          true;
+
+
+        panel.classList.remove(
+          "is-active"
+        );
+
+      }
+    );
+
+
+  // =======================================================
+  // 選択ページだけ表示
+  // =======================================================
+
+  const activePanel =
+    document.querySelector(
+      `[data-page-panel="${page}"]`
+    );
+
+
+  if (activePanel) {
+
+    activePanel.hidden =
+      false;
+
+
+    activePanel.classList.add(
+      "is-active"
+    );
+
+  }
+
+
+  // =======================================================
+  // NAV
+  // =======================================================
+
+  document
+    .querySelectorAll(
+      ".nav-button"
+    )
+    .forEach(
+      button => {
+
+        const active =
+          button.dataset.page ===
+          page;
+
+
+        button.classList.toggle(
+          "active",
+          active
+        );
+
+
+        button.setAttribute(
+          "aria-current",
+          active
+            ? "page"
+            : "false"
+        );
+
+      }
+    );
+
+
+  updatePageHeader();
+
+
+  // =======================================================
+  // 必ずページ上部へ
+  // =======================================================
+
+  window.scrollTo(
+    0,
+    0
+  );
+
+
+  document.documentElement.scrollTop =
+    0;
+
+
+  document.body.scrollTop =
+    0;
+
+
+  // =======================================================
+  // PAGE DATA
+  // =======================================================
+
+  if (
+    page === "home"
+  ) {
+
+    renderHome();
+
+  }
+
+
+  if (
+    page === "receipt"
+  ) {
+
+    await refreshReceiptPage();
+
+  }
+
+
+  if (
+    page === "report"
+  ) {
+
+    renderReport();
+
+  }
+
+
+  if (
+    page === "calendar"
+  ) {
+
+    await refreshCalendarPage();
+
+  }
+
+
+  // =======================================================
+  // URL HASH
+  //
+  // 戻る操作でもページを判別しやすくする
+  // =======================================================
+
+  if (
+    history.replaceState
+  ) {
+
+    history.replaceState(
+      null,
+      "",
+      `#${page}`
+    );
+
+  }
 
 }
 
@@ -606,26 +928,24 @@ function setHeader() {
 
 function renderHome() {
 
-  if (!dashboardData) {
+  if (
+    !dashboardData
+  ) {
 
     return;
 
   }
 
 
-  const data =
-    dashboardData;
-
-
   const living =
-    data.living ||
+    dashboardData.living ||
     {};
 
 
   const budget =
     Number(
       living.budget ??
-      data.budget ??
+      dashboardData.budget ??
       SETTINGS.monthlyBudget
     ) ||
     SETTINGS.monthlyBudget;
@@ -634,7 +954,7 @@ function renderHome() {
   const expense =
     Number(
       living.expense ??
-      data.expense ??
+      dashboardData.expense ??
       0
     ) || 0;
 
@@ -642,7 +962,7 @@ function renderHome() {
   const remaining =
     Number(
       living.remaining ??
-      data.balance ??
+      dashboardData.balance ??
       (
         budget -
         expense
@@ -659,68 +979,124 @@ function renderHome() {
       : 0;
 
 
-  document.getElementById(
-    "totalMoney"
-  ).textContent =
-    yen(
-      expense
+  if (
+    el(
+      "totalMoney"
+    )
+  ) {
+
+    el(
+      "totalMoney"
+    ).textContent =
+      yen(
+        expense
+      );
+
+  }
+
+
+  if (
+    el(
+      "budgetMoney"
+    )
+  ) {
+
+    el(
+      "budgetMoney"
+    ).textContent =
+      yen(
+        budget
+      );
+
+  }
+
+
+  if (
+    el(
+      "balanceMoney"
+    )
+  ) {
+
+    el(
+      "balanceMoney"
+    ).textContent =
+      yen(
+        remaining
+      );
+
+
+    el(
+      "balanceMoney"
+    ).classList.toggle(
+      "is-danger",
+      remaining < 0
+    );
+
+  }
+
+
+  const percentage =
+    Math.round(
+      rate
     );
 
 
-  document.getElementById(
-    "budgetMoney"
-  ).textContent =
-    yen(
-      budget
-    );
+  if (
+    el(
+      "budgetPercent"
+    )
+  ) {
+
+    el(
+      "budgetPercent"
+    ).textContent =
+      `${percentage}%`;
+
+  }
 
 
-  document.getElementById(
-    "balanceMoney"
-  ).textContent =
-    yen(
-      remaining
-    );
-
-
-  document.getElementById(
-    "budgetPercent"
-  ).textContent =
-    `${Math.round(rate)}%`;
-
-
-  const progress =
-    document.getElementById(
+  if (
+    el(
       "progressBar"
-    );
+    )
+  ) {
+
+    el(
+      "progressBar"
+    ).style.width =
+      `${Math.min(
+        100,
+        Math.max(
+          0,
+          rate
+        )
+      )}%`;
+
+  }
 
 
-  progress.style.width =
-    `${Math.min(
-      100,
-      Math.max(
-        0,
-        rate
-      )
-    )}%`;
+  if (
+    el(
+      "budgetProgress"
+    )
+  ) {
 
-
-  document.getElementById(
-    "budgetProgress"
-  ).setAttribute(
-    "aria-valuenow",
-    String(
-      Math.round(
+    el(
+      "budgetProgress"
+    ).setAttribute(
+      "aria-valuenow",
+      String(
         Math.min(
           100,
           Math.max(
             0,
-            rate
+            percentage
           )
         )
       )
-    )
-  );
+    );
+
+  }
 
 
   // =======================================================
@@ -729,18 +1105,26 @@ function renderHome() {
 
   const saving =
     Number(
-      data.saving?.current ??
-      data.saving?.actual ??
+      dashboardData.saving?.current ??
+      dashboardData.saving?.actual ??
       0
     ) || 0;
 
 
-  document.getElementById(
-    "savingActual"
-  ).textContent =
-    yen(
-      saving
-    );
+  if (
+    el(
+      "savingActual"
+    )
+  ) {
+
+    el(
+      "savingActual"
+    ).textContent =
+      yen(
+        saving
+      );
+
+  }
 
 
   // =======================================================
@@ -748,13 +1132,13 @@ function renderHome() {
   // =======================================================
 
   renderCategoryList(
-    document.getElementById(
+    el(
       "categoryList"
     ),
     Array.isArray(
-      data.categories
+      dashboardData.categories
     )
-      ? data.categories
+      ? dashboardData.categories
       : []
   );
 
@@ -764,13 +1148,13 @@ function renderHome() {
   // =======================================================
 
   renderReceiptList(
-    document.getElementById(
+    el(
       "recentList"
     ),
     Array.isArray(
-      data.recent
+      dashboardData.recent
     )
-      ? data.recent
+      ? dashboardData.recent
       : [],
     5
   );
@@ -798,13 +1182,17 @@ function renderCategoryList(
 
 
   if (
+    !Array.isArray(
+      categories
+    ) ||
     categories.length === 0
   ) {
 
     container.innerHTML =
-      emptyState(
+      createEmptyState(
         "pie_chart",
-        "カテゴリがありません"
+        "カテゴリデータがありません",
+        ""
       );
 
 
@@ -835,16 +1223,40 @@ function renderCategoryList(
             amount;
 
 
-          const rate =
+          let rate =
+            0;
+
+
+          if (
             budget > 0
-              ? (
-                  amount /
-                  budget
-                ) * 100
+          ) {
+
+            rate =
+              (
+                amount /
+                budget
+              ) *
+              100;
+
+          }
+
+          else if (
+            amount > 0
+          ) {
+
+            rate =
+              100;
+
+          }
+
+
+          const remainingText =
+            budget <= 0
+              ? "予算未設定"
               : (
-                  amount > 0
-                    ? 100
-                    : 0
+                  remaining >= 0
+                    ? `残り ${yen(remaining)}`
+                    : `${yen(Math.abs(remaining))} オーバー`
                 );
 
 
@@ -855,15 +1267,18 @@ function renderCategoryList(
               <div class="category-top">
 
                 <span class="category-name">
-                  ${escapeHTML(category.name)}
+                  ${escapeHTML(category.name || "🧾 雑費")}
                 </span>
 
+
                 <strong class="category-amount">
+
                   ${
                     budget > 0
                       ? `${yen(amount)} / ${yen(budget)}`
                       : yen(amount)
                   }
+
                 </strong>
 
               </div>
@@ -874,7 +1289,7 @@ function renderCategoryList(
                 <div
                   class="category-progress-bar"
                   style="
-                    width:${Math.min(100, rate)}%;
+                    width:${Math.min(100, Math.max(0, rate))}%;
                     background:${safeColor(category.color)};
                   "
                 ></div>
@@ -883,23 +1298,12 @@ function renderCategoryList(
 
 
               <div
-                class="category-remaining ${
-                  remaining < 0
-                    ? "danger"
-                    : ""
-                }"
+                class="
+                  category-remaining
+                  ${remaining < 0 ? "is-danger" : ""}
+                "
               >
-
-                ${
-                  budget > 0
-                    ? (
-                        remaining >= 0
-                          ? `残り ${yen(remaining)}`
-                          : `${yen(Math.abs(remaining))} オーバー`
-                      )
-                    : "予算未設定"
-                }
-
+                ${remainingText}
               </div>
 
             </div>
@@ -930,13 +1334,21 @@ function renderReceiptList(
   }
 
 
+  const source =
+    Array.isArray(
+      receipts
+    )
+      ? receipts
+      : [];
+
+
   const items =
     limit
-      ? receipts.slice(
+      ? source.slice(
           0,
           limit
         )
-      : receipts;
+      : source;
 
 
   if (
@@ -944,9 +1356,10 @@ function renderReceiptList(
   ) {
 
     container.innerHTML =
-      emptyState(
+      createEmptyState(
         "receipt_long",
-        "支出はありません"
+        "支出はありません",
+        "登録した支出がここに表示されます"
       );
 
 
@@ -960,9 +1373,15 @@ function renderReceiptList(
       .map(
         item => {
 
+          const payer =
+            String(
+              item.payer || ""
+            ).trim();
+
+
           return `
 
-            <div class="receipt-item">
+            <article class="receipt-item">
 
               <div class="receipt-thumbnail">
 
@@ -986,18 +1405,17 @@ function renderReceiptList(
                     ${escapeHTML(item.category || "🧾 雑費")}
                   </span>
 
-                  <span>•</span>
-
                   <span>
-                    ${escapeHTML(formatDate(item.date))}
+                    ${escapeHTML(formatShortDate(item.date))}
                   </span>
 
                   ${
-                    item.payer
+                    payer
                       ? `
-                          <span>•</span>
-                          <span>${escapeHTML(item.payer)}</span>
-                        `
+                        <span class="payer-chip">
+                          ${escapeHTML(payer)}
+                        </span>
+                      `
                       : ""
                   }
 
@@ -1010,7 +1428,7 @@ function renderReceiptList(
                 ${yen(item.amount)}
               </strong>
 
-            </div>
+            </article>
 
           `;
 
@@ -1027,14 +1445,14 @@ function renderReceiptList(
 
 function renderAdvice() {
 
-  const element =
-    document.getElementById(
+  const target =
+    el(
       "aiAdvice"
     );
 
 
   if (
-    !element ||
+    !target ||
     !dashboardData
   ) {
 
@@ -1076,8 +1494,8 @@ function renderAdvice() {
     remaining < 0
   ) {
 
-    element.textContent =
-      `生活費予算を${yen(Math.abs(remaining))}超えています。支出を確認してみましょう。`;
+    target.textContent =
+      `今月は生活費予算を${yen(Math.abs(remaining))}超えています。カテゴリ別の支出を確認してみましょう。`;
 
 
     return;
@@ -1089,12 +1507,12 @@ function renderAdvice() {
     Array.isArray(
       dashboardData.categories
     )
-      ? dashboardData.categories
+      ? [...dashboardData.categories]
       : [];
 
 
   const top =
-    [...categories]
+    categories
       .filter(
         item =>
           Number(
@@ -1114,8 +1532,8 @@ function renderAdvice() {
 
   if (top) {
 
-    element.textContent =
-      `今月は「${top.name}」が最も多く${yen(top.amount)}です。生活費はあと${yen(remaining)}使えます。`;
+    target.textContent =
+      `今月は「${top.name}」が最も多く${yen(top.amount)}です。生活費はあと${yen(remaining)}残っています。`;
 
 
     return;
@@ -1123,8 +1541,47 @@ function renderAdvice() {
   }
 
 
-  element.textContent =
-    `今月は${yen(budget)}からスタートです。`;
+  target.textContent =
+    `今月の生活費は${yen(budget)}からスタートです。`;
+
+}
+
+
+// =========================================================
+// RECEIPT PAGE REFRESH
+// =========================================================
+
+async function refreshReceiptPage() {
+
+  const year =
+    receiptDate.getFullYear();
+
+
+  const month =
+    receiptDate.getMonth() + 1;
+
+
+  if (
+    el(
+      "receiptMonthLabel"
+    )
+  ) {
+
+    el(
+      "receiptMonthLabel"
+    ).textContent =
+      `${year}年${month}月`;
+
+  }
+
+
+  await loadReceiptsFor(
+    year,
+    month
+  );
+
+
+  renderReceiptPage();
 
 }
 
@@ -1133,24 +1590,7 @@ function renderAdvice() {
 // RECEIPT PAGE
 // =========================================================
 
-async function renderReceiptPage() {
-
-  const label =
-    document.getElementById(
-      "receiptMonthLabel"
-    );
-
-
-  if (!label) {
-
-    return;
-
-  }
-
-
-  label.textContent =
-    `${receiptDate.getFullYear()}年${receiptDate.getMonth() + 1}月`;
-
+function renderReceiptPage() {
 
   const year =
     receiptDate.getFullYear();
@@ -1165,37 +1605,53 @@ async function renderReceiptPage() {
       .filter(
         item => {
 
-          const match =
-            String(
-              item.date || ""
-            ).match(
-              /^(\d{4})-(\d{2})/
+          const date =
+            parseDateValue(
+              item.date
             );
 
 
-          if (!match) {
+          if (!date) {
 
-            return true;
+            return false;
 
           }
 
 
           return (
-            Number(match[1]) === year &&
-            Number(match[2]) === month
+            date.getFullYear() === year &&
+            date.getMonth() + 1 === month
           );
 
         }
       )
       .sort(
-        (a, b) =>
-          String(
-            b.date || ""
-          ).localeCompare(
-            String(
-              a.date || ""
+        (a, b) => {
+
+          const aDate =
+            parseDateValue(
+              a.date
+            );
+
+
+          const bDate =
+            parseDateValue(
+              b.date
+            );
+
+
+          return (
+            (
+              bDate?.getTime() ||
+              0
+            ) -
+            (
+              aDate?.getTime() ||
+              0
             )
-          )
+          );
+
+        }
       );
 
 
@@ -1216,22 +1672,38 @@ async function renderReceiptPage() {
     );
 
 
-  document.getElementById(
-    "receiptMonthTotal"
-  ).textContent =
-    yen(
-      total
-    );
+  if (
+    el(
+      "receiptMonthTotal"
+    )
+  ) {
+
+    el(
+      "receiptMonthTotal"
+    ).textContent =
+      yen(
+        total
+      );
+
+  }
 
 
-  document.getElementById(
-    "receiptCount"
-  ).textContent =
-    `${filtered.length}件`;
+  if (
+    el(
+      "receiptCount"
+    )
+  ) {
+
+    el(
+      "receiptCount"
+    ).textContent =
+      `${filtered.length}件`;
+
+  }
 
 
   renderReceiptList(
-    document.getElementById(
+    el(
       "receiptFullList"
     ),
     filtered
@@ -1246,7 +1718,9 @@ async function renderReceiptPage() {
 
 function renderReport() {
 
-  if (!dashboardData) {
+  if (
+    !dashboardData
+  ) {
 
     return;
 
@@ -1260,16 +1734,17 @@ function renderReport() {
 
   const budget =
     Number(
-      living.budget ||
+      living.budget ??
       SETTINGS.monthlyBudget
-    );
+    ) ||
+    SETTINGS.monthlyBudget;
 
 
   const expense =
     Number(
-      living.expense ||
+      living.expense ??
       0
-    );
+    ) || 0;
 
 
   const remaining =
@@ -1291,43 +1766,104 @@ function renderReport() {
       : 0;
 
 
-  document.getElementById(
-    "reportExpense"
-  ).textContent =
-    yen(
-      expense
-    );
-
-
-  document.getElementById(
-    "reportBudget"
-  ).textContent =
-    yen(
-      budget
-    );
-
-
-  document.getElementById(
-    "reportRemaining"
-  ).textContent =
-    yen(
-      remaining
-    );
-
-
-  document.getElementById(
-    "reportRate"
-  ).textContent =
-    `${Math.round(rate)}%`;
-
-
-  document.getElementById(
-    "reportSaving"
-  ).textContent =
-    yen(
-      dashboardData.saving?.current ||
+  const saving =
+    Number(
+      dashboardData.saving?.current ??
+      dashboardData.saving?.actual ??
       0
-    );
+    ) || 0;
+
+
+  if (
+    el(
+      "reportExpense"
+    )
+  ) {
+
+    el(
+      "reportExpense"
+    ).textContent =
+      yen(
+        expense
+      );
+
+  }
+
+
+  if (
+    el(
+      "reportBudget"
+    )
+  ) {
+
+    el(
+      "reportBudget"
+    ).textContent =
+      yen(
+        budget
+      );
+
+  }
+
+
+  if (
+    el(
+      "reportRemaining"
+    )
+  ) {
+
+    el(
+      "reportRemaining"
+    ).textContent =
+      yen(
+        remaining
+      );
+
+  }
+
+
+  if (
+    el(
+      "reportRate"
+    )
+  ) {
+
+    el(
+      "reportRate"
+    ).textContent =
+      `${Math.round(rate)}%`;
+
+  }
+
+
+  if (
+    el(
+      "reportSaving"
+    )
+  ) {
+
+    el(
+      "reportSaving"
+    ).textContent =
+      yen(
+        saving
+      );
+
+  }
+
+
+  if (
+    el(
+      "reportHeroCaption"
+    )
+  ) {
+
+    el(
+      "reportHeroCaption"
+    ).textContent =
+      `生活費予算 ${yen(budget)} ・ 残り ${yen(remaining)}`;
+
+  }
 
 
   const categories =
@@ -1350,7 +1886,7 @@ function renderReport() {
 
 
   renderCategoryList(
-    document.getElementById(
+    el(
       "reportCategoryList"
     ),
     categories
@@ -1360,13 +1896,107 @@ function renderReport() {
 
 
 // =========================================================
+// CALENDAR REFRESH
+// =========================================================
+
+async function refreshCalendarPage() {
+
+  const year =
+    calendarDate.getFullYear();
+
+
+  const month =
+    calendarDate.getMonth() + 1;
+
+
+  if (
+    el(
+      "calendarMonthLabel"
+    )
+  ) {
+
+    el(
+      "calendarMonthLabel"
+    ).textContent =
+      `${year}年${month}月`;
+
+  }
+
+
+  await Promise.all([
+
+    loadReceiptsFor(
+      year,
+      month
+    ),
+
+    loadSchedulesFor(
+      year,
+      month
+    )
+
+  ]);
+
+
+  // =======================================================
+  // 今月なら今日を自動選択
+  // それ以外なら1日
+  // =======================================================
+
+  if (
+    !selectedCalendarDate ||
+    !selectedCalendarDate.startsWith(
+      `${year}-${String(month).padStart(2, "0")}`
+    )
+  ) {
+
+    const today =
+      new Date();
+
+
+    if (
+      today.getFullYear() === year &&
+      today.getMonth() + 1 === month
+    ) {
+
+      selectedCalendarDate =
+        localDateKey(
+          today
+        );
+
+    }
+
+    else {
+
+      selectedCalendarDate =
+        localDateKey(
+          new Date(
+            year,
+            month - 1,
+            1
+          )
+        );
+
+    }
+
+  }
+
+
+  renderCalendar();
+
+  renderSelectedDay();
+
+}
+
+
+// =========================================================
 // CALENDAR
 // =========================================================
 
-async function renderCalendar() {
+function renderCalendar() {
 
   const grid =
-    document.getElementById(
+    el(
       "calendarGrid"
     );
 
@@ -1382,20 +2012,14 @@ async function renderCalendar() {
     calendarDate.getFullYear();
 
 
-  const month =
+  const monthIndex =
     calendarDate.getMonth();
-
-
-  document.getElementById(
-    "calendarMonthLabel"
-  ).textContent =
-    `${year}年${month + 1}月`;
 
 
   const firstDay =
     new Date(
       year,
-      month,
+      monthIndex,
       1
     );
 
@@ -1403,45 +2027,59 @@ async function renderCalendar() {
   const lastDay =
     new Date(
       year,
-      month + 1,
+      monthIndex + 1,
       0
     );
 
 
-  const startWeekday =
+  const firstWeekday =
     firstDay.getDay();
 
 
-  const days =
+  const daysInMonth =
     lastDay.getDate();
+
+
+  const todayKey =
+    localDateKey(
+      new Date()
+    );
 
 
   let html =
     "";
 
 
+  // =======================================================
+  // BLANK
+  // =======================================================
+
   for (
     let i = 0;
-    i < startWeekday;
+    i < firstWeekday;
     i++
   ) {
 
     html +=
-      `<div class="calendar-day empty"></div>`;
+      `<div class="calendar-day calendar-day-empty"></div>`;
 
   }
 
 
+  // =======================================================
+  // DAYS
+  // =======================================================
+
   for (
     let day = 1;
-    day <= days;
+    day <= daysInMonth;
     day++
   ) {
 
     const date =
       new Date(
         year,
-        month,
+        monthIndex,
         day
       );
 
@@ -1453,9 +2091,8 @@ async function renderCalendar() {
 
 
     const schedules =
-      scheduleData.filter(
-        item =>
-          item.date === key
+      getSchedulesForDate(
+        key
       );
 
 
@@ -1465,96 +2102,92 @@ async function renderCalendar() {
       );
 
 
-    const total =
-      expenses.reduce(
-        (
-          sum,
-          item
-        ) =>
-          sum +
-          (
-            Number(
-              item.amount
-            ) ||
-            0
-          ),
-        0
+    const hasSatoru =
+      schedules.some(
+        item =>
+          item.target === "さとる"
       );
+
+
+    const hasKana =
+      schedules.some(
+        item =>
+          item.target === "かな"
+      );
+
+
+    const hasTogether =
+      schedules.some(
+        item =>
+          item.target === "ふたり"
+      );
+
+
+    const hasExpense =
+      expenses.length > 0;
 
 
     const isToday =
       key ===
-      localDateKey(
-        new Date()
-      );
+      todayKey;
 
 
-    const selected =
+    const isSelected =
       key ===
       selectedCalendarDate;
+
+
+    const weekday =
+      date.getDay();
 
 
     html += `
 
       <button
+        type="button"
         class="
           calendar-day
-          ${isToday ? "today" : ""}
-          ${selected ? "selected" : ""}
+          ${isToday ? "is-today" : ""}
+          ${isSelected ? "is-selected" : ""}
+          ${weekday === 0 ? "is-sunday" : ""}
+          ${weekday === 6 ? "is-saturday" : ""}
         "
-        type="button"
-        data-date="${key}"
+        data-calendar-date="${key}"
+        aria-label="${year}年${monthIndex + 1}月${day}日"
       >
 
-        <span class="calendar-number">
+        <span class="calendar-day-number">
           ${day}
         </span>
 
 
-        <div class="calendar-markers">
+        <span class="calendar-event-markers">
 
           ${
-            schedules
-              .slice(
-                0,
-                2
-              )
-              .map(
-                schedule => {
-
-                  const icon =
-                    schedule.target === "さとる"
-                      ? "🌿"
-                      : (
-                          schedule.target === "かな"
-                            ? "🌸"
-                            : "👫"
-                        );
-
-
-                  return `
-                    <span class="calendar-schedule-dot">
-                      ${icon}
-                    </span>
-                  `;
-
-                }
-              )
-              .join("")
+            hasSatoru
+              ? `<i class="marker marker-satoru"></i>`
+              : ""
           }
 
-        </div>
+          ${
+            hasKana
+              ? `<i class="marker marker-kana"></i>`
+              : ""
+          }
 
+          ${
+            hasTogether
+              ? `<i class="marker marker-together"></i>`
+              : ""
+          }
 
-        ${
-          total > 0
-            ? `
-                <span class="calendar-money">
-                  ${compactYen(total)}
-                </span>
-              `
-            : ""
-        }
+          ${
+            hasExpense
+              ? `<i class="marker-expense">¥</i>`
+              : ""
+          }
+
+        </span>
 
       </button>
 
@@ -1569,7 +2202,7 @@ async function renderCalendar() {
 
   grid
     .querySelectorAll(
-      ".calendar-day:not(.empty)"
+      "[data-calendar-date]"
     )
     .forEach(
       button => {
@@ -1579,12 +2212,33 @@ async function renderCalendar() {
           () => {
 
             selectedCalendarDate =
-              button.dataset.date;
+              button.dataset.calendarDate;
 
 
             renderCalendar();
 
             renderSelectedDay();
+
+
+            const detail =
+              document.querySelector(
+                ".selected-date-section"
+              );
+
+
+            if (detail) {
+
+              detail.scrollIntoView({
+
+                behavior:
+                  "smooth",
+
+                block:
+                  "start"
+
+              });
+
+            }
 
           }
         );
@@ -1592,47 +2246,71 @@ async function renderCalendar() {
       }
     );
 
+}
 
-  if (
-    selectedCalendarDate
-  ) {
 
-    renderSelectedDay();
+// =========================================================
+// GET EXPENSES FOR DATE
+// =========================================================
 
-  }
+function getExpensesForDate(dateKey) {
+
+  return receiptData.filter(
+    item => {
+
+      const date =
+        parseDateValue(
+          item.date
+        );
+
+
+      if (!date) {
+
+        return false;
+
+      }
+
+
+      return (
+        localDateKey(
+          date
+        ) ===
+        dateKey
+      );
+
+    }
+  );
 
 }
 
 
 // =========================================================
-// EXPENSES FOR DATE
+// GET SCHEDULES FOR DATE
 // =========================================================
 
-function getExpensesForDate(
-  date
-) {
+function getSchedulesForDate(dateKey) {
 
-  const source =
-    receiptData.length
-      ? receiptData
-      : (
-          Array.isArray(
-            dashboardData?.recent
+  return scheduleData
+    .filter(
+      item =>
+        String(
+          item.date || ""
+        ).slice(
+          0,
+          10
+        ) ===
+        dateKey
+    )
+    .sort(
+      (a, b) =>
+        String(
+          a.start || ""
+        ).localeCompare(
+          String(
+            b.start || ""
           )
-            ? dashboardData.recent
-            : []
-        );
-
-
-  return source.filter(
-    item =>
-      String(
-        item.date || ""
-      ).slice(
-        0,
-        10
-      ) === date
-  );
+        )
+    );
 
 }
 
@@ -1652,33 +2330,9 @@ function renderSelectedDay() {
   }
 
 
-  const title =
-    document.getElementById(
-      "selectedDateTitle"
-    );
-
-
-  const list =
-    document.getElementById(
-      "selectedDayList"
-    );
-
-
-  const date =
-    new Date(
-      `${selectedCalendarDate}T00:00:00`
-    );
-
-
-  title.textContent =
-    `${date.getMonth() + 1}月${date.getDate()}日`;
-
-
   const schedules =
-    scheduleData.filter(
-      item =>
-        item.date ===
-        selectedCalendarDate
+    getSchedulesForDate(
+      selectedCalendarDate
     );
 
 
@@ -1688,121 +2342,310 @@ function renderSelectedDay() {
     );
 
 
-  let html =
-    "";
+  const expenseTotal =
+    expenses.reduce(
+      (
+        sum,
+        item
+      ) =>
+        sum +
+        (
+          Number(
+            item.amount
+          ) ||
+          0
+        ),
+      0
+    );
 
 
-  schedules.forEach(
-    item => {
+  if (
+    el(
+      "selectedDateTitle"
+    )
+  ) {
 
-      const icon =
-        item.target === "さとる"
-          ? "🌿"
-          : (
-              item.target === "かな"
-                ? "🌸"
-                : "👫"
-            );
-
-
-      html += `
-
-        <button
-          class="schedule-list-item"
-          type="button"
-          data-schedule-id="${escapeHTML(item.id)}"
-        >
-
-          <div class="schedule-icon">
-            ${icon}
-          </div>
-
-
-          <div class="schedule-info">
-
-            <strong>
-              ${escapeHTML(item.title)}
-            </strong>
-
-            <span>
-
-              ${
-                item.start
-                  ? escapeHTML(item.start)
-                  : "時間未設定"
-              }
-
-              ${
-                item.end
-                  ? `〜${escapeHTML(item.end)}`
-                  : ""
-              }
-
-              ・${escapeHTML(item.target)}
-
-            </span>
-
-          </div>
-
-        </button>
-
-      `;
-
-    }
-  );
-
-
-  expenses.forEach(
-    item => {
-
-      html += `
-
-        <div class="day-expense-item">
-
-          <div class="day-expense-icon">
-            💰
-          </div>
-
-          <div>
-
-            <strong>
-              ${escapeHTML(item.shop || item.category)}
-            </strong>
-
-            <span>
-              ${escapeHTML(item.category || "支出")}
-            </span>
-
-          </div>
-
-          <strong class="day-expense-money">
-            ${yen(item.amount)}
-          </strong>
-
-        </div>
-
-      `;
-
-    }
-  );
-
-
-  if (!html) {
-
-    html =
-      emptyState(
-        "event_available",
-        "予定・支出はありません"
+    el(
+      "selectedDateTitle"
+    ).textContent =
+      formatJapaneseDate(
+        selectedCalendarDate
       );
 
   }
 
 
-  list.innerHTML =
+  if (
+    el(
+      "selectedDateTotal"
+    )
+  ) {
+
+    el(
+      "selectedDateTotal"
+    ).textContent =
+      expenseTotal > 0
+        ? yen(
+            expenseTotal
+          )
+        : "支出なし";
+
+  }
+
+
+  const container =
+    el(
+      "selectedDayList"
+    );
+
+
+  if (!container) {
+
+    return;
+
+  }
+
+
+  let html =
+    "";
+
+
+  // =======================================================
+  // SCHEDULE HEADER
+  // =======================================================
+
+  html += `
+
+    <div class="day-detail-block">
+
+      <div class="day-detail-heading">
+
+        <span class="material-symbols-rounded">
+          event
+        </span>
+
+        <strong>
+          ふたりの予定
+        </strong>
+
+        <small>
+          ${schedules.length}件
+        </small>
+
+      </div>
+
+  `;
+
+
+  if (
+    schedules.length === 0
+  ) {
+
+    html += `
+
+      <div class="day-empty-row">
+        この日の予定はありません
+      </div>
+
+    `;
+
+  }
+
+  else {
+
+    schedules.forEach(
+      schedule => {
+
+        const icon =
+          schedule.target === "さとる"
+            ? "🌿"
+            : (
+                schedule.target === "かな"
+                  ? "🌸"
+                  : "👫"
+              );
+
+
+        const time =
+          schedule.start
+            ? (
+                schedule.end
+                  ? `${schedule.start}〜${schedule.end}`
+                  : schedule.start
+              )
+            : "時間未設定";
+
+
+        html += `
+
+          <button
+            type="button"
+            class="schedule-detail-row"
+            data-schedule-id="${escapeHTML(schedule.id)}"
+          >
+
+            <span class="schedule-person-icon">
+              ${icon}
+            </span>
+
+
+            <div class="schedule-detail-main">
+
+              <strong>
+                ${escapeHTML(schedule.title || "予定")}
+              </strong>
+
+              <span>
+                ${escapeHTML(time)}
+                ・
+                ${escapeHTML(schedule.target || "ふたり")}
+              </span>
+
+              ${
+                schedule.memo
+                  ? `
+                    <small>
+                      ${escapeHTML(schedule.memo)}
+                    </small>
+                  `
+                  : ""
+              }
+
+            </div>
+
+
+            <span class="material-symbols-rounded schedule-chevron">
+              chevron_right
+            </span>
+
+          </button>
+
+        `;
+
+      }
+    );
+
+  }
+
+
+  html +=
+    `</div>`;
+
+
+  // =======================================================
+  // EXPENSE HEADER
+  // =======================================================
+
+  html += `
+
+    <div class="day-detail-block">
+
+      <div class="day-detail-heading">
+
+        <span class="material-symbols-rounded">
+          payments
+        </span>
+
+        <strong>
+          この日の支出
+        </strong>
+
+        <small>
+          ${expenses.length}件
+        </small>
+
+      </div>
+
+  `;
+
+
+  if (
+    expenses.length === 0
+  ) {
+
+    html += `
+
+      <div class="day-empty-row">
+        この日の支出はありません
+      </div>
+
+    `;
+
+  }
+
+  else {
+
+    expenses.forEach(
+      expense => {
+
+        html += `
+
+          <div class="day-expense-row">
+
+            <div class="day-expense-main">
+
+              <strong>
+                ${escapeHTML(expense.shop || "支出")}
+              </strong>
+
+              <span>
+                ${escapeHTML(expense.category || "🧾 雑費")}
+
+                ${
+                  expense.payer
+                    ? ` ・ ${escapeHTML(expense.payer)}`
+                    : ""
+                }
+
+              </span>
+
+            </div>
+
+
+            <strong class="day-expense-price">
+              ${yen(expense.amount)}
+            </strong>
+
+          </div>
+
+        `;
+
+      }
+    );
+
+
+    html += `
+
+      <div class="day-expense-total">
+
+        <span>
+          合計
+        </span>
+
+        <strong>
+          ${yen(expenseTotal)}
+        </strong>
+
+      </div>
+
+    `;
+
+  }
+
+
+  html +=
+    `</div>`;
+
+
+  container.innerHTML =
     html;
 
 
-  list
+  // =======================================================
+  // EDIT SCHEDULE
+  // =======================================================
+
+  container
     .querySelectorAll(
       "[data-schedule-id]"
     )
@@ -1813,11 +2656,19 @@ function renderSelectedDay() {
           "click",
           () => {
 
+            const id =
+              button.dataset.scheduleId;
+
+
             const schedule =
               scheduleData.find(
                 item =>
-                  item.id ===
-                  button.dataset.scheduleId
+                  String(
+                    item.id
+                  ) ===
+                  String(
+                    id
+                  )
               );
 
 
@@ -1839,37 +2690,58 @@ function renderSelectedDay() {
 
 
 // =========================================================
-// COMPACT YEN
+// TARGET RADIO SYNC
 // =========================================================
 
-function compactYen(value) {
+function syncTargetSelector(
+  target
+) {
 
-  const number =
-    Number(
-      value
-    ) || 0;
+  const value =
+    [
+      "さとる",
+      "かな",
+      "ふたり"
+    ].includes(
+      target
+    )
+      ? target
+      : "ふたり";
 
 
   if (
-    number >= 10000
+    el(
+      "scheduleTarget"
+    )
   ) {
 
-    return (
-      `¥${Math.round(number / 1000)}k`
-    );
+    el(
+      "scheduleTarget"
+    ).value =
+      value;
 
   }
 
 
-  return (
-    `¥${number.toLocaleString("ja-JP")}`
-  );
+  document
+    .querySelectorAll(
+      'input[name="scheduleTargetRadio"]'
+    )
+    .forEach(
+      radio => {
+
+        radio.checked =
+          radio.value ===
+          value;
+
+      }
+    );
 
 }
 
 
 // =========================================================
-// SCHEDULE MODAL
+// OPEN SCHEDULE MODAL
 // =========================================================
 
 function openScheduleModal(
@@ -1877,19 +2749,30 @@ function openScheduleModal(
 ) {
 
   const modal =
-    document.getElementById(
+    el(
       "scheduleModal"
     );
 
 
-  const deleteButton =
-    document.getElementById(
-      "deleteScheduleButton"
-    );
+  if (!modal) {
+
+    return;
+
+  }
 
 
-  modal.classList.add(
-    "show"
+  modal.hidden =
+    false;
+
+
+  requestAnimationFrame(
+    () => {
+
+      modal.classList.add(
+        "show"
+      );
+
+    }
   );
 
 
@@ -1900,76 +2783,80 @@ function openScheduleModal(
 
   if (schedule) {
 
-    document.getElementById(
+    el(
       "scheduleModalTitle"
     ).textContent =
       "予定を編集";
 
 
-    document.getElementById(
+    el(
       "scheduleId"
     ).value =
       schedule.id || "";
 
 
-    document.getElementById(
+    el(
       "scheduleDate"
     ).value =
-      schedule.date || "";
+      String(
+        schedule.date || ""
+      ).slice(
+        0,
+        10
+      );
 
 
-    document.getElementById(
+    el(
       "scheduleStart"
     ).value =
       schedule.start || "";
 
 
-    document.getElementById(
+    el(
       "scheduleEnd"
     ).value =
       schedule.end || "";
 
 
-    document.getElementById(
+    el(
       "scheduleTitle"
     ).value =
       schedule.title || "";
 
 
-    document.getElementById(
-      "scheduleTarget"
-    ).value =
-      schedule.target ||
-      "ふたり";
-
-
-    document.getElementById(
+    el(
       "scheduleMemo"
     ).value =
       schedule.memo || "";
 
 
-    deleteButton.classList.remove(
-      "hidden"
+    syncTargetSelector(
+      schedule.target
     );
+
+
+    el(
+      "deleteScheduleButton"
+    ).hidden =
+      false;
 
   }
 
   else {
 
-    document.getElementById(
+    el(
       "scheduleModalTitle"
     ).textContent =
       "予定を追加";
 
 
-    document.getElementById(
+    el(
       "scheduleId"
     ).value =
       "";
 
 
-    document.getElementById(
+    el(
       "scheduleDate"
     ).value =
       selectedCalendarDate ||
@@ -1978,39 +2865,39 @@ function openScheduleModal(
       );
 
 
-    document.getElementById(
+    el(
       "scheduleStart"
     ).value =
       "";
 
 
-    document.getElementById(
+    el(
       "scheduleEnd"
     ).value =
       "";
 
 
-    document.getElementById(
+    el(
       "scheduleTitle"
     ).value =
       "";
 
 
-    document.getElementById(
-      "scheduleTarget"
-    ).value =
-      "ふたり";
-
-
-    document.getElementById(
+    el(
       "scheduleMemo"
     ).value =
       "";
 
 
-    deleteButton.classList.add(
-      "hidden"
+    syncTargetSelector(
+      "ふたり"
     );
+
+
+    el(
+      "deleteScheduleButton"
+    ).hidden =
+      true;
 
   }
 
@@ -2023,15 +2910,37 @@ function openScheduleModal(
 
 function closeScheduleModal() {
 
-  document.getElementById(
-    "scheduleModal"
-  ).classList.remove(
+  const modal =
+    el(
+      "scheduleModal"
+    );
+
+
+  if (!modal) {
+
+    return;
+
+  }
+
+
+  modal.classList.remove(
     "show"
   );
 
 
   document.body.classList.remove(
     "modal-open"
+  );
+
+
+  window.setTimeout(
+    () => {
+
+      modal.hidden =
+        true;
+
+    },
+    220
   );
 
 }
@@ -2044,30 +2953,72 @@ function closeScheduleModal() {
 async function saveSchedule() {
 
   const id =
-    document.getElementById(
-      "scheduleId"
-    ).value.trim();
+    String(
+      el(
+        "scheduleId"
+      ).value ||
+      ""
+    ).trim();
 
 
   const date =
-    document.getElementById(
+    el(
       "scheduleDate"
     ).value;
 
 
+  const start =
+    el(
+      "scheduleStart"
+    ).value;
+
+
+  const end =
+    el(
+      "scheduleEnd"
+    ).value;
+
+
   const title =
-    document.getElementById(
-      "scheduleTitle"
-    ).value.trim();
+    String(
+      el(
+        "scheduleTitle"
+      ).value ||
+      ""
+    ).trim();
 
 
-  if (
-    !date ||
-    !title
-  ) {
+  const target =
+    el(
+      "scheduleTarget"
+    ).value;
+
+
+  const memo =
+    String(
+      el(
+        "scheduleMemo"
+      ).value ||
+      ""
+    ).trim();
+
+
+  if (!date) {
 
     showToast(
-      "日付と予定を入力してください"
+      "日付を選択してください"
+    );
+
+
+    return;
+
+  }
+
+
+  if (!title) {
+
+    showToast(
+      "予定を入力してください"
     );
 
 
@@ -2106,17 +3057,13 @@ async function saveSchedule() {
 
   params.set(
     "start",
-    document.getElementById(
-      "scheduleStart"
-    ).value
+    start
   );
 
 
   params.set(
     "end",
-    document.getElementById(
-      "scheduleEnd"
-    ).value
+    end
   );
 
 
@@ -2128,17 +3075,13 @@ async function saveSchedule() {
 
   params.set(
     "target",
-    document.getElementById(
-      "scheduleTarget"
-    ).value
+    target
   );
 
 
   params.set(
     "memo",
-    document.getElementById(
-      "scheduleMemo"
-    ).value
+    memo
   );
 
 
@@ -2146,6 +3089,24 @@ async function saveSchedule() {
     "registeredBy",
     "Web"
   );
+
+
+  const saveButton =
+    el(
+      "saveScheduleButton"
+    );
+
+
+  const oldText =
+    saveButton.textContent;
+
+
+  saveButton.disabled =
+    true;
+
+
+  saveButton.textContent =
+    "保存中...";
 
 
   try {
@@ -2157,18 +3118,16 @@ async function saveSchedule() {
 
 
     if (
-      result.success !== true
+      result.success !==
+      true
     ) {
 
       throw new Error(
         result.error ||
-        "保存失敗"
+        "保存に失敗しました"
       );
 
     }
-
-
-    closeScheduleModal();
 
 
     selectedCalendarDate =
@@ -2181,7 +3140,10 @@ async function saveSchedule() {
       );
 
 
-    await loadSchedules();
+    closeScheduleModal();
+
+
+    await refreshCalendarPage();
 
 
     showToast(
@@ -2195,6 +3157,7 @@ async function saveSchedule() {
   catch (error) {
 
     console.error(
+      "Save Schedule Error:",
       error
     );
 
@@ -2202,6 +3165,17 @@ async function saveSchedule() {
     showToast(
       "予定を保存できませんでした"
     );
+
+  }
+
+  finally {
+
+    saveButton.disabled =
+      false;
+
+
+    saveButton.textContent =
+      oldText;
 
   }
 
@@ -2215,9 +3189,12 @@ async function saveSchedule() {
 async function deleteSchedule() {
 
   const id =
-    document.getElementById(
-      "scheduleId"
-    ).value.trim();
+    String(
+      el(
+        "scheduleId"
+      ).value ||
+      ""
+    ).trim();
 
 
   if (!id) {
@@ -2227,11 +3204,13 @@ async function deleteSchedule() {
   }
 
 
-  if (
-    !window.confirm(
+  const confirmed =
+    window.confirm(
       "この予定を削除しますか？"
-    )
-  ) {
+    );
+
+
+  if (!confirmed) {
 
     return;
 
@@ -2247,12 +3226,13 @@ async function deleteSchedule() {
 
 
     if (
-      result.success !== true
+      result.success !==
+      true
     ) {
 
       throw new Error(
         result.error ||
-        "削除失敗"
+        "削除に失敗しました"
       );
 
     }
@@ -2261,7 +3241,7 @@ async function deleteSchedule() {
     closeScheduleModal();
 
 
-    await loadSchedules();
+    await refreshCalendarPage();
 
 
     showToast(
@@ -2273,6 +3253,7 @@ async function deleteSchedule() {
   catch (error) {
 
     console.error(
+      "Delete Schedule Error:",
       error
     );
 
@@ -2287,104 +3268,13 @@ async function deleteSchedule() {
 
 
 // =========================================================
-// NAVIGATION
-// =========================================================
-
-async function switchPage(page) {
-
-  currentPage =
-    page;
-
-
-  document
-    .querySelectorAll(
-      ".page"
-    )
-    .forEach(
-      element => {
-
-        element.classList.toggle(
-          "active",
-          element.id ===
-          `page-${page}`
-        );
-
-      }
-    );
-
-
-  document
-    .querySelectorAll(
-      ".nav-button"
-    )
-    .forEach(
-      button => {
-
-        button.classList.toggle(
-          "active",
-          button.dataset.page ===
-          page
-        );
-
-      }
-    );
-
-
-  setHeader();
-
-
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
-
-
-  if (
-    page === "receipt"
-  ) {
-
-    await loadReceipts();
-
-  }
-
-
-  if (
-    page === "report"
-  ) {
-
-    renderReport();
-
-  }
-
-
-  if (
-    page === "calendar"
-  ) {
-
-    receiptDate =
-      new Date(
-        calendarDate.getFullYear(),
-        calendarDate.getMonth(),
-        1
-      );
-
-
-    await loadReceipts();
-
-    await loadSchedules();
-
-  }
-
-}
-
-
-// =========================================================
 // EMPTY STATE
 // =========================================================
 
-function emptyState(
+function createEmptyState(
   icon,
-  text
+  title,
+  description
 ) {
 
   return `
@@ -2392,12 +3282,22 @@ function emptyState(
     <div class="empty-state">
 
       <span class="material-symbols-rounded">
-        ${icon}
+        ${escapeHTML(icon)}
       </span>
 
       <strong>
-        ${escapeHTML(text)}
+        ${escapeHTML(title)}
       </strong>
+
+      ${
+        description
+          ? `
+            <p>
+              ${escapeHTML(description)}
+            </p>
+          `
+          : ""
+      }
 
     </div>
 
@@ -2410,18 +3310,32 @@ function emptyState(
 // TOAST
 // =========================================================
 
+let toastTimer =
+  null;
+
+
 function showToast(message) {
 
   const toast =
-    document.getElementById(
+    el(
       "errorToast"
     );
 
 
   const text =
-    document.getElementById(
+    el(
       "errorMessage"
     );
+
+
+  if (
+    !toast ||
+    !text
+  ) {
+
+    return;
+
+  }
 
 
   text.textContent =
@@ -2433,38 +3347,62 @@ function showToast(message) {
   );
 
 
-  window.setTimeout(
-    () => {
+  if (
+    toastTimer
+  ) {
 
-      toast.classList.remove(
-        "show"
-      );
+    clearTimeout(
+      toastTimer
+    );
 
-    },
-    2800
-  );
+  }
+
+
+  toastTimer =
+    window.setTimeout(
+      () => {
+
+        toast.classList.remove(
+          "show"
+        );
+
+      },
+      2600
+    );
 
 }
 
 
 // =========================================================
-// UPDATE TIME
+// UPDATED
 // =========================================================
 
-function setUpdatedTime() {
+function updateLastUpdated() {
+
+  const target =
+    el(
+      "lastUpdated"
+    );
+
+
+  if (!target) {
+
+    return;
+
+  }
+
 
   const now =
     new Date();
 
 
-  document.getElementById(
-    "lastUpdated"
-  ).textContent =
+  target.textContent =
     `${now.toLocaleTimeString(
       "ja-JP",
       {
         hour:
           "2-digit",
+
         minute:
           "2-digit"
       }
@@ -2479,7 +3417,9 @@ function setUpdatedTime() {
 
 function setupEvents() {
 
+  // =======================================================
   // NAV
+  // =======================================================
 
   document
     .querySelectorAll(
@@ -2490,9 +3430,9 @@ function setupEvents() {
 
         button.addEventListener(
           "click",
-          () => {
+          async () => {
 
-            switchPage(
+            await switchPage(
               button.dataset.page
             );
 
@@ -2503,11 +3443,13 @@ function setupEvents() {
     );
 
 
+  // =======================================================
   // HOME → REPORT
+  // =======================================================
 
-  document.getElementById(
+  el(
     "categoryDetailButton"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     () => {
 
@@ -2519,11 +3461,13 @@ function setupEvents() {
   );
 
 
+  // =======================================================
   // HOME → RECEIPT
+  // =======================================================
 
-  document.getElementById(
+  el(
     "receiptDetailButton"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     () => {
 
@@ -2535,51 +3479,67 @@ function setupEvents() {
   );
 
 
-  // RECEIPT MONTH
+  // =======================================================
+  // RECEIPT PREV
+  // =======================================================
 
-  document.getElementById(
+  el(
     "receiptPrevMonth"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     async () => {
 
-      receiptDate.setMonth(
-        receiptDate.getMonth() - 1
-      );
+      receiptDate =
+        new Date(
+          receiptDate.getFullYear(),
+          receiptDate.getMonth() - 1,
+          1
+        );
 
 
-      await loadReceipts();
+      updatePageHeader();
 
-      setHeader();
+
+      await refreshReceiptPage();
 
     }
   );
 
 
-  document.getElementById(
+  // =======================================================
+  // RECEIPT NEXT
+  // =======================================================
+
+  el(
     "receiptNextMonth"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     async () => {
 
-      receiptDate.setMonth(
-        receiptDate.getMonth() + 1
-      );
+      receiptDate =
+        new Date(
+          receiptDate.getFullYear(),
+          receiptDate.getMonth() + 1,
+          1
+        );
 
 
-      await loadReceipts();
+      updatePageHeader();
 
-      setHeader();
+
+      await refreshReceiptPage();
 
     }
   );
 
 
-  // CALENDAR MONTH
+  // =======================================================
+  // CALENDAR PREV
+  // =======================================================
 
-  document.getElementById(
+  el(
     "calendarPrevMonth"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     async () => {
 
@@ -2595,27 +3555,22 @@ function setupEvents() {
         null;
 
 
-      receiptDate =
-        new Date(
-          calendarDate.getFullYear(),
-          calendarDate.getMonth(),
-          1
-        );
+      updatePageHeader();
 
 
-      await loadReceipts();
-
-      await loadSchedules();
-
-      setHeader();
+      await refreshCalendarPage();
 
     }
   );
 
 
-  document.getElementById(
+  // =======================================================
+  // CALENDAR NEXT
+  // =======================================================
+
+  el(
     "calendarNextMonth"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     async () => {
 
@@ -2631,29 +3586,22 @@ function setupEvents() {
         null;
 
 
-      receiptDate =
-        new Date(
-          calendarDate.getFullYear(),
-          calendarDate.getMonth(),
-          1
-        );
+      updatePageHeader();
 
 
-      await loadReceipts();
-
-      await loadSchedules();
-
-      setHeader();
+      await refreshCalendarPage();
 
     }
   );
 
 
+  // =======================================================
   // ADD SCHEDULE
+  // =======================================================
 
-  document.getElementById(
+  el(
     "addScheduleButton"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     () => {
 
@@ -2663,27 +3611,33 @@ function setupEvents() {
   );
 
 
-  // CLOSE
+  // =======================================================
+  // MODAL CLOSE
+  // =======================================================
 
-  document.getElementById(
+  el(
     "scheduleModalClose"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     closeScheduleModal
   );
 
 
-  // BACKDROP
+  // =======================================================
+  // MODAL BACKDROP
+  // =======================================================
 
-  document.getElementById(
+  el(
     "scheduleModal"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     event => {
 
       if (
-        event.target.id ===
-        "scheduleModal"
+        event.target ===
+        el(
+          "scheduleModal"
+        )
       ) {
 
         closeScheduleModal();
@@ -2694,36 +3648,78 @@ function setupEvents() {
   );
 
 
-  // SAVE
+  // =======================================================
+  // TARGET
+  // =======================================================
 
-  document.getElementById(
+  document
+    .querySelectorAll(
+      'input[name="scheduleTargetRadio"]'
+    )
+    .forEach(
+      radio => {
+
+        radio.addEventListener(
+          "change",
+          () => {
+
+            if (
+              radio.checked &&
+              el(
+                "scheduleTarget"
+              )
+            ) {
+
+              el(
+                "scheduleTarget"
+              ).value =
+                radio.value;
+
+            }
+
+          }
+        );
+
+      }
+    );
+
+
+  // =======================================================
+  // SAVE
+  // =======================================================
+
+  el(
     "saveScheduleButton"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     saveSchedule
   );
 
 
+  // =======================================================
   // DELETE
+  // =======================================================
 
-  document.getElementById(
+  el(
     "deleteScheduleButton"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     deleteSchedule
   );
 
 
-  // NOTIFICATION
+  // =======================================================
+  // BELL
+  // =======================================================
 
-  document.getElementById(
+  el(
     "notificationButton"
-  ).addEventListener(
+  )?.addEventListener(
     "click",
     () => {
 
       showToast(
-        "お知らせはありません"
+        "現在、新しいお知らせはありません"
       );
 
     }
@@ -2750,7 +3746,7 @@ function startAutoRefresh() {
 
 
   refreshTimer =
-    setInterval(
+    window.setInterval(
       async () => {
 
         if (
@@ -2767,10 +3763,21 @@ function startAutoRefresh() {
 
 
         if (
-          currentPage === "calendar"
+          currentPage ===
+          "receipt"
         ) {
 
-          await loadSchedules();
+          await refreshReceiptPage();
+
+        }
+
+
+        if (
+          currentPage ===
+          "calendar"
+        ) {
+
+          await refreshCalendarPage();
 
         }
 
@@ -2782,32 +3789,94 @@ function startAutoRefresh() {
 
 
 // =========================================================
-// START
+// VISIBILITY
+// =========================================================
+
+document.addEventListener(
+  "visibilitychange",
+  async () => {
+
+    if (
+      document.visibilityState !==
+      "visible"
+    ) {
+
+      return;
+
+    }
+
+
+    await loadDashboard();
+
+
+    if (
+      currentPage ===
+      "calendar"
+    ) {
+
+      await refreshCalendarPage();
+
+    }
+
+  }
+);
+
+
+// =========================================================
+// START PAGE
+// =========================================================
+
+function getInitialPage() {
+
+  const hash =
+    window.location.hash
+      .replace(
+        "#",
+        ""
+      )
+      .trim();
+
+
+  const valid = [
+    "home",
+    "receipt",
+    "report",
+    "calendar",
+    "settings"
+  ];
+
+
+  return valid.includes(
+    hash
+  )
+    ? hash
+    : "home";
+
+}
+
+
+// =========================================================
+// INITIALIZE
 // =========================================================
 
 async function initializeApp() {
 
-  const now =
-    new Date();
+  // =======================================================
+  // まず全ページ非表示
+  // =======================================================
 
+  document
+    .querySelectorAll(
+      "[data-page-panel]"
+    )
+    .forEach(
+      panel => {
 
-  receiptDate =
-    new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1
+        panel.hidden =
+          true;
+
+      }
     );
-
-
-  calendarDate =
-    new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1
-    );
-
-
-  setHeader();
 
 
   setupEvents();
@@ -2816,10 +3885,23 @@ async function initializeApp() {
   await loadDashboard();
 
 
+  const initialPage =
+    getInitialPage();
+
+
+  await switchPage(
+    initialPage
+  );
+
+
   startAutoRefresh();
 
 }
 
+
+// =========================================================
+// START
+// =========================================================
 
 document.addEventListener(
   "DOMContentLoaded",
