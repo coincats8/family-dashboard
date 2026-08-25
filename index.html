@@ -2,7 +2,6 @@
 <html lang="ja">
 
 <head>
-
   <meta charset="UTF-8">
 
   <meta
@@ -10,10 +9,7 @@
     content="width=device-width, initial-scale=1.0, viewport-fit=cover"
   >
 
-  <meta
-    name="theme-color"
-    content="#F5F7FA"
-  >
+  <meta name="theme-color" content="#F5F7FA">
 
   <meta
     name="description"
@@ -22,21 +18,9 @@
 
   <title>ふたりの家計簿</title>
 
+  <link rel="stylesheet" href="css/style.css">
 
-  <!-- CSS -->
-
-  <link
-    rel="stylesheet"
-    href="css/style.css"
-  >
-
-
-  <!-- Google Fonts -->
-
-  <link
-    rel="preconnect"
-    href="https://fonts.googleapis.com"
-  >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
 
   <link
     rel="preconnect"
@@ -48,9 +32,6 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   >
-
-
-  <!-- Material Symbols -->
 
   <link
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded"
@@ -117,7 +98,7 @@
 
 
   <!-- ===================================================
-       生活費
+       今月の生活費
   ==================================================== -->
 
   <section class="card summary-card living-card">
@@ -147,8 +128,6 @@
     </div>
 
 
-    <!-- Progress -->
-
     <div
       class="progress"
       id="budgetProgress"
@@ -167,8 +146,6 @@
     </div>
 
 
-    <!-- Budget -->
-
     <div class="budget-row">
 
       <div class="budget-item">
@@ -178,7 +155,7 @@
         </span>
 
         <strong id="budgetMoney">
-          ¥0
+          ¥250,000
         </strong>
 
       </div>
@@ -191,7 +168,7 @@
         </span>
 
         <strong id="balanceMoney">
-          ¥0
+          ¥250,000
         </strong>
 
       </div>
@@ -203,167 +180,115 @@
 
 
   <!-- ===================================================
-       貯蓄・投資
+       今月の貯蓄
   ==================================================== -->
 
-  <section class="finance-overview">
+  <section class="saving-summary">
 
-
-    <!-- 貯蓄 -->
-
-    <article class="mini-card saving-card">
-
-      <div class="mini-card-icon saving-icon">
-
-        <span class="material-symbols-rounded">
-          savings
-        </span>
-
-      </div>
-
-
-      <p class="mini-card-label">
-        今月の貯蓄
-      </p>
-
-
-      <strong
-        class="mini-card-value"
-        id="savingActual"
-      >
-        ¥0
-      </strong>
-
-
-      <div class="mini-card-bottom">
-
-        <span>
-          目標
-        </span>
-
-        <strong id="savingTarget">
-          ¥0
-        </strong>
-
-      </div>
-
-
-      <div class="mini-progress">
-
-        <div
-          class="mini-progress-bar saving-progress"
-          id="savingProgress"
-        ></div>
-
-      </div>
-
-
-      <p
-        class="mini-rate"
-        id="savingRate"
-      >
-        達成率 0%
-      </p>
-
-    </article>
-
-
-
-    <!-- 投資 -->
-
-    <article class="mini-card investment-card">
-
-      <div class="mini-card-icon investment-icon">
-
-        <span class="material-symbols-rounded">
-          trending_up
-        </span>
-
-      </div>
-
-
-      <p class="mini-card-label">
-        今月の投資
-      </p>
-
-
-      <strong
-        class="mini-card-value"
-        id="investmentActual"
-      >
-        ¥0
-      </strong>
-
-
-      <div class="mini-card-bottom">
-
-        <span>
-          予定
-        </span>
-
-        <strong id="investmentTarget">
-          ¥0
-        </strong>
-
-      </div>
-
-
-      <div class="mini-progress">
-
-        <div
-          class="mini-progress-bar investment-progress"
-          id="investmentProgress"
-        ></div>
-
-      </div>
-
-
-      <p
-        class="mini-rate"
-        id="investmentRate"
-      >
-        達成率 0%
-      </p>
-
-    </article>
-
-  </section>
-
-
-
-  <!-- ===================================================
-       TOTAL PLAN
-  ==================================================== -->
-
-  <section class="plan-strip">
-
-    <div class="plan-strip-icon">
+    <div class="saving-summary-icon">
 
       <span class="material-symbols-rounded">
-        account_balance_wallet
+        savings
       </span>
 
     </div>
 
 
-    <div class="plan-strip-main">
+    <div class="saving-summary-content">
 
-      <span>
-        今月の家計プラン
+      <span class="saving-summary-label">
+        💰 今月の貯蓄
       </span>
 
-      <strong id="monthlyPlanTotal">
-        ¥0
+      <strong id="savingActual">
+        ¥250,000
+      </strong>
+
+      <p>
+        生活費の残金を自動で貯蓄
+      </p>
+
+    </div>
+
+  </section>
+
+
+
+  <!-- ===================================================
+       夫婦の負担
+  ==================================================== -->
+
+  <section class="contribution-card">
+
+    <div class="contribution-header">
+
+      <div>
+
+        <span class="contribution-caption">
+          今月の生活費
+        </span>
+
+        <h3>
+          ふたりの負担
+        </h3>
+
+      </div>
+
+
+      <strong
+        class="contribution-total"
+        id="contributionTotal"
+      >
+        ¥250,000
       </strong>
 
     </div>
 
 
-    <div class="plan-strip-detail">
+    <div class="contribution-members">
 
-      <span>
-        生活費 + 貯蓄 + 投資
-      </span>
+
+      <div class="contribution-member">
+
+        <div class="member-left">
+
+          <span class="member-avatar">
+            👨
+          </span>
+
+          <span>
+            さとる
+          </span>
+
+        </div>
+
+        <strong id="satoruContribution">
+          ¥150,000
+        </strong>
+
+      </div>
+
+
+      <div class="contribution-member">
+
+        <div class="member-left">
+
+          <span class="member-avatar">
+            👩
+          </span>
+
+          <span>
+            かな
+          </span>
+
+        </div>
+
+        <strong id="kanaContribution">
+          ¥100,000
+        </strong>
+
+      </div>
+
 
     </div>
 
@@ -545,7 +470,7 @@
 
 
 <!-- =====================================================
-     BOTTOM NAV
+     BOTTOM NAVIGATION
 ===================================================== -->
 
 <nav
@@ -553,8 +478,6 @@
   aria-label="メインメニュー"
 >
 
-
-  <!-- HOME -->
 
   <button
     class="nav-button active"
@@ -575,8 +498,6 @@
 
 
 
-  <!-- RECEIPT -->
-
   <button
     class="nav-button"
     type="button"
@@ -595,8 +516,6 @@
   </button>
 
 
-
-  <!-- REPORT -->
 
   <button
     class="nav-button"
@@ -617,8 +536,6 @@
 
 
 
-  <!-- CALENDAR -->
-
   <button
     class="nav-button"
     type="button"
@@ -637,8 +554,6 @@
   </button>
 
 
-
-  <!-- SETTINGS -->
 
   <button
     class="nav-button"
@@ -662,7 +577,7 @@
 
 
 <!-- =====================================================
-     ERROR TOAST
+     ERROR
 ===================================================== -->
 
 <div
@@ -684,13 +599,8 @@
 
 
 
-<!-- =====================================================
-     JAVASCRIPT
-===================================================== -->
-
 <script src="js/app.js"></script>
 
 
 </body>
-
 </html>
