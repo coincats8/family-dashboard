@@ -1,77 +1,87 @@
-document.getElementById("app").innerHTML = `
-<div class="header">
-    <div class="greeting">
-        ☀️ おはよう、市川さん
-    </div>
+// ================================
+// Family Dashboard v0.2
+// ================================
 
-    <div class="title">
-        ふたりの家計簿
-    </div>
-</div>
+// 仮データ（後でスプレッドシートから取得）
+const dashboard = {
+  budget: 300000,
+  total: 152380,
+  categories: {
+    food: 48230,
+    eatingOut: 12830,
+    daily: 8520,
+    transport: 5980
+  }
+};
 
-<div class="card">
+// 金額を「¥123,456」にする
+function yen(value) {
+  return "¥" + value.toLocaleString("ja-JP");
+}
 
-    <div class="card-title">
-        今月の支出
-    </div>
+// カウントアップ
+function animateNumber(target, end) {
+  let current = 0;
 
-    <div class="amount">
-        ¥0
-    </div>
+  const step = Math.max(1, Math.ceil(end / 80));
 
-    <div class="progress">
-        <div class="progress-value"></div>
-    </div>
+  const timer = setInterval(() => {
 
-</div>
+    current += step;
 
-<div class="card">
+    if (current >= end) {
+      current = end;
+      clearInterval(timer);
+    }
 
-    <div class="category">
-        <span>🍚 食費</span>
-        <span>¥0</span>
-    </div>
+    target.textContent = yen(current);
 
-    <div class="category">
-        <span>🍜 外食</span>
-        <span>¥0</span>
-    </div>
+  }, 16);
+}
 
-    <div class="category">
-        <span>🛒 日用品</span>
-        <span>¥0</span>
-    </div>
+// 今日の日付
+function setMonth() {
 
-    <div class="category">
-        <span>🚗 交通費</span>
-        <span>¥0</span>
-    </div>
+  const now = new Date();
 
-</div>
+  const month = document.querySelector(".month");
 
-<div class="card">
+  month.textContent =
+    now.getFullYear() +
+    "年" +
+    (now.getMonth() + 1) +
+    "月";
 
-    <div class="card-title">
-        最近のレシート
-    </div>
+}
 
-    <div style="margin-top:20px;color:#6E6E73;">
-        まだ登録されていません
-    </div>
+// 初期表示
+window.onload = () => {
 
-</div>
+  setMonth();
 
-<div class="bottom-nav">
+  // 合計金額
+  const total = document.getElementById("totalMoney");
 
-<span class="material-symbols-rounded">home</span>
+  animateNumber(total, dashboard.total);
 
-<span class="material-symbols-rounded">receipt_long</span>
+  // プログレスバー
+  const percent = dashboard.total / dashboard.budget * 100;
 
-<span class="material-symbols-rounded">pie_chart</span>
+  document.querySelector(".progress-bar").style.width =
+    percent + "%";
 
-<span class="material-symbols-rounded">calendar_month</span>
+  // 残り予算
+  document.querySelector(".budget-row").innerHTML = `
+    <span>予算 ${yen(dashboard.budget)}</span>
+    <span>残り ${yen(dashboard.budget-dashboard.total)}</span>
+  `;
 
-<span class="material-symbols-rounded">settings</span>
+  // カテゴリ
+  const rows = document.querySelectorAll(".category strong");
 
-</div>
-`;
+  rows[0].textContent = yen(dashboard.categories.food);
+  rows[1].textContent = yen(dashboard.categories.eatingOut);
+  rows[2].textContent = yen(dashboard.categories.daily);
+  rows[3].textContent = yen(dashboard.categories.transport);
+
+};
