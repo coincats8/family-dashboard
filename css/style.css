@@ -2,11 +2,12 @@
    Family Dashboard
    Apple Style UI
    style.css
+   v0.7
    ========================================================= */
 
 
 /* =========================================================
-   RESET
+   1. RESET
    ========================================================= */
 
 *,
@@ -76,13 +77,13 @@ button:focus-visible {
 
 
 /* =========================================================
-   VARIABLES
+   2. VARIABLES
    ========================================================= */
 
 :root {
   --background: #f5f7fa;
 
-  --card: rgba(255, 255, 255, 0.92);
+  --card: rgba(255, 255, 255, 0.94);
 
   --text: #1d1d1f;
 
@@ -97,6 +98,14 @@ button:focus-visible {
   --green-soft: rgba(52, 199, 89, 0.11);
 
   --blue: #007aff;
+
+  --blue-light: #5ac8fa;
+
+  --blue-soft: rgba(0, 122, 255, 0.10);
+
+  --purple: #af52de;
+
+  --purple-soft: rgba(175, 82, 222, 0.10);
 
   --red: #ff3b30;
 
@@ -124,12 +133,11 @@ button:focus-visible {
 
 
 /* =========================================================
-   APP
+   3. APP
    ========================================================= */
 
 .app {
   width: 100%;
-
   max-width: var(--app-width);
 
   min-height: 100vh;
@@ -144,7 +152,7 @@ button:focus-visible {
 
 
 /* =========================================================
-   HEADER
+   4. HEADER
    ========================================================= */
 
 .header {
@@ -201,7 +209,7 @@ button:focus-visible {
 
 
 /* =========================================================
-   NOTIFICATION BUTTON
+   5. NOTIFICATION
    ========================================================= */
 
 .bell {
@@ -251,7 +259,7 @@ button:focus-visible {
 
 
 /* =========================================================
-   CARDS
+   6. CARD
    ========================================================= */
 
 .card {
@@ -278,18 +286,6 @@ button:focus-visible {
   animation: cardAppear 0.45s ease both;
 }
 
-.card:nth-of-type(2) {
-  animation-delay: 0.04s;
-}
-
-.card:nth-of-type(3) {
-  animation-delay: 0.08s;
-}
-
-.card:nth-of-type(4) {
-  animation-delay: 0.12s;
-}
-
 .card-title {
   color: var(--text-secondary);
 
@@ -314,15 +310,15 @@ button:focus-visible {
 
 
 /* =========================================================
-   SUMMARY
+   7. LIVING CARD
    ========================================================= */
 
 .summary-card {
   background:
     linear-gradient(
       145deg,
-      rgba(255, 255, 255, 0.98),
-      rgba(255, 255, 255, 0.88)
+      rgba(255, 255, 255, 0.99),
+      rgba(249, 255, 251, 0.92)
     );
 }
 
@@ -331,17 +327,18 @@ button:focus-visible {
 
   position: absolute;
 
-  top: -70px;
+  top: -72px;
 
-  right: -70px;
+  right: -72px;
 
-  width: 170px;
+  width: 175px;
 
-  height: 170px;
+  height: 175px;
 
   border-radius: 50%;
 
-  background: rgba(52, 199, 89, 0.08);
+  background:
+    rgba(52, 199, 89, 0.08);
 
   pointer-events: none;
 }
@@ -377,6 +374,10 @@ button:focus-visible {
 }
 
 .summary-percent {
+  position: relative;
+
+  z-index: 2;
+
   flex: 0 0 auto;
 
   min-width: 54px;
@@ -398,7 +399,7 @@ button:focus-visible {
 
 
 /* =========================================================
-   PROGRESS
+   8. MAIN PROGRESS
    ========================================================= */
 
 .progress {
@@ -441,7 +442,7 @@ button:focus-visible {
 
 
 /* =========================================================
-   BUDGET
+   9. BUDGET
    ========================================================= */
 
 .budget-row {
@@ -488,7 +489,366 @@ button:focus-visible {
 
 
 /* =========================================================
-   SECTION HEADER
+   10. SAVING + INVESTMENT OVERVIEW
+   ========================================================= */
+
+.finance-overview {
+  display: grid;
+
+  grid-template-columns: 1fr 1fr;
+
+  gap: 12px;
+
+  margin-bottom: 14px;
+}
+
+.mini-card {
+  position: relative;
+
+  min-width: 0;
+
+  padding: 18px;
+
+  overflow: hidden;
+
+  border: 1px solid rgba(255, 255, 255, 0.88);
+
+  border-radius: 24px;
+
+  background: rgba(255, 255, 255, 0.94);
+
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.05);
+
+  backdrop-filter: blur(20px);
+
+  -webkit-backdrop-filter: blur(20px);
+
+  animation: cardAppear 0.45s ease both;
+}
+
+.saving-card {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.98),
+      rgba(245, 255, 248, 0.98)
+    );
+}
+
+.investment-card {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.98),
+      rgba(245, 250, 255, 0.98)
+    );
+}
+
+.mini-card::after {
+  content: "";
+
+  position: absolute;
+
+  top: -35px;
+
+  right: -35px;
+
+  width: 90px;
+
+  height: 90px;
+
+  border-radius: 50%;
+
+  pointer-events: none;
+}
+
+.saving-card::after {
+  background:
+    rgba(52, 199, 89, 0.08);
+}
+
+.investment-card::after {
+  background:
+    rgba(0, 122, 255, 0.08);
+}
+
+
+/* =========================================================
+   11. MINI CARD ICON
+   ========================================================= */
+
+.mini-card-icon {
+  position: relative;
+
+  z-index: 2;
+
+  display: grid;
+
+  place-items: center;
+
+  width: 38px;
+
+  height: 38px;
+
+  margin-bottom: 15px;
+
+  border-radius: 13px;
+}
+
+.saving-icon {
+  color: var(--green);
+
+  background:
+    var(--green-soft);
+}
+
+.investment-icon {
+  color: var(--blue);
+
+  background:
+    var(--blue-soft);
+}
+
+.mini-card-icon
+.material-symbols-rounded {
+  font-size: 21px;
+}
+
+
+/* =========================================================
+   12. MINI CARD TEXT
+   ========================================================= */
+
+.mini-card-label {
+  color: var(--text-secondary);
+
+  font-size: 11px;
+
+  font-weight: 600;
+}
+
+.mini-card-value {
+  display: block;
+
+  margin-top: 5px;
+
+  overflow: hidden;
+
+  color: var(--text);
+
+  font-size: clamp(20px, 5.8vw, 27px);
+
+  font-weight: 800;
+
+  letter-spacing: -0.04em;
+
+  line-height: 1.2;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  font-variant-numeric: tabular-nums;
+}
+
+.mini-card-bottom {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 5px;
+
+  margin-top: 15px;
+
+  color: var(--text-tertiary);
+
+  font-size: 10px;
+}
+
+.mini-card-bottom strong {
+  overflow: hidden;
+
+  color: var(--text-secondary);
+
+  font-size: 11px;
+
+  font-weight: 700;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* =========================================================
+   13. MINI PROGRESS
+   ========================================================= */
+
+.mini-progress {
+  width: 100%;
+
+  height: 6px;
+
+  margin-top: 9px;
+
+  overflow: hidden;
+
+  border-radius: 100px;
+
+  background: rgba(142, 142, 147, 0.14);
+}
+
+.mini-progress-bar {
+  width: 0%;
+
+  height: 100%;
+
+  border-radius: inherit;
+
+  transition:
+    width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.saving-progress {
+  background:
+    linear-gradient(
+      90deg,
+      #34c759,
+      #63df83
+    );
+}
+
+.investment-progress {
+  background:
+    linear-gradient(
+      90deg,
+      #007aff,
+      #5ac8fa
+    );
+}
+
+.mini-rate {
+  margin-top: 7px;
+
+  color: var(--text-tertiary);
+
+  font-size: 9px;
+
+  font-weight: 600;
+
+  text-align: right;
+}
+
+
+/* =========================================================
+   14. MONTHLY PLAN
+   ========================================================= */
+
+.plan-strip {
+  display: grid;
+
+  grid-template-columns: auto 1fr;
+
+  gap: 12px;
+
+  align-items: center;
+
+  margin-bottom: 18px;
+
+  padding: 16px 18px;
+
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.85);
+
+  border-radius: 21px;
+
+  background:
+    rgba(255, 255, 255, 0.72);
+
+  box-shadow:
+    0 5px 20px
+    rgba(0, 0, 0, 0.035);
+
+  backdrop-filter: blur(18px);
+
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.plan-strip-icon {
+  display: grid;
+
+  place-items: center;
+
+  width: 40px;
+
+  height: 40px;
+
+  border-radius: 13px;
+
+  color: #af52de;
+
+  background:
+    var(--purple-soft);
+}
+
+.plan-strip-icon
+.material-symbols-rounded {
+  font-size: 21px;
+}
+
+.plan-strip-main {
+  min-width: 0;
+
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 2px;
+}
+
+.plan-strip-main span {
+  color: var(--text-secondary);
+
+  font-size: 10px;
+
+  font-weight: 600;
+}
+
+.plan-strip-main strong {
+  color: var(--text);
+
+  font-size: 18px;
+
+  font-weight: 800;
+
+  letter-spacing: -0.025em;
+
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-strip-detail {
+  grid-column: 2;
+
+  margin-top: -7px;
+}
+
+.plan-strip-detail span {
+  color: var(--text-tertiary);
+
+  font-size: 9px;
+
+  font-weight: 500;
+}
+
+
+/* =========================================================
+   15. SECTION HEADER
    ========================================================= */
 
 .section-header {
@@ -533,7 +893,7 @@ button:focus-visible {
 
 
 /* =========================================================
-   CATEGORY
+   16. CATEGORY
    ========================================================= */
 
 .category-list {
@@ -543,7 +903,9 @@ button:focus-visible {
 .category-item {
   padding: 16px 0;
 
-  border-bottom: 1px solid var(--border);
+  border-bottom:
+    1px solid
+    var(--border);
 }
 
 .category-item:last-child {
@@ -559,7 +921,7 @@ button:focus-visible {
 
   justify-content: space-between;
 
-  gap: 14px;
+  gap: 12px;
 }
 
 .category-name {
@@ -567,7 +929,7 @@ button:focus-visible {
 
   color: var(--text);
 
-  font-size: 15px;
+  font-size: 14px;
 
   font-weight: 600;
 
@@ -583,7 +945,7 @@ button:focus-visible {
 
   color: var(--text);
 
-  font-size: 16px;
+  font-size: 14px;
 
   font-weight: 700;
 
@@ -619,7 +981,7 @@ button:focus-visible {
 
 
 /* =========================================================
-   EMPTY STATE
+   17. EMPTY
    ========================================================= */
 
 .empty-state {
@@ -636,7 +998,8 @@ button:focus-visible {
   text-align: center;
 }
 
-.empty-state .material-symbols-rounded {
+.empty-state
+.material-symbols-rounded {
   margin-bottom: 9px;
 
   color: #c7c7cc;
@@ -662,15 +1025,15 @@ button:focus-visible {
 
 
 /* =========================================================
-   AI CARD
+   18. AI
    ========================================================= */
 
 .ai-card {
   background:
     linear-gradient(
       145deg,
-      rgba(255, 255, 255, 0.96),
-      rgba(247, 255, 249, 0.96)
+      rgba(255, 255, 255, 0.97),
+      rgba(247, 255, 249, 0.97)
     );
 }
 
@@ -700,7 +1063,8 @@ button:focus-visible {
   background: var(--green-soft);
 }
 
-.ai-icon .material-symbols-rounded {
+.ai-icon
+.material-symbols-rounded {
   font-size: 23px;
 }
 
@@ -718,7 +1082,7 @@ button:focus-visible {
 
 
 /* =========================================================
-   RECEIPTS
+   19. RECEIPTS
    ========================================================= */
 
 .recent-list {
@@ -728,7 +1092,8 @@ button:focus-visible {
 .receipt-item {
   display: grid;
 
-  grid-template-columns: 46px 1fr auto;
+  grid-template-columns:
+    46px 1fr auto;
 
   align-items: center;
 
@@ -736,7 +1101,9 @@ button:focus-visible {
 
   padding: 14px 0;
 
-  border-bottom: 1px solid var(--border);
+  border-bottom:
+    1px solid
+    var(--border);
 }
 
 .receipt-item:last-child {
@@ -771,7 +1138,8 @@ button:focus-visible {
   object-fit: cover;
 }
 
-.receipt-thumbnail .material-symbols-rounded {
+.receipt-thumbnail
+.material-symbols-rounded {
   font-size: 22px;
 }
 
@@ -833,7 +1201,7 @@ button:focus-visible {
 
 
 /* =========================================================
-   LOADING
+   20. LOADING
    ========================================================= */
 
 .loading-row {
@@ -862,12 +1230,15 @@ button:focus-visible {
   background: var(--green);
 
   animation:
-    loadingPulse 1.1s ease-in-out infinite;
+    loadingPulse
+    1.1s
+    ease-in-out
+    infinite;
 }
 
 
 /* =========================================================
-   UPDATE STATUS
+   21. UPDATE
    ========================================================= */
 
 .update-status {
@@ -894,7 +1265,7 @@ button:focus-visible {
 
 
 /* =========================================================
-   BOTTOM NAVIGATION
+   22. NAVIGATION
    ========================================================= */
 
 .bottom-nav {
@@ -935,21 +1306,18 @@ button:focus-visible {
   border-radius: 27px;
 
   background:
-    rgba(255, 255, 255, 0.88);
+    rgba(255, 255, 255, 0.89);
 
   box-shadow:
     var(--shadow-nav);
 
-  backdrop-filter:
-    blur(28px);
+  backdrop-filter: blur(28px);
 
   -webkit-backdrop-filter:
     blur(28px);
 }
 
 .nav-button {
-  position: relative;
-
   display: flex;
 
   flex-direction: column;
@@ -977,7 +1345,8 @@ button:focus-visible {
     transform 0.16s ease;
 }
 
-.nav-button .material-symbols-rounded {
+.nav-button
+.material-symbols-rounded {
   font-size: 25px;
 
   transition:
@@ -1010,7 +1379,7 @@ button:focus-visible {
 
 
 /* =========================================================
-   TOAST
+   23. TOAST
    ========================================================= */
 
 .toast {
@@ -1059,8 +1428,7 @@ button:focus-visible {
 
   visibility: hidden;
 
-  backdrop-filter:
-    blur(20px);
+  backdrop-filter: blur(20px);
 
   -webkit-backdrop-filter:
     blur(20px);
@@ -1096,26 +1464,15 @@ button:focus-visible {
 
 
 /* =========================================================
-   BOTTOM SPACE
-   ========================================================= */
-
-.bottom-space {
-  height: 10px;
-}
-
-
-/* =========================================================
-   STATES
+   24. STATES
    ========================================================= */
 
 .is-danger {
-  color:
-    var(--red) !important;
+  color: var(--red) !important;
 }
 
 .is-warning {
-  color:
-    var(--orange) !important;
+  color: var(--orange) !important;
 }
 
 .progress-bar.is-warning {
@@ -1136,9 +1493,13 @@ button:focus-visible {
     );
 }
 
+.bottom-space {
+  height: 10px;
+}
+
 
 /* =========================================================
-   ANIMATIONS
+   25. ANIMATION
    ========================================================= */
 
 @keyframes cardAppear {
@@ -1181,11 +1542,10 @@ button:focus-visible {
 
 
 /* =========================================================
-   SMALL IPHONE
+   26. SMALL PHONE
    ========================================================= */
 
-@media
-(max-width: 375px) {
+@media (max-width: 375px) {
 
   .app {
     padding-left: 14px;
@@ -1199,10 +1559,6 @@ button:focus-visible {
     border-radius: 25px;
   }
 
-  .header {
-    margin-bottom: 22px;
-  }
-
   .header h1 {
     font-size: 28px;
   }
@@ -1211,12 +1567,26 @@ button:focus-visible {
     font-size: 38px;
   }
 
-  .budget-row {
-    gap: 8px;
+  .finance-overview {
+    gap: 9px;
   }
 
-  .budget-item strong {
-    font-size: 13px;
+  .mini-card {
+    padding: 15px;
+
+    border-radius: 21px;
+  }
+
+  .mini-card-value {
+    font-size: 20px;
+  }
+
+  .mini-card-bottom {
+    flex-direction: column;
+
+    align-items: flex-start;
+
+    gap: 2px;
   }
 
   .receipt-item {
@@ -1232,48 +1602,39 @@ button:focus-visible {
     height: 42px;
   }
 
-  .receipt-category {
-    max-width: 100px;
-  }
-
-  .nav-label {
-    font-size: 8px;
-  }
-
 }
 
 
 /* =========================================================
-   DESKTOP
+   27. DESKTOP
    ========================================================= */
 
-@media
-(min-width: 700px) {
+@media (min-width: 700px) {
 
   .app {
     padding-top: 42px;
   }
 
-  .card {
+  .card,
+  .mini-card,
+  .plan-strip {
     transition:
       transform 0.22s ease,
       box-shadow 0.22s ease;
   }
 
-  .card:hover {
+  .card:hover,
+  .mini-card:hover,
+  .plan-strip:hover {
     transform:
       translateY(-2px);
-
-    box-shadow:
-      0 14px 40px
-      rgba(0, 0, 0, 0.07);
   }
 
 }
 
 
 /* =========================================================
-   REDUCED MOTION
+   28. REDUCED MOTION
    ========================================================= */
 
 @media
@@ -1282,7 +1643,6 @@ button:focus-visible {
   *,
   *::before,
   *::after {
-
     scroll-behavior:
       auto !important;
 
@@ -1300,18 +1660,17 @@ button:focus-visible {
 
 
 /* =========================================================
-   DARK MODE
+   29. DARK MODE
    ========================================================= */
 
 @media
 (prefers-color-scheme: dark) {
 
   :root {
-
     --background: #0f1012;
 
     --card:
-      rgba(29, 29, 31, 0.91);
+      rgba(29, 29, 31, 0.92);
 
     --text: #f5f5f7;
 
@@ -1322,10 +1681,6 @@ button:focus-visible {
     --border:
       rgba(255, 255, 255, 0.07);
 
-    --shadow-small:
-      0 3px 12px
-      rgba(0, 0, 0, 0.18);
-
     --shadow-card:
       0 12px 35px
       rgba(0, 0, 0, 0.24);
@@ -1333,109 +1688,77 @@ button:focus-visible {
     --shadow-nav:
       0 15px 45px
       rgba(0, 0, 0, 0.42);
-
   }
 
 
   body {
-
     background:
-
       radial-gradient(
         circle at 15% 0%,
         rgba(52, 199, 89, 0.09),
         transparent 30%
       ),
-
       radial-gradient(
         circle at 100% 18%,
         rgba(90, 200, 250, 0.07),
         transparent 28%
       ),
-
       #0f1012;
-
   }
 
 
   .card,
   .summary-card,
-  .ai-card {
-
+  .ai-card,
+  .mini-card,
+  .saving-card,
+  .investment-card,
+  .plan-strip {
     border-color:
-      rgba(255, 255, 255, 0.04);
+      rgba(255, 255, 255, 0.05);
 
     background:
-      rgba(29, 29, 31, 0.91);
-
+      rgba(29, 29, 31, 0.92);
   }
 
 
   .bell {
-
     border-color:
       rgba(255, 255, 255, 0.05);
 
-    color:
-      #f5f5f7;
+    color: #f5f5f7;
 
     background:
       rgba(38, 38, 40, 0.9);
-
   }
 
 
-  .bell:hover {
-
-    background:
-      #2c2c2e;
-
-  }
-
-
-  .progress {
-
-    background:
-      #343438;
-
-  }
-
-
-  .category-progress {
-
-    background:
-      #343438;
-
+  .progress,
+  .category-progress,
+  .mini-progress {
+    background: #343438;
   }
 
 
   .receipt-thumbnail {
-
-    background:
-      #2c2c2e;
-
+    background: #2c2c2e;
   }
 
 
   .bottom-nav {
-
     border-color:
       rgba(255, 255, 255, 0.06);
 
     background:
-      rgba(29, 29, 31, 0.88);
-
+      rgba(29, 29, 31, 0.89);
   }
 
 
   .toast {
-
-    color:
-      #1d1d1f;
+    color: #1d1d1f;
 
     background:
       rgba(245, 245, 247, 0.95);
-
   }
 
 }
