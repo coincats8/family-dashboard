@@ -2,6 +2,7 @@
 <html lang="ja">
 
 <head>
+
   <meta charset="UTF-8">
 
   <meta
@@ -9,7 +10,10 @@
     content="width=device-width, initial-scale=1.0, viewport-fit=cover"
   >
 
-  <meta name="theme-color" content="#F5F7FA">
+  <meta
+    name="theme-color"
+    content="#F5F7FA"
+  >
 
   <meta
     name="description"
@@ -18,9 +22,21 @@
 
   <title>ふたりの家計簿</title>
 
-  <link rel="stylesheet" href="css/style.css">
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <!-- CSS -->
+
+  <link
+    rel="stylesheet"
+    href="css/style.css"
+  >
+
+
+  <!-- Google Fonts -->
+
+  <link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+  >
 
   <link
     rel="preconnect"
@@ -32,6 +48,9 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   >
+
+
+  <!-- Material Symbols -->
 
   <link
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded"
@@ -66,9 +85,11 @@
         ☀️ おはよう、市川さん
       </p>
 
+
       <h1>
         ふたりの家計簿
       </h1>
+
 
       <span
         class="month"
@@ -101,7 +122,9 @@
        今月の生活費
   ==================================================== -->
 
-  <section class="card summary-card living-card">
+  <section
+    class="card summary-card living-card"
+  >
 
     <div class="summary-header">
 
@@ -110,6 +133,7 @@
         <p class="card-title">
           🏠 今月の生活費
         </p>
+
 
         <h2 id="totalMoney">
           ¥0
@@ -127,6 +151,8 @@
 
     </div>
 
+
+    <!-- PROGRESS -->
 
     <div
       class="progress"
@@ -146,6 +172,8 @@
     </div>
 
 
+    <!-- BUDGET -->
+
     <div class="budget-row">
 
       <div class="budget-item">
@@ -161,7 +189,9 @@
       </div>
 
 
-      <div class="budget-item budget-item-right">
+      <div
+        class="budget-item budget-item-right"
+      >
 
         <span class="budget-label">
           残り
@@ -180,7 +210,7 @@
 
 
   <!-- ===================================================
-       今月の貯蓄
+       現在の貯蓄
   ==================================================== -->
 
   <section class="saving-summary">
@@ -197,98 +227,18 @@
     <div class="saving-summary-content">
 
       <span class="saving-summary-label">
-        💰 今月の貯蓄
+        💰 現在の貯蓄
       </span>
 
+
       <strong id="savingActual">
-        ¥250,000
+        ¥0
       </strong>
+
 
       <p>
-        生活費の残金を自動で貯蓄
+        毎月の残金を自動で貯蓄
       </p>
-
-    </div>
-
-  </section>
-
-
-
-  <!-- ===================================================
-       夫婦の負担
-  ==================================================== -->
-
-  <section class="contribution-card">
-
-    <div class="contribution-header">
-
-      <div>
-
-        <span class="contribution-caption">
-          今月の生活費
-        </span>
-
-        <h3>
-          ふたりの負担
-        </h3>
-
-      </div>
-
-
-      <strong
-        class="contribution-total"
-        id="contributionTotal"
-      >
-        ¥250,000
-      </strong>
-
-    </div>
-
-
-    <div class="contribution-members">
-
-
-      <div class="contribution-member">
-
-        <div class="member-left">
-
-          <span class="member-avatar">
-            👨
-          </span>
-
-          <span>
-            さとる
-          </span>
-
-        </div>
-
-        <strong id="satoruContribution">
-          ¥150,000
-        </strong>
-
-      </div>
-
-
-      <div class="contribution-member">
-
-        <div class="member-left">
-
-          <span class="member-avatar">
-            👩
-          </span>
-
-          <span>
-            かな
-          </span>
-
-        </div>
-
-        <strong id="kanaContribution">
-          ¥100,000
-        </strong>
-
-      </div>
-
 
     </div>
 
@@ -300,7 +250,9 @@
        CATEGORY
   ==================================================== -->
 
-  <section class="card category-card">
+  <section
+    class="card category-card"
+  >
 
     <div class="section-header">
 
@@ -309,6 +261,7 @@
         <p class="card-title">
           カテゴリ
         </p>
+
 
         <h3>
           生活費の内訳
@@ -353,7 +306,9 @@
        AI
   ==================================================== -->
 
-  <section class="card ai-card">
+  <section
+    class="card ai-card"
+  >
 
     <div class="ai-header">
 
@@ -393,10 +348,12 @@
 
 
   <!-- ===================================================
-       RECENT
+       RECENT RECEIPTS
   ==================================================== -->
 
-  <section class="card receipt-card">
+  <section
+    class="card receipt-card"
+  >
 
     <div class="section-header">
 
@@ -446,14 +403,17 @@
 
 
   <!-- ===================================================
-       UPDATE
+       UPDATE STATUS
   ==================================================== -->
 
   <div class="update-status">
 
-    <span class="material-symbols-rounded update-icon">
+    <span
+      class="material-symbols-rounded update-icon"
+    >
       sync
     </span>
+
 
     <span id="lastUpdated">
       データを取得しています
@@ -479,6 +439,8 @@
 >
 
 
+  <!-- HOME -->
+
   <button
     class="nav-button active"
     type="button"
@@ -497,6 +459,8 @@
   </button>
 
 
+
+  <!-- RECEIPT -->
 
   <button
     class="nav-button"
@@ -517,6 +481,8 @@
 
 
 
+  <!-- REPORT -->
+
   <button
     class="nav-button"
     type="button"
@@ -535,6 +501,8 @@
   </button>
 
 
+
+  <!-- CALENDAR -->
 
   <button
     class="nav-button"
@@ -555,6 +523,8 @@
 
 
 
+  <!-- SETTINGS -->
+
   <button
     class="nav-button"
     type="button"
@@ -572,12 +542,13 @@
 
   </button>
 
+
 </nav>
 
 
 
 <!-- =====================================================
-     ERROR
+     ERROR TOAST
 ===================================================== -->
 
 <div
@@ -591,6 +562,7 @@
     error
   </span>
 
+
   <span id="errorMessage">
     エラーが発生しました
   </span>
@@ -599,8 +571,13 @@
 
 
 
+<!-- =====================================================
+     JAVASCRIPT
+===================================================== -->
+
 <script src="js/app.js"></script>
 
 
 </body>
+
 </html>
