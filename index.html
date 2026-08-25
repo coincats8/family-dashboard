@@ -2,7 +2,6 @@
 <html lang="ja">
 
 <head>
-
   <meta charset="UTF-8">
 
   <meta
@@ -17,14 +16,15 @@
 
   <meta
     name="description"
-    content="ふたりで使う家計簿 Family Dashboard"
+    content="ふたりで使う家計簿"
   >
 
   <title>ふたりの家計簿</title>
 
+  <!-- キャッシュ対策 -->
   <link
     rel="stylesheet"
-    href="css/style.css"
+    href="css/style.css?v=3.0"
   >
 
   <link
@@ -47,18 +47,16 @@
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded"
     rel="stylesheet"
   >
-
 </head>
 
 
 <body>
 
-
 <main class="app">
 
 
   <!-- =====================================================
-       HEADER
+       共通HEADER
   ====================================================== -->
 
   <header class="header">
@@ -66,10 +64,10 @@
     <div class="header-main">
 
       <p
-        class="hello"
-        id="greeting"
+        class="page-kicker"
+        id="pageKicker"
       >
-        🌿 こんにちは、市川さん
+        家計
       </p>
 
       <h1 id="pageTitle">
@@ -92,11 +90,9 @@
       type="button"
       aria-label="お知らせ"
     >
-
       <span class="material-symbols-rounded">
         notifications
       </span>
-
     </button>
 
   </header>
@@ -107,27 +103,35 @@
   ====================================================== -->
 
   <section
-    class="page active"
+    class="app-page"
     id="page-home"
+    data-page-panel="home"
   >
+
+    <div class="page-section-title">
+      <span>🏠</span>
+
+      <div>
+        <small>HOME</small>
+        <strong>今月の家計</strong>
+      </div>
+    </div>
 
 
     <!-- 今月の生活費 -->
 
-    <section class="card summary-card living-card">
+    <section class="card summary-card">
 
       <div class="summary-header">
 
         <div>
-
           <p class="card-title">
-            🏠 今月の生活費
+            今月の生活費
           </p>
 
           <h2 id="totalMoney">
             ¥0
           </h2>
-
         </div>
 
 
@@ -149,19 +153,16 @@
         aria-valuemax="100"
         aria-valuenow="0"
       >
-
         <div
           class="progress-bar"
           id="progressBar"
         ></div>
-
       </div>
 
 
       <div class="budget-row">
 
         <div class="budget-item">
-
           <span class="budget-label">
             予算
           </span>
@@ -169,12 +170,10 @@
           <strong id="budgetMoney">
             ¥250,000
           </strong>
-
         </div>
 
 
         <div class="budget-item budget-item-right">
-
           <span class="budget-label">
             残り
           </span>
@@ -182,7 +181,6 @@
           <strong id="balanceMoney">
             ¥250,000
           </strong>
-
         </div>
 
       </div>
@@ -190,23 +188,21 @@
     </section>
 
 
-    <!-- 現在の貯蓄 -->
+    <!-- 貯蓄 -->
 
     <section class="saving-summary">
 
       <div class="saving-summary-icon">
-
         <span class="material-symbols-rounded">
           savings
         </span>
-
       </div>
 
 
       <div class="saving-summary-content">
 
         <span class="saving-summary-label">
-          💰 現在の貯蓄
+          現在の貯蓄
         </span>
 
         <strong id="savingActual">
@@ -222,22 +218,20 @@
     </section>
 
 
-    <!-- カテゴリ -->
+    <!-- CATEGORY -->
 
-    <section class="card category-card">
+    <section class="card">
 
       <div class="section-header">
 
         <div>
-
           <p class="card-title">
-            カテゴリ
+            CATEGORY
           </p>
 
           <h3>
             生活費の内訳
           </h3>
-
         </div>
 
 
@@ -246,7 +240,7 @@
           id="categoryDetailButton"
           type="button"
         >
-          すべて見る
+          レポートへ
         </button>
 
       </div>
@@ -256,11 +250,9 @@
         class="category-list"
         id="categoryList"
       >
-
         <div class="loading-row">
           読み込み中...
         </div>
-
       </div>
 
     </section>
@@ -273,23 +265,20 @@
       <div class="ai-header">
 
         <div class="ai-icon">
-
           <span class="material-symbols-rounded">
             auto_awesome
           </span>
-
         </div>
 
-        <div>
 
+        <div>
           <p class="card-title">
-            AIアドバイス
+            AI
           </p>
 
           <h3>
             今月の家計
           </h3>
-
         </div>
 
       </div>
@@ -305,22 +294,20 @@
     </section>
 
 
-    <!-- 最近のレシート -->
+    <!-- RECENT -->
 
-    <section class="card receipt-card">
+    <section class="card">
 
       <div class="section-header">
 
         <div>
-
           <p class="card-title">
-            最近のレシート
+            RECENT
           </p>
 
           <h3>
-            最新の支出
+            最近の支出
           </h3>
-
         </div>
 
 
@@ -329,7 +316,7 @@
           id="receiptDetailButton"
           type="button"
         >
-          すべて見る
+          一覧を見る
         </button>
 
       </div>
@@ -339,11 +326,9 @@
         class="recent-list"
         id="recentList"
       >
-
         <div class="loading-row">
           読み込み中...
         </div>
-
       </div>
 
     </section>
@@ -352,58 +337,86 @@
 
 
   <!-- =====================================================
-       RECEIPT PAGE
+       RECEIPT
   ====================================================== -->
 
   <section
-    class="page"
+    class="app-page"
     id="page-receipt"
+    data-page-panel="receipt"
+    hidden
   >
 
-    <div class="page-month-control">
+    <div class="page-section-title receipt-title">
+
+      <span class="material-symbols-rounded">
+        receipt_long
+      </span>
+
+      <div>
+        <small>HISTORY</small>
+        <strong>支出・レシート</strong>
+      </div>
+
+    </div>
+
+
+    <div class="month-switcher">
 
       <button
-        class="month-arrow"
         id="receiptPrevMonth"
         type="button"
+        aria-label="前月"
       >
-        ‹
+        <span class="material-symbols-rounded">
+          chevron_left
+        </span>
       </button>
 
-      <strong id="receiptMonthLabel">
-        ----年--月
-      </strong>
+
+      <div>
+        <small>表示月</small>
+
+        <strong id="receiptMonthLabel">
+          ----年--月
+        </strong>
+      </div>
+
 
       <button
-        class="month-arrow"
         id="receiptNextMonth"
         type="button"
+        aria-label="翌月"
       >
-        ›
+        <span class="material-symbols-rounded">
+          chevron_right
+        </span>
       </button>
 
     </div>
 
 
-    <section class="card page-summary-card">
+    <section class="card receipt-total-card">
 
-      <p class="card-title">
-        今月の支出
-      </p>
+      <div>
+        <p class="card-title">
+          この月の支出
+        </p>
 
-      <strong
-        class="page-big-money"
-        id="receiptMonthTotal"
-      >
-        ¥0
-      </strong>
+        <strong
+          class="page-big-money"
+          id="receiptMonthTotal"
+        >
+          ¥0
+        </strong>
+      </div>
 
-      <p
-        class="page-sub-text"
-        id="receiptCount"
-      >
-        0件
-      </p>
+
+      <div class="count-badge">
+        <span id="receiptCount">
+          0件
+        </span>
+      </div>
 
     </section>
 
@@ -411,19 +424,15 @@
     <section class="card">
 
       <div class="section-header">
-
         <div>
-
           <p class="card-title">
-            レシート
+            RECEIPTS
           </p>
 
           <h3>
             支出一覧
           </h3>
-
         </div>
-
       </div>
 
 
@@ -438,30 +447,43 @@
 
 
   <!-- =====================================================
-       REPORT PAGE
+       REPORT
   ====================================================== -->
 
   <section
-    class="page"
+    class="app-page"
     id="page-report"
+    data-page-panel="report"
+    hidden
   >
 
-    <section class="card page-summary-card">
+    <div class="page-section-title report-title">
 
-      <p class="card-title">
-        📊 今月のレポート
-      </p>
+      <span class="material-symbols-rounded">
+        donut_large
+      </span>
 
-      <strong
-        class="page-big-money"
-        id="reportExpense"
-      >
+      <div>
+        <small>ANALYSIS</small>
+        <strong>今月の分析</strong>
+      </div>
+
+    </div>
+
+
+    <section class="report-hero">
+
+      <span>
+        今月の支出
+      </span>
+
+      <strong id="reportExpense">
         ¥0
       </strong>
 
-      <p class="page-sub-text">
-        今月の生活費
-      </p>
+      <small id="reportHeroCaption">
+        生活費予算 ¥250,000
+      </small>
 
     </section>
 
@@ -470,9 +492,13 @@
 
       <section class="mini-stat-card">
 
-        <span>
-          予算
+        <span class="material-symbols-rounded">
+          account_balance_wallet
         </span>
+
+        <small>
+          予算
+        </small>
 
         <strong id="reportBudget">
           ¥250,000
@@ -483,9 +509,13 @@
 
       <section class="mini-stat-card">
 
-        <span>
-          残り
+        <span class="material-symbols-rounded">
+          payments
         </span>
+
+        <small>
+          残り
+        </small>
 
         <strong id="reportRemaining">
           ¥250,000
@@ -496,9 +526,13 @@
 
       <section class="mini-stat-card">
 
-        <span>
-          使用率
+        <span class="material-symbols-rounded">
+          speed
         </span>
+
+        <small>
+          使用率
+        </small>
 
         <strong id="reportRate">
           0%
@@ -509,9 +543,13 @@
 
       <section class="mini-stat-card">
 
-        <span>
-          現在の貯蓄
+        <span class="material-symbols-rounded">
+          savings
         </span>
+
+        <small>
+          現在の貯蓄
+        </small>
 
         <strong id="reportSaving">
           ¥0
@@ -525,19 +563,15 @@
     <section class="card">
 
       <div class="section-header">
-
         <div>
-
           <p class="card-title">
-            カテゴリ
+            RANKING
           </p>
 
           <h3>
-            支出ランキング
+            カテゴリ別支出
           </h3>
-
         </div>
-
       </div>
 
 
@@ -549,42 +583,96 @@
 
 
   <!-- =====================================================
-       CALENDAR PAGE
+       CALENDAR
   ====================================================== -->
 
   <section
-    class="page"
+    class="app-page"
     id="page-calendar"
+    data-page-panel="calendar"
+    hidden
   >
 
-    <div class="calendar-toolbar">
+    <div class="page-section-title calendar-title">
+
+      <span class="material-symbols-rounded">
+        calendar_month
+      </span>
+
+      <div>
+        <small>FAMILY</small>
+        <strong>ふたりのカレンダー</strong>
+      </div>
+
+    </div>
+
+
+    <!-- LEGEND -->
+
+    <div class="calendar-legend">
+
+      <span>
+        🌿 さとる
+      </span>
+
+      <span>
+        🌸 かな
+      </span>
+
+      <span>
+        👫 ふたり
+      </span>
+
+      <span>
+        <b class="expense-dot">¥</b>
+        支出
+      </span>
+
+    </div>
+
+
+    <!-- MONTH -->
+
+    <div class="calendar-month-header">
 
       <button
-        class="month-arrow"
         id="calendarPrevMonth"
         type="button"
+        aria-label="前月"
       >
-        ‹
+        <span class="material-symbols-rounded">
+          chevron_left
+        </span>
       </button>
 
 
-      <strong id="calendarMonthLabel">
-        ----年--月
-      </strong>
+      <div>
+        <small>
+          FAMILY CALENDAR
+        </small>
+
+        <strong id="calendarMonthLabel">
+          ----年--月
+        </strong>
+      </div>
 
 
       <button
-        class="month-arrow"
         id="calendarNextMonth"
         type="button"
+        aria-label="翌月"
       >
-        ›
+        <span class="material-symbols-rounded">
+          chevron_right
+        </span>
       </button>
 
     </div>
 
 
-    <section class="card calendar-card">
+    <!-- CALENDAR -->
+
+    <section class="calendar-shell">
 
       <div class="calendar-week">
 
@@ -613,6 +701,8 @@
     </section>
 
 
+    <!-- ADD -->
+
     <button
       class="add-schedule-button"
       id="addScheduleButton"
@@ -628,40 +718,50 @@
     </button>
 
 
-    <section class="card">
+    <!-- SELECTED DAY -->
 
-      <div class="section-header">
+    <section class="selected-date-section">
+
+      <div class="selected-date-heading">
 
         <div>
+          <small>
+            SELECTED DAY
+          </small>
 
-          <p class="card-title">
-            選択した日
-          </p>
-
-          <h3 id="selectedDateTitle">
+          <h2 id="selectedDateTitle">
             日付を選択
-          </h3>
+          </h2>
+        </div>
 
+
+        <div
+          class="selected-date-total"
+          id="selectedDateTotal"
+        >
+          ¥0
         </div>
 
       </div>
 
 
       <div
-        id="selectedDayList"
         class="selected-day-list"
+        id="selectedDayList"
       >
 
         <div class="empty-state">
-
           <span class="material-symbols-rounded">
-            calendar_month
+            touch_app
           </span>
 
           <strong>
-            日付を選択してください
+            カレンダーの日付をタップ
           </strong>
 
+          <p>
+            その日の予定と支出をまとめて確認できます
+          </p>
         </div>
 
       </div>
@@ -672,75 +772,159 @@
 
 
   <!-- =====================================================
-       SETTINGS PAGE
+       SETTINGS
   ====================================================== -->
 
   <section
-    class="page"
+    class="app-page"
     id="page-settings"
+    data-page-panel="settings"
+    hidden
   >
 
-    <section class="card">
+    <div class="page-section-title settings-title">
 
-      <p class="card-title">
-        家計設定
-      </p>
+      <span class="material-symbols-rounded">
+        settings
+      </span>
 
-      <h3 class="settings-heading">
-        基本ルール
-      </h3>
+      <div>
+        <small>MANAGE</small>
+        <strong>家計簿の設定</strong>
+      </div>
+
+    </div>
 
 
-      <div class="settings-list">
+    <!-- HOUSEHOLD -->
+
+    <section class="settings-group">
+
+      <div class="settings-group-heading">
+
+        <span class="material-symbols-rounded">
+          account_balance_wallet
+        </span>
+
+        <div>
+          <small>HOUSEHOLD</small>
+          <strong>家計設定</strong>
+        </div>
+
+      </div>
+
+
+      <div class="settings-panel">
 
         <div class="settings-row">
+          <div>
+            <strong>
+              毎月の生活費
+            </strong>
 
-          <span>
-            毎月の生活費
-          </span>
+            <small>
+              毎月1日にリセット
+            </small>
+          </div>
 
-          <strong>
+          <b>
             ¥250,000
-          </strong>
-
+          </b>
         </div>
 
 
         <div class="settings-row">
+          <div>
+            <strong>
+              家計簿開始
+            </strong>
 
-          <span>
-            家計簿開始
-          </span>
+            <small>
+              貯蓄計算の開始月
+            </small>
+          </div>
 
-          <strong>
+          <b>
             2026年8月
-          </strong>
-
+          </b>
         </div>
 
 
         <div class="settings-row">
+          <div>
+            <strong>
+              月末の残金
+            </strong>
 
-          <span>
-            残金
+            <small>
+              翌月1日に貯蓄へ
+            </small>
+          </div>
+
+          <b>
+            自動
+          </b>
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- FAMILY -->
+
+    <section class="settings-group">
+
+      <div class="settings-group-heading">
+
+        <span class="material-symbols-rounded">
+          family_restroom
+        </span>
+
+        <div>
+          <small>FAMILY</small>
+          <strong>家族</strong>
+        </div>
+
+      </div>
+
+
+      <div class="settings-panel">
+
+        <div class="family-setting-row">
+
+          <span class="family-avatar">
+            🌿
           </span>
 
-          <strong>
-            翌月に貯蓄
-          </strong>
+          <div>
+            <strong>
+              さとる
+            </strong>
+
+            <small>
+              LINEから支払者を自動判定
+            </small>
+          </div>
 
         </div>
 
 
-        <div class="settings-row">
+        <div class="family-setting-row">
 
-          <span>
-            翌月予算
+          <span class="family-avatar">
+            🌸
           </span>
 
-          <strong>
-            毎月リセット
-          </strong>
+          <div>
+            <strong>
+              かな
+            </strong>
+
+            <small>
+              LINEから支払者を自動判定
+            </small>
+          </div>
 
         </div>
 
@@ -749,58 +933,74 @@
     </section>
 
 
-    <section class="card">
+    <!-- CALENDAR -->
 
-      <p class="card-title">
-        家族
-      </p>
+    <section class="settings-group">
 
-      <h3 class="settings-heading">
-        ふたり
-      </h3>
+      <div class="settings-group-heading">
+
+        <span class="material-symbols-rounded">
+          calendar_month
+        </span>
+
+        <div>
+          <small>CALENDAR</small>
+          <strong>夫婦カレンダー</strong>
+        </div>
+
+      </div>
 
 
-      <div class="family-settings">
+      <div class="settings-panel">
 
-        <div class="family-setting-row">
-
-          <span class="family-avatar satoru">
-            🌿
-          </span>
-
+        <div class="settings-row">
           <div>
-
             <strong>
-              さとる
+              🌿 さとる
             </strong>
 
-            <p>
-              LINEから自動判定
-            </p>
-
+            <small>
+              個人予定
+            </small>
           </div>
 
+          <b>
+            表示
+          </b>
         </div>
 
 
-        <div class="family-setting-row">
-
-          <span class="family-avatar kana">
-            🌸
-          </span>
-
+        <div class="settings-row">
           <div>
-
             <strong>
-              かな
+              🌸 かな
             </strong>
 
-            <p>
-              LINEから自動判定
-            </p>
-
+            <small>
+              個人予定
+            </small>
           </div>
 
+          <b>
+            表示
+          </b>
+        </div>
+
+
+        <div class="settings-row">
+          <div>
+            <strong>
+              👫 ふたり
+            </strong>
+
+            <small>
+              共通予定
+            </small>
+          </div>
+
+          <b>
+            表示
+          </b>
         </div>
 
       </div>
@@ -810,7 +1010,9 @@
   </section>
 
 
-  <!-- UPDATE -->
+  <!-- =====================================================
+       UPDATE
+  ====================================================== -->
 
   <div class="update-status">
 
@@ -837,22 +1039,25 @@
 <div
   class="modal-backdrop"
   id="scheduleModal"
+  hidden
 >
 
-  <div class="schedule-modal">
+  <div
+    class="schedule-modal"
+    role="dialog"
+    aria-modal="true"
+  >
 
     <div class="modal-header">
 
       <div>
-
         <p class="card-title">
-          夫婦カレンダー
+          FAMILY CALENDAR
         </p>
 
         <h3 id="scheduleModalTitle">
           予定を追加
         </h3>
-
       </div>
 
 
@@ -860,12 +1065,11 @@
         class="modal-close"
         id="scheduleModalClose"
         type="button"
+        aria-label="閉じる"
       >
-
         <span class="material-symbols-rounded">
           close
         </span>
-
       </button>
 
     </div>
@@ -878,7 +1082,6 @@
 
 
     <label class="form-field">
-
       <span>
         日付
       </span>
@@ -887,14 +1090,12 @@
         type="date"
         id="scheduleDate"
       >
-
     </label>
 
 
     <div class="time-fields">
 
       <label class="form-field">
-
         <span>
           開始
         </span>
@@ -903,12 +1104,10 @@
           type="time"
           id="scheduleStart"
         >
-
       </label>
 
 
       <label class="form-field">
-
         <span>
           終了
         </span>
@@ -917,14 +1116,12 @@
           type="time"
           id="scheduleEnd"
         >
-
       </label>
 
     </div>
 
 
     <label class="form-field">
-
       <span>
         予定
       </span>
@@ -934,37 +1131,86 @@
         id="scheduleTitle"
         placeholder="例：美容院"
       >
-
     </label>
 
 
     <label class="form-field">
-
       <span>
-        対象
+        誰の予定？
       </span>
 
-      <select id="scheduleTarget">
+      <div class="target-selector">
 
+        <label>
+          <input
+            type="radio"
+            name="scheduleTargetRadio"
+            value="さとる"
+          >
+
+          <span>
+            🌿
+            <b>さとる</b>
+          </span>
+        </label>
+
+
+        <label>
+          <input
+            type="radio"
+            name="scheduleTargetRadio"
+            value="かな"
+          >
+
+          <span>
+            🌸
+            <b>かな</b>
+          </span>
+        </label>
+
+
+        <label>
+          <input
+            type="radio"
+            name="scheduleTargetRadio"
+            value="ふたり"
+            checked
+          >
+
+          <span>
+            👫
+            <b>ふたり</b>
+          </span>
+        </label>
+
+      </div>
+
+      <select
+        id="scheduleTarget"
+        class="hidden-select"
+        aria-hidden="true"
+        tabindex="-1"
+      >
         <option value="さとる">
-          🌿 さとる
+          さとる
         </option>
 
         <option value="かな">
-          🌸 かな
+          かな
         </option>
 
-        <option value="ふたり">
-          👫 ふたり
+        <option
+          value="ふたり"
+          selected
+        >
+          ふたり
         </option>
-
       </select>
 
     </label>
 
 
     <label class="form-field">
-
       <span>
         メモ
       </span>
@@ -972,9 +1218,8 @@
       <textarea
         id="scheduleMemo"
         rows="3"
-        placeholder="必要なら入力"
+        placeholder="必要なことがあれば入力"
       ></textarea>
-
     </label>
 
 
@@ -983,14 +1228,15 @@
       id="saveScheduleButton"
       type="button"
     >
-      保存する
+      予定を保存
     </button>
 
 
     <button
-      class="delete-button hidden"
+      class="delete-button"
       id="deleteScheduleButton"
       type="button"
+      hidden
     >
       この予定を削除
     </button>
@@ -1001,7 +1247,7 @@
 
 
 <!-- =====================================================
-     NAVIGATION
+     BOTTOM NAV
 ===================================================== -->
 
 <nav
@@ -1014,7 +1260,6 @@
     type="button"
     data-page="home"
   >
-
     <span class="material-symbols-rounded">
       home
     </span>
@@ -1022,7 +1267,6 @@
     <span class="nav-label">
       ホーム
     </span>
-
   </button>
 
 
@@ -1031,7 +1275,6 @@
     type="button"
     data-page="receipt"
   >
-
     <span class="material-symbols-rounded">
       receipt_long
     </span>
@@ -1039,7 +1282,6 @@
     <span class="nav-label">
       レシート
     </span>
-
   </button>
 
 
@@ -1048,7 +1290,6 @@
     type="button"
     data-page="report"
   >
-
     <span class="material-symbols-rounded">
       donut_large
     </span>
@@ -1056,7 +1297,6 @@
     <span class="nav-label">
       レポート
     </span>
-
   </button>
 
 
@@ -1065,7 +1305,6 @@
     type="button"
     data-page="calendar"
   >
-
     <span class="material-symbols-rounded">
       calendar_month
     </span>
@@ -1073,7 +1312,6 @@
     <span class="nav-label">
       カレンダー
     </span>
-
   </button>
 
 
@@ -1082,7 +1320,6 @@
     type="button"
     data-page="settings"
   >
-
     <span class="material-symbols-rounded">
       settings
     </span>
@@ -1090,17 +1327,20 @@
     <span class="nav-label">
       設定
     </span>
-
   </button>
 
 </nav>
 
 
-<!-- TOAST -->
+<!-- =====================================================
+     TOAST
+===================================================== -->
 
 <div
   class="toast"
   id="errorToast"
+  role="status"
+  aria-live="polite"
 >
 
   <span class="material-symbols-rounded">
@@ -1112,7 +1352,8 @@
 </div>
 
 
-<script src="js/app.js"></script>
+<!-- キャッシュ対策 -->
+<script src="js/app.js?v=3.0"></script>
 
 </body>
 
