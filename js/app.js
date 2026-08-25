@@ -1,15 +1,19 @@
 // =========================================================
 // Family Dashboard
 // app.js
-// v0.8
+// v1.0
 //
-// 生活費予算 250,000円
-//      ↓
-// 今月の支出を差し引く
-//      ↓
-// 残金 = 今月の貯蓄
+// 家計ルール
 //
-// NISA / 投資機能なし
+// 毎月の生活費予算：250,000円
+//
+// 当月
+// 250,000 - 支出 = 残り
+//
+// 終了した月
+// 残りを「現在の貯蓄」へ加算
+//
+// 前月残金を翌月生活費には繰り越さない
 // =========================================================
 
 
@@ -27,11 +31,14 @@ const API_URL =
 
 const SETTINGS = {
 
-  refreshInterval: 60000,
+  refreshInterval:
+    60000,
 
-  recentLimit: 5,
+  recentLimit:
+    5,
 
-  categoryLimit: 12
+  categoryLimit:
+    20
 
 };
 
@@ -40,9 +47,12 @@ const SETTINGS = {
 // 3. STATE
 // =========================================================
 
-let dashboardData = null;
+let dashboardData =
+  null;
 
-let refreshTimer = null;
+
+let refreshTimer =
+  null;
 
 
 // =========================================================
@@ -54,79 +64,79 @@ function getElements() {
   return {
 
     greeting:
-      document.getElementById("greeting"),
+      document.getElementById(
+        "greeting"
+      ),
 
     currentMonth:
-      document.getElementById("currentMonth"),
+      document.getElementById(
+        "currentMonth"
+      ),
 
     totalMoney:
-      document.getElementById("totalMoney"),
+      document.getElementById(
+        "totalMoney"
+      ),
 
     budgetMoney:
-      document.getElementById("budgetMoney"),
+      document.getElementById(
+        "budgetMoney"
+      ),
 
     balanceMoney:
-      document.getElementById("balanceMoney"),
+      document.getElementById(
+        "balanceMoney"
+      ),
 
     budgetPercent:
-      document.getElementById("budgetPercent"),
+      document.getElementById(
+        "budgetPercent"
+      ),
 
     budgetProgress:
-      document.getElementById("budgetProgress"),
+      document.getElementById(
+        "budgetProgress"
+      ),
 
     progressBar:
-      document.getElementById("progressBar"),
-
-
-    // 貯蓄
+      document.getElementById(
+        "progressBar"
+      ),
 
     savingActual:
-      document.getElementById("savingActual"),
-
-
-    // 夫婦負担
-
-    contributionTotal:
-      document.getElementById("contributionTotal"),
-
-    satoruContribution:
-      document.getElementById("satoruContribution"),
-
-    kanaContribution:
-      document.getElementById("kanaContribution"),
-
-
-    // カテゴリ
+      document.getElementById(
+        "savingActual"
+      ),
 
     categoryList:
-      document.getElementById("categoryList"),
-
-
-    // 最近の支出
+      document.getElementById(
+        "categoryList"
+      ),
 
     recentList:
-      document.getElementById("recentList"),
-
-
-    // AI
+      document.getElementById(
+        "recentList"
+      ),
 
     aiAdvice:
-      document.getElementById("aiAdvice"),
-
-
-    // 更新
+      document.getElementById(
+        "aiAdvice"
+      ),
 
     lastUpdated:
-      document.getElementById("lastUpdated"),
-
-
-    // エラー
+      document.getElementById(
+        "lastUpdated"
+      ),
 
     errorToast:
-      document.getElementById("errorToast"),
+      document.getElementById(
+        "errorToast"
+      ),
 
     errorMessage:
-      document.getElementById("errorMessage")
+      document.getElementById(
+        "errorMessage"
+      )
 
   };
 
@@ -134,7 +144,7 @@ function getElements() {
 
 
 // =========================================================
-// 5. MONEY FORMAT
+// 5. MONEY
 // =========================================================
 
 function yen(value) {
@@ -145,7 +155,9 @@ function yen(value) {
 
   return (
     "¥" +
-    number.toLocaleString("ja-JP")
+    number.toLocaleString(
+      "ja-JP"
+    )
   );
 
 }
@@ -227,7 +239,9 @@ function safeColor(value) {
 // 8. HEADER
 // =========================================================
 
-function setHeaderDate(data = null) {
+function setHeaderDate(
+  data = null
+) {
 
   const el =
     getElements();
@@ -251,7 +265,9 @@ function setHeaderDate(data = null) {
     now.getMonth() + 1;
 
 
-  if (el.currentMonth) {
+  if (
+    el.currentMonth
+  ) {
 
     el.currentMonth.textContent =
       `${year}年${month}月`;
@@ -259,7 +275,9 @@ function setHeaderDate(data = null) {
   }
 
 
-  if (!el.greeting) {
+  if (
+    !el.greeting
+  ) {
 
     return;
 
@@ -319,7 +337,9 @@ function setHeaderDate(data = null) {
 
 function formatDate(value) {
 
-  if (!value) {
+  if (
+    !value
+  ) {
 
     return "";
 
@@ -358,7 +378,9 @@ function formatDate(value) {
 
 function safeImageUrl(value) {
 
-  if (!value) {
+  if (
+    !value
+  ) {
 
     return "";
 
@@ -406,7 +428,9 @@ function setLoading() {
     getElements();
 
 
-  if (el.lastUpdated) {
+  if (
+    el.lastUpdated
+  ) {
 
     el.lastUpdated.textContent =
       "データを取得しています";
@@ -417,10 +441,12 @@ function setLoading() {
 
 
 // =========================================================
-// 12. LOAD API
+// 12. LOAD DASHBOARD
 // =========================================================
 
-async function loadDashboard(options = {}) {
+async function loadDashboard(
+  options = {}
+) {
 
   const silent =
     Boolean(
@@ -430,13 +456,16 @@ async function loadDashboard(options = {}) {
 
   try {
 
-    if (!silent) {
+    if (
+      !silent
+    ) {
 
       setLoading();
 
     }
 
 
+    // キャッシュ回避
     const separator =
       API_URL.includes("?")
         ? "&"
@@ -451,14 +480,23 @@ async function loadDashboard(options = {}) {
       await fetch(
         requestUrl,
         {
-          method: "GET",
-          cache: "no-store",
-          redirect: "follow"
+
+          method:
+            "GET",
+
+          cache:
+            "no-store",
+
+          redirect:
+            "follow"
+
         }
       );
 
 
-    if (!response.ok) {
+    if (
+      !response.ok
+    ) {
 
       throw new Error(
         `HTTP ${response.status}`
@@ -508,7 +546,9 @@ async function loadDashboard(options = {}) {
     );
 
 
-    if (!dashboardData) {
+    if (
+      !dashboardData
+    ) {
 
       renderError();
 
@@ -538,24 +578,12 @@ function validateData(data) {
 
 
   if (
-    typeof data.budget ===
-    "undefined"
+    !data.living &&
+    typeof data.budget === "undefined"
   ) {
 
     throw new Error(
-      "budget is missing"
-    );
-
-  }
-
-
-  if (
-    typeof data.expense ===
-    "undefined"
-  ) {
-
-    throw new Error(
-      "expense is missing"
+      "living budget is missing"
     );
 
   }
@@ -579,12 +607,7 @@ function renderDashboard(data) {
   );
 
 
-  renderSaving(
-    data
-  );
-
-
-  renderContributions(
+  renderSavings(
     data
   );
 
@@ -615,7 +638,7 @@ function renderDashboard(data) {
 
 
 // =========================================================
-// 15. LIVING EXPENSE
+// 15. LIVING
 // =========================================================
 
 function renderLiving(data) {
@@ -633,19 +656,33 @@ function renderLiving(data) {
       : {};
 
 
+  // =======================================================
+  // 予算
+  // =======================================================
+
   const budget =
     Number(
       living.budget ??
-      data.budget
-    ) || 0;
+      data.budget ??
+      250000
+    ) || 250000;
 
+
+  // =======================================================
+  // 支出
+  // =======================================================
 
   const expense =
     Number(
       living.expense ??
-      data.expense
+      data.expense ??
+      0
     ) || 0;
 
+
+  // =======================================================
+  // 残り
+  // =======================================================
 
   const remaining =
     Number(
@@ -655,8 +692,12 @@ function renderLiving(data) {
         budget -
         expense
       )
-    ) || 0;
+    );
 
+
+  // =======================================================
+  // 使用率
+  // =======================================================
 
   let rate =
     Number(
@@ -681,11 +722,13 @@ function renderLiving(data) {
   }
 
 
-  // -------------------------------------------------------
-  // 今月の支出
-  // -------------------------------------------------------
+  // =======================================================
+  // 支出表示
+  // =======================================================
 
-  if (el.totalMoney) {
+  if (
+    el.totalMoney
+  ) {
 
     el.totalMoney.textContent =
       yen(
@@ -695,11 +738,13 @@ function renderLiving(data) {
   }
 
 
-  // -------------------------------------------------------
-  // 予算
-  // -------------------------------------------------------
+  // =======================================================
+  // 予算表示
+  // =======================================================
 
-  if (el.budgetMoney) {
+  if (
+    el.budgetMoney
+  ) {
 
     el.budgetMoney.textContent =
       yen(
@@ -709,11 +754,13 @@ function renderLiving(data) {
   }
 
 
-  // -------------------------------------------------------
-  // 残り
-  // -------------------------------------------------------
+  // =======================================================
+  // 残り表示
+  // =======================================================
 
-  if (el.balanceMoney) {
+  if (
+    el.balanceMoney
+  ) {
 
     el.balanceMoney.textContent =
       yen(
@@ -750,9 +797,9 @@ function renderLiving(data) {
   }
 
 
-  // -------------------------------------------------------
-  // 使用率
-  // -------------------------------------------------------
+  // =======================================================
+  // %
+  // =======================================================
 
   const roundedRate =
     Math.round(
@@ -789,6 +836,10 @@ function renderLiving(data) {
 
   }
 
+
+  // =======================================================
+  // Progress
+  // =======================================================
 
   if (
     el.progressBar
@@ -840,12 +891,17 @@ function renderLiving(data) {
 
 
 // =========================================================
-// 16. SAVING
+// 16. CURRENT SAVINGS
 //
-// 生活費の残金 = 貯蓄
+// ここで重要なのは
+//
+// 「今月の残り」ではなく
+// 「終了済み月の残金累積」
+//
+// を表示すること
 // =========================================================
 
-function renderSaving(data) {
+function renderSavings(data) {
 
   const el =
     getElements();
@@ -860,141 +916,50 @@ function renderSaving(data) {
   }
 
 
-  const living =
-    data.living || {};
+  const saving =
+    (
+      data.saving &&
+      typeof data.saving === "object"
+    )
+      ? data.saving
+      : {};
 
 
-  const budget =
+  let currentSavings =
     Number(
-      living.budget ??
-      data.budget
-    ) || 0;
-
-
-  const expense =
-    Number(
-      living.expense ??
-      data.expense
-    ) || 0;
-
-
-  // APIのsaving.actualを優先
-  // 無ければ自動計算
-
-  let saving =
-    Number(
-      data.saving?.actual
+      saving.current ??
+      saving.actual ??
+      0
     );
 
 
   if (
     !Number.isFinite(
-      saving
+      currentSavings
     )
   ) {
 
-    saving =
-      Math.max(
-        0,
-        budget -
-        expense
-      );
+    currentSavings =
+      0;
 
   }
 
 
   el.savingActual.textContent =
     yen(
-      saving
+      currentSavings
     );
 
 }
 
 
 // =========================================================
-// 17. CONTRIBUTIONS
+// 17. CATEGORIES
 // =========================================================
 
-function renderContributions(data) {
-
-  const el =
-    getElements();
-
-
-  const contributions =
-    (
-      data.contributions &&
-      typeof data.contributions === "object"
-    )
-      ? data.contributions
-      : {};
-
-
-  const satoru =
-    Number(
-      contributions.satoru
-    ) || 0;
-
-
-  const kana =
-    Number(
-      contributions.kana
-    ) || 0;
-
-
-  const total =
-    Number(
-      contributions.total
-    ) ||
-    (
-      satoru +
-      kana
-    );
-
-
-  if (
-    el.satoruContribution
-  ) {
-
-    el.satoruContribution.textContent =
-      yen(
-        satoru
-      );
-
-  }
-
-
-  if (
-    el.kanaContribution
-  ) {
-
-    el.kanaContribution.textContent =
-      yen(
-        kana
-      );
-
-  }
-
-
-  if (
-    el.contributionTotal
-  ) {
-
-    el.contributionTotal.textContent =
-      yen(
-        total
-      );
-
-  }
-
-}
-
-
-// =========================================================
-// 18. CATEGORIES
-// =========================================================
-
-function renderCategories(categories) {
+function renderCategories(
+  categories
+) {
 
   const el =
     getElements();
@@ -1084,7 +1049,7 @@ function renderCategories(categories) {
                 budget -
                 amount
               )
-            ) || 0;
+            );
 
 
           const color =
@@ -1105,8 +1070,7 @@ function renderCategories(categories) {
               (
                 amount /
                 budget
-              ) *
-              100;
+              ) * 100;
 
           }
 
@@ -1225,10 +1189,12 @@ function renderCategories(categories) {
 
 
 // =========================================================
-// 19. RECENT
+// 18. RECENT RECEIPTS
 // =========================================================
 
-function renderRecent(recent) {
+function renderRecent(
+  recent
+) {
 
   const el =
     getElements();
@@ -1243,21 +1209,8 @@ function renderRecent(recent) {
   }
 
 
-  const livingRecent =
-    recent
-      .filter(
-        item =>
-          !item.group ||
-          item.group === "生活費"
-      )
-      .slice(
-        0,
-        SETTINGS.recentLimit
-      );
-
-
   if (
-    livingRecent.length === 0
+    recent.length === 0
   ) {
 
     el.recentList.innerHTML = `
@@ -1288,7 +1241,11 @@ function renderRecent(recent) {
 
 
   el.recentList.innerHTML =
-    livingRecent
+    recent
+      .slice(
+        0,
+        SETTINGS.recentLimit
+      )
       .map(
         item => {
 
@@ -1302,7 +1259,7 @@ function renderRecent(recent) {
           const category =
             escapeHTML(
               item.category ||
-              "その他"
+              "🧾 雑費"
             );
 
 
@@ -1318,6 +1275,12 @@ function renderRecent(recent) {
             Number(
               item.amount
             ) || 0;
+
+
+          const payer =
+            escapeHTML(
+              item.payer || ""
+            );
 
 
           const imageUrl =
@@ -1395,6 +1358,16 @@ function renderRecent(recent) {
                       : ""
                   }
 
+
+                  ${
+                    payer
+                      ? `
+                        <span>•</span>
+                        <span>${payer}</span>
+                      `
+                      : ""
+                  }
+
                 </div>
 
               </div>
@@ -1416,10 +1389,12 @@ function renderRecent(recent) {
 
 
 // =========================================================
-// 20. AI ADVICE
+// 19. AI ADVICE
 // =========================================================
 
-function renderAdvice(data) {
+function renderAdvice(
+  data
+) {
 
   const el =
     getElements();
@@ -1438,17 +1413,23 @@ function renderAdvice(data) {
     data.living || {};
 
 
+  const saving =
+    data.saving || {};
+
+
   const budget =
     Number(
       living.budget ??
-      data.budget
-    ) || 0;
+      data.budget ??
+      250000
+    ) || 250000;
 
 
   const expense =
     Number(
       living.expense ??
-      data.expense
+      data.expense ??
+      0
     ) || 0;
 
 
@@ -1460,17 +1441,15 @@ function renderAdvice(data) {
         budget -
         expense
       )
-    ) || 0;
-
-
-  const saving =
-    Math.max(
-      0,
-      Number(
-        data.saving?.actual ??
-        remaining
-      ) || 0
     );
+
+
+  const currentSavings =
+    Number(
+      saving.current ??
+      saving.actual ??
+      0
+    ) || 0;
 
 
   const rate =
@@ -1478,8 +1457,7 @@ function renderAdvice(data) {
       ? (
           expense /
           budget
-        ) *
-        100
+        ) * 100
       : 0;
 
 
@@ -1491,16 +1469,16 @@ function renderAdvice(data) {
       : [];
 
 
-  // -------------------------------------------------------
+  // =======================================================
   // 予算オーバー
-  // -------------------------------------------------------
+  // =======================================================
 
   if (
     remaining < 0
   ) {
 
     el.aiAdvice.textContent =
-      `生活費予算を${yen(Math.abs(remaining))}超えています。カテゴリ別の支出を確認してみましょう。`;
+      `生活費予算を${yen(Math.abs(remaining))}超えています。今月の支出を確認してみましょう。`;
 
 
     return;
@@ -1508,16 +1486,16 @@ function renderAdvice(data) {
   }
 
 
-  // -------------------------------------------------------
+  // =======================================================
   // 80%以上
-  // -------------------------------------------------------
+  // =======================================================
 
   if (
     rate >= 80
   ) {
 
     el.aiAdvice.textContent =
-      `生活費予算の${Math.round(rate)}%を使っています。現在の残りは${yen(remaining)}です。`;
+      `今月は生活費予算の${Math.round(rate)}%を使っています。残りは${yen(remaining)}です。`;
 
 
     return;
@@ -1525,9 +1503,9 @@ function renderAdvice(data) {
   }
 
 
-  // -------------------------------------------------------
-  // 一番大きな支出
-  // -------------------------------------------------------
+  // =======================================================
+  // 一番大きいカテゴリ
+  // =======================================================
 
   const topCategory =
     [...categories]
@@ -1562,7 +1540,7 @@ function renderAdvice(data) {
   ) {
 
     el.aiAdvice.textContent =
-      `今月は「${topCategory.name}」の支出が最も多く${yen(topCategory.amount)}です。今のままなら${yen(saving)}が貯蓄に回ります。`;
+      `今月は「${topCategory.name}」が最も多く${yen(topCategory.amount)}です。生活費はあと${yen(remaining)}使えます。現在の貯蓄は${yen(currentSavings)}です。`;
 
 
     return;
@@ -1570,16 +1548,16 @@ function renderAdvice(data) {
   }
 
 
-  // -------------------------------------------------------
+  // =======================================================
   // 支出なし
-  // -------------------------------------------------------
+  // =======================================================
 
   if (
     expense === 0
   ) {
 
     el.aiAdvice.textContent =
-      `今月の生活費予算は${yen(budget)}です。使わなかった分はそのまま貯蓄になります。`;
+      `今月の生活費は${yen(budget)}からスタートです。現在の貯蓄は${yen(currentSavings)}です。`;
 
 
     return;
@@ -1587,18 +1565,18 @@ function renderAdvice(data) {
   }
 
 
-  // -------------------------------------------------------
+  // =======================================================
   // 通常
-  // -------------------------------------------------------
+  // =======================================================
 
   el.aiAdvice.textContent =
-    `今月は${yen(expense)}使っています。現在の残り${yen(remaining)}が貯蓄に回る予定です。`;
+    `今月は${yen(expense)}使っています。残りは${yen(remaining)}、現在の貯蓄は${yen(currentSavings)}です。`;
 
 }
 
 
 // =========================================================
-// 21. UPDATED TIME
+// 20. UPDATED TIME
 // =========================================================
 
 function setUpdatedTime() {
@@ -1624,8 +1602,13 @@ function setUpdatedTime() {
     now.toLocaleTimeString(
       "ja-JP",
       {
-        hour: "2-digit",
-        minute: "2-digit"
+
+        hour:
+          "2-digit",
+
+        minute:
+          "2-digit"
+
       }
     );
 
@@ -1637,10 +1620,12 @@ function setUpdatedTime() {
 
 
 // =========================================================
-// 22. ERROR TOAST
+// 21. ERROR TOAST
 // =========================================================
 
-function showError(message) {
+function showError(
+  message
+) {
 
   const el =
     getElements();
@@ -1680,7 +1665,7 @@ function showError(message) {
 
 
 // =========================================================
-// 23. ERROR VIEW
+// 22. ERROR VIEW
 // =========================================================
 
 function renderError() {
@@ -1763,7 +1748,7 @@ function renderError() {
 
 
 // =========================================================
-// 24. NAVIGATION
+// 23. NAVIGATION
 // =========================================================
 
 function setupNavigation() {
@@ -1824,7 +1809,7 @@ function setupNavigation() {
 
 
 // =========================================================
-// 25. BUTTONS
+// 24. BUTTONS
 // =========================================================
 
 function setupButtons() {
@@ -1904,7 +1889,7 @@ function setupButtons() {
 
 
 // =========================================================
-// 26. AUTO REFRESH
+// 25. AUTO REFRESH
 // =========================================================
 
 function startAutoRefresh() {
@@ -1943,7 +1928,7 @@ function startAutoRefresh() {
 
 
 // =========================================================
-// 27. VISIBILITY REFRESH
+// 26. VISIBILITY REFRESH
 // =========================================================
 
 function setupVisibilityRefresh() {
@@ -1970,7 +1955,7 @@ function setupVisibilityRefresh() {
 
 
 // =========================================================
-// 28. START
+// 27. START
 // =========================================================
 
 async function initializeApp() {
