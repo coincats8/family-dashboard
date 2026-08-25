@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
+
   <meta charset="UTF-8">
 
   <meta
@@ -8,510 +10,687 @@
     content="width=device-width, initial-scale=1.0, viewport-fit=cover"
   >
 
-  <meta name="theme-color" content="#F5F7FA">
+  <meta
+    name="theme-color"
+    content="#F5F7FA"
+  >
 
   <meta
     name="description"
-    content="ふたりで使う、シンプルでかわいい家計簿"
+    content="ふたりで使う家計簿 Family Dashboard"
   >
 
   <title>ふたりの家計簿</title>
 
+
   <!-- CSS -->
-  <link rel="stylesheet" href="css/style.css">
+
+  <link
+    rel="stylesheet"
+    href="css/style.css"
+  >
+
 
   <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+  >
+
+  <link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+  >
 
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   >
 
+
   <!-- Material Symbols -->
+
   <link
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded"
     rel="stylesheet"
   >
+
 </head>
 
 
 <body>
 
-  <!-- ========================================
-       APP
-  ========================================= -->
 
-  <main class="app">
+<!-- =====================================================
+     APP
+===================================================== -->
 
+<main class="app">
 
-    <!-- ========================================
-         HEADER
-    ========================================= -->
 
-    <header class="header">
+  <!-- ===================================================
+       HEADER
+  ==================================================== -->
 
-      <div class="header-main">
+  <header class="header">
 
-        <p class="hello" id="greeting">
-          ☀️ おはよう、市川さん
-        </p>
-
-        <h1>
-          ふたりの家計簿
-        </h1>
-
-        <span class="month" id="currentMonth">
-          ----年--月
-        </span>
-
-      </div>
-
-
-      <button
-        class="bell"
-        id="notificationButton"
-        type="button"
-        aria-label="お知らせ"
-      >
-
-        <span class="material-symbols-rounded">
-          notifications
-        </span>
-
-      </button>
-
-    </header>
-
-
-
-    <!-- ========================================
-         MONTHLY EXPENSE
-    ========================================= -->
-
-    <section class="card summary-card">
-
-      <div class="summary-header">
-
-        <div>
-
-          <p class="card-title">
-            今月の支出
-          </p>
-
-          <h2 id="totalMoney">
-            ¥0
-          </h2>
-
-        </div>
-
-
-        <div
-          class="summary-percent"
-          id="budgetPercent"
-        >
-          0%
-        </div>
-
-      </div>
-
-
-      <!-- Progress -->
-
-      <div
-        class="progress"
-        role="progressbar"
-        aria-label="今月の予算使用率"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        aria-valuenow="0"
-        id="budgetProgress"
-      >
-
-        <div
-          class="progress-bar"
-          id="progressBar"
-        ></div>
-
-      </div>
-
-
-      <!-- Budget -->
-
-      <div class="budget-row">
-
-        <div class="budget-item">
-
-          <span class="budget-label">
-            予算
-          </span>
-
-          <strong id="budgetMoney">
-            ¥0
-          </strong>
-
-        </div>
-
-
-        <div class="budget-item budget-item-right">
-
-          <span class="budget-label">
-            残り
-          </span>
-
-          <strong id="balanceMoney">
-            ¥0
-          </strong>
-
-        </div>
-
-      </div>
-
-    </section>
-
-
-
-    <!-- ========================================
-         CATEGORY
-    ========================================= -->
-
-    <section class="card category-card">
-
-      <div class="section-header">
-
-        <div>
-
-          <p class="card-title">
-            カテゴリ
-          </p>
-
-          <h3>
-            今月の内訳
-          </h3>
-
-        </div>
-
-
-        <button
-          class="text-button"
-          id="categoryDetailButton"
-          type="button"
-        >
-          すべて見る
-        </button>
-
-      </div>
-
-
-      <!--
-        app.js がここへカテゴリを自動生成する
-
-        例:
-
-        🍚 食費      ¥3,500
-        █████░░░░░
-      -->
-
-      <div
-        class="category-list"
-        id="categoryList"
-      >
-
-        <div class="loading-row">
-
-          <span class="loading-dot"></span>
-
-          <span>
-            読み込み中...
-          </span>
-
-        </div>
-
-      </div>
-
-    </section>
-
-
-
-    <!-- ========================================
-         AI ADVICE
-    ========================================= -->
-
-    <section class="card ai-card">
-
-      <div class="ai-header">
-
-        <div class="ai-icon">
-
-          <span class="material-symbols-rounded">
-            auto_awesome
-          </span>
-
-        </div>
-
-
-        <div>
-
-          <p class="card-title">
-            AIアドバイス
-          </p>
-
-          <h3>
-            今月の家計
-          </h3>
-
-        </div>
-
-      </div>
-
+    <div class="header-main">
 
       <p
-        class="ai-text"
-        id="aiAdvice"
+        class="hello"
+        id="greeting"
       >
-        家計データを読み込んでいます...
+        ☀️ おはよう、市川さん
       </p>
 
-    </section>
-
-
-
-    <!-- ========================================
-         RECENT RECEIPTS
-    ========================================= -->
-
-    <section class="card receipt-card">
-
-      <div class="section-header">
-
-        <div>
-
-          <p class="card-title">
-            最近のレシート
-          </p>
-
-          <h3>
-            最新の支出
-          </h3>
-
-        </div>
-
-
-        <button
-          class="text-button"
-          id="receiptDetailButton"
-          type="button"
-        >
-          すべて見る
-        </button>
-
-      </div>
-
-
-      <!--
-        app.js がここへレシートを自動生成する
-
-        例:
-
-        OKストア
-        🍚 食費
-        9/1             ¥3,500
-      -->
-
-      <div
-        class="recent-list"
-        id="recentList"
-      >
-
-        <div class="loading-row">
-
-          <span class="loading-dot"></span>
-
-          <span>
-            読み込み中...
-          </span>
-
-        </div>
-
-      </div>
-
-    </section>
-
-
-
-    <!-- ========================================
-         UPDATE STATUS
-    ========================================= -->
-
-    <div class="update-status">
+      <h1>
+        ふたりの家計簿
+      </h1>
 
       <span
-        class="material-symbols-rounded update-icon"
+        class="month"
+        id="currentMonth"
       >
-        sync
-      </span>
-
-      <span id="lastUpdated">
-        データを取得しています
+        ----年--月
       </span>
 
     </div>
 
 
-    <!-- Bottom nav分の余白 -->
-
-    <div class="bottom-space"></div>
-
-  </main>
-
-
-
-  <!-- ========================================
-       BOTTOM NAVIGATION
-  ========================================= -->
-
-  <nav
-    class="bottom-nav"
-    aria-label="メインメニュー"
-  >
-
-
-    <!-- Home -->
-
     <button
-      class="nav-button active"
+      class="bell"
+      id="notificationButton"
       type="button"
-      data-page="home"
-      aria-label="ホーム"
+      aria-label="お知らせ"
     >
 
       <span class="material-symbols-rounded">
-        home
-      </span>
-
-      <span class="nav-label">
-        ホーム
+        notifications
       </span>
 
     </button>
 
+  </header>
 
 
-    <!-- Receipt -->
 
-    <button
-      class="nav-button"
-      type="button"
-      data-page="receipt"
-      aria-label="レシート"
+  <!-- ===================================================
+       生活費
+  ==================================================== -->
+
+  <section class="card summary-card living-card">
+
+    <div class="summary-header">
+
+      <div>
+
+        <p class="card-title">
+          🏠 今月の生活費
+        </p>
+
+        <h2 id="totalMoney">
+          ¥0
+        </h2>
+
+      </div>
+
+
+      <div
+        class="summary-percent"
+        id="budgetPercent"
+      >
+        0%
+      </div>
+
+    </div>
+
+
+    <!-- Progress -->
+
+    <div
+      class="progress"
+      id="budgetProgress"
+      role="progressbar"
+      aria-label="生活費予算使用率"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow="0"
     >
 
+      <div
+        class="progress-bar"
+        id="progressBar"
+      ></div>
+
+    </div>
+
+
+    <!-- Budget -->
+
+    <div class="budget-row">
+
+      <div class="budget-item">
+
+        <span class="budget-label">
+          予算
+        </span>
+
+        <strong id="budgetMoney">
+          ¥0
+        </strong>
+
+      </div>
+
+
+      <div class="budget-item budget-item-right">
+
+        <span class="budget-label">
+          残り
+        </span>
+
+        <strong id="balanceMoney">
+          ¥0
+        </strong>
+
+      </div>
+
+    </div>
+
+  </section>
+
+
+
+  <!-- ===================================================
+       貯蓄・投資
+  ==================================================== -->
+
+  <section class="finance-overview">
+
+
+    <!-- 貯蓄 -->
+
+    <article class="mini-card saving-card">
+
+      <div class="mini-card-icon saving-icon">
+
+        <span class="material-symbols-rounded">
+          savings
+        </span>
+
+      </div>
+
+
+      <p class="mini-card-label">
+        今月の貯蓄
+      </p>
+
+
+      <strong
+        class="mini-card-value"
+        id="savingActual"
+      >
+        ¥0
+      </strong>
+
+
+      <div class="mini-card-bottom">
+
+        <span>
+          目標
+        </span>
+
+        <strong id="savingTarget">
+          ¥0
+        </strong>
+
+      </div>
+
+
+      <div class="mini-progress">
+
+        <div
+          class="mini-progress-bar saving-progress"
+          id="savingProgress"
+        ></div>
+
+      </div>
+
+
+      <p
+        class="mini-rate"
+        id="savingRate"
+      >
+        達成率 0%
+      </p>
+
+    </article>
+
+
+
+    <!-- 投資 -->
+
+    <article class="mini-card investment-card">
+
+      <div class="mini-card-icon investment-icon">
+
+        <span class="material-symbols-rounded">
+          trending_up
+        </span>
+
+      </div>
+
+
+      <p class="mini-card-label">
+        今月の投資
+      </p>
+
+
+      <strong
+        class="mini-card-value"
+        id="investmentActual"
+      >
+        ¥0
+      </strong>
+
+
+      <div class="mini-card-bottom">
+
+        <span>
+          予定
+        </span>
+
+        <strong id="investmentTarget">
+          ¥0
+        </strong>
+
+      </div>
+
+
+      <div class="mini-progress">
+
+        <div
+          class="mini-progress-bar investment-progress"
+          id="investmentProgress"
+        ></div>
+
+      </div>
+
+
+      <p
+        class="mini-rate"
+        id="investmentRate"
+      >
+        達成率 0%
+      </p>
+
+    </article>
+
+  </section>
+
+
+
+  <!-- ===================================================
+       TOTAL PLAN
+  ==================================================== -->
+
+  <section class="plan-strip">
+
+    <div class="plan-strip-icon">
+
       <span class="material-symbols-rounded">
-        receipt_long
+        account_balance_wallet
       </span>
 
-      <span class="nav-label">
-        レシート
+    </div>
+
+
+    <div class="plan-strip-main">
+
+      <span>
+        今月の家計プラン
       </span>
 
-    </button>
+      <strong id="monthlyPlanTotal">
+        ¥0
+      </strong>
+
+    </div>
+
+
+    <div class="plan-strip-detail">
+
+      <span>
+        生活費 + 貯蓄 + 投資
+      </span>
+
+    </div>
+
+  </section>
 
 
 
-    <!-- Report -->
+  <!-- ===================================================
+       CATEGORY
+  ==================================================== -->
 
-    <button
-      class="nav-button"
-      type="button"
-      data-page="report"
-      aria-label="レポート"
+  <section class="card category-card">
+
+    <div class="section-header">
+
+      <div>
+
+        <p class="card-title">
+          カテゴリ
+        </p>
+
+        <h3>
+          生活費の内訳
+        </h3>
+
+      </div>
+
+
+      <button
+        class="text-button"
+        id="categoryDetailButton"
+        type="button"
+      >
+        すべて見る
+      </button>
+
+    </div>
+
+
+    <div
+      class="category-list"
+      id="categoryList"
     >
 
-      <span class="material-symbols-rounded">
-        donut_large
-      </span>
+      <div class="loading-row">
 
-      <span class="nav-label">
-        レポート
-      </span>
+        <span class="loading-dot"></span>
 
-    </button>
+        <span>
+          読み込み中...
+        </span>
+
+      </div>
+
+    </div>
+
+  </section>
 
 
 
-    <!-- Calendar -->
+  <!-- ===================================================
+       AI
+  ==================================================== -->
 
-    <button
-      class="nav-button"
-      type="button"
-      data-page="calendar"
-      aria-label="カレンダー"
+  <section class="card ai-card">
+
+    <div class="ai-header">
+
+      <div class="ai-icon">
+
+        <span class="material-symbols-rounded">
+          auto_awesome
+        </span>
+
+      </div>
+
+
+      <div>
+
+        <p class="card-title">
+          AIアドバイス
+        </p>
+
+        <h3>
+          今月の家計
+        </h3>
+
+      </div>
+
+    </div>
+
+
+    <p
+      class="ai-text"
+      id="aiAdvice"
+    >
+      家計データを読み込んでいます...
+    </p>
+
+  </section>
+
+
+
+  <!-- ===================================================
+       RECENT
+  ==================================================== -->
+
+  <section class="card receipt-card">
+
+    <div class="section-header">
+
+      <div>
+
+        <p class="card-title">
+          最近のレシート
+        </p>
+
+        <h3>
+          最新の支出
+        </h3>
+
+      </div>
+
+
+      <button
+        class="text-button"
+        id="receiptDetailButton"
+        type="button"
+      >
+        すべて見る
+      </button>
+
+    </div>
+
+
+    <div
+      class="recent-list"
+      id="recentList"
     >
 
-      <span class="material-symbols-rounded">
-        calendar_month
-      </span>
+      <div class="loading-row">
 
-      <span class="nav-label">
-        カレンダー
-      </span>
+        <span class="loading-dot"></span>
 
-    </button>
+        <span>
+          読み込み中...
+        </span>
 
+      </div>
 
+    </div>
 
-    <!-- Settings -->
-
-    <button
-      class="nav-button"
-      type="button"
-      data-page="settings"
-      aria-label="設定"
-    >
-
-      <span class="material-symbols-rounded">
-        settings
-      </span>
-
-      <span class="nav-label">
-        設定
-      </span>
-
-    </button>
-
-  </nav>
+  </section>
 
 
 
-  <!-- ========================================
-       ERROR TOAST
-  ========================================= -->
+  <!-- ===================================================
+       UPDATE
+  ==================================================== -->
 
-  <div
-    class="toast"
-    id="errorToast"
-    role="alert"
-    aria-live="polite"
-  >
+  <div class="update-status">
 
-    <span class="material-symbols-rounded">
-      error
+    <span class="material-symbols-rounded update-icon">
+      sync
     </span>
 
-    <span id="errorMessage">
-      データを取得できませんでした
+    <span id="lastUpdated">
+      データを取得しています
     </span>
 
   </div>
 
 
+  <div class="bottom-space"></div>
 
-  <!-- ========================================
-       JAVASCRIPT
-  ========================================= -->
 
-  <script src="js/app.js"></script>
+</main>
+
+
+
+<!-- =====================================================
+     BOTTOM NAV
+===================================================== -->
+
+<nav
+  class="bottom-nav"
+  aria-label="メインメニュー"
+>
+
+
+  <!-- HOME -->
+
+  <button
+    class="nav-button active"
+    type="button"
+    data-page="home"
+    aria-label="ホーム"
+  >
+
+    <span class="material-symbols-rounded">
+      home
+    </span>
+
+    <span class="nav-label">
+      ホーム
+    </span>
+
+  </button>
+
+
+
+  <!-- RECEIPT -->
+
+  <button
+    class="nav-button"
+    type="button"
+    data-page="receipt"
+    aria-label="レシート"
+  >
+
+    <span class="material-symbols-rounded">
+      receipt_long
+    </span>
+
+    <span class="nav-label">
+      レシート
+    </span>
+
+  </button>
+
+
+
+  <!-- REPORT -->
+
+  <button
+    class="nav-button"
+    type="button"
+    data-page="report"
+    aria-label="レポート"
+  >
+
+    <span class="material-symbols-rounded">
+      donut_large
+    </span>
+
+    <span class="nav-label">
+      レポート
+    </span>
+
+  </button>
+
+
+
+  <!-- CALENDAR -->
+
+  <button
+    class="nav-button"
+    type="button"
+    data-page="calendar"
+    aria-label="カレンダー"
+  >
+
+    <span class="material-symbols-rounded">
+      calendar_month
+    </span>
+
+    <span class="nav-label">
+      カレンダー
+    </span>
+
+  </button>
+
+
+
+  <!-- SETTINGS -->
+
+  <button
+    class="nav-button"
+    type="button"
+    data-page="settings"
+    aria-label="設定"
+  >
+
+    <span class="material-symbols-rounded">
+      settings
+    </span>
+
+    <span class="nav-label">
+      設定
+    </span>
+
+  </button>
+
+</nav>
+
+
+
+<!-- =====================================================
+     ERROR TOAST
+===================================================== -->
+
+<div
+  class="toast"
+  id="errorToast"
+  role="alert"
+  aria-live="polite"
+>
+
+  <span class="material-symbols-rounded">
+    error
+  </span>
+
+  <span id="errorMessage">
+    エラーが発生しました
+  </span>
+
+</div>
+
+
+
+<!-- =====================================================
+     JAVASCRIPT
+===================================================== -->
+
+<script src="js/app.js"></script>
+
 
 </body>
+
 </html>
