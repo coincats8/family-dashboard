@@ -4168,6 +4168,72 @@ function renderAdvice() {
       : 0;
   }
 
+  function renderAdvice() {
+  const target =
+    document.getElementById(
+      "aiAdvice"
+    );
+
+  if (
+    !target ||
+    !dashboardData
+  ) {
+    return;
+  }
+
+  const living =
+    dashboardData.living || {};
+
+  const budget =
+    Number(
+      living.budget ??
+      SETTINGS.monthlyBudget ??
+      250000
+    ) || 250000;
+
+  const expense =
+    Number(
+      living.expense ?? 0
+    ) || 0;
+
+  const remaining =
+    Number(
+      living.remaining ??
+      (
+        budget -
+        expense
+      )
+    );
+
+  const categories =
+    Array.isArray(
+      dashboardData.categories
+    )
+      ? [...dashboardData.categories]
+      : [];
+
+  function adviceAmountNumber_(value) {
+    if (
+      typeof value === "number"
+    ) {
+      return Number.isFinite(value)
+        ? value
+        : 0;
+    }
+
+    const number =
+      Number(
+        String(value || "")
+          .replace(/,/g, "")
+          .replace(/[¥￥円]/g, "")
+          .replace(/\s/g, "")
+      );
+
+    return Number.isFinite(number)
+      ? number
+      : 0;
+  }
+
   function adviceIsRentCategory_(category) {
     const name =
       String(
@@ -4221,7 +4287,7 @@ function renderAdvice() {
             remaining
           )
         ) +
-        "超えています。家賃を除くと「" +
+        "超えています。「" +
         String(
           top.name || ""
         ) +
@@ -4249,7 +4315,7 @@ function renderAdvice() {
 
   if (top) {
     target.textContent =
-      "家賃を除くと、今月は「" +
+      "今月は「" +
       String(
         top.name || ""
       ) +
@@ -4276,7 +4342,7 @@ function renderAdvice() {
       yen(
         remaining
       ) +
-      "残っています。家賃以外の支出はまだありません。";
+      "残っています。";
 
     return;
   }
