@@ -40,6 +40,10 @@ const SETTINGS = {
 };
 
 
+const DASHBOARD_CACHE_KEY =
+  "family-kakeibo-dashboard-v1";
+
+
 // =========================================================
 // STATE
 // =========================================================
@@ -412,6 +416,9 @@ async function loadDashboard() {
       );
 
 
+    saveDashboardCache();
+
+
     renderHome();
 
     renderReport();
@@ -431,6 +438,97 @@ async function loadDashboard() {
     showToast(
       "家計データを取得できませんでした"
     );
+
+  }
+
+}
+
+
+// =========================================================
+// DASHBOARD CACHE
+//
+// 前回表示した家計簿を先に描画し、通信完了後に最新値へ更新する。
+// =========================================================
+
+function saveDashboardCache() {
+
+  if (!dashboardData) {
+
+    return;
+
+  }
+
+
+  try {
+
+    localStorage.setItem(
+      DASHBOARD_CACHE_KEY,
+      JSON.stringify({
+        savedAt: Date.now(),
+        data: dashboardData
+      })
+    );
+
+  }
+
+  catch (error) {
+
+    console.warn(
+      "Dashboard cache save error:",
+      error
+    );
+
+  }
+
+}
+
+
+function restoreDashboardCache() {
+
+  try {
+
+    const raw = localStorage.getItem(
+      DASHBOARD_CACHE_KEY
+    );
+
+
+    if (!raw) {
+
+      return false;
+
+    }
+
+
+    const cached = JSON.parse(raw);
+
+
+    if (!cached || !cached.data) {
+
+      return false;
+
+    }
+
+
+    dashboardData = cached.data;
+
+    renderHome();
+
+    renderReport();
+
+
+    return true;
+
+  }
+
+  catch (error) {
+
+    console.warn(
+      "Dashboard cache restore error:",
+      error
+    );
+
+
+    return false;
 
   }
 
@@ -1126,7 +1224,8 @@ async function switchPage(page) {
 
     renderHome();
 
-    await loadTodaySchedules();
+    // ホーム画面の表示をカレンダー通信で待たせない
+    void loadTodaySchedules();
 
   }
 
@@ -3852,13 +3951,8 @@ async function initializeApp() {
   setupEvents();
 
 
-  await Promise.all([
-
-    loadDashboard(),
-
-    loadTodaySchedules()
-
-  ]);
+  // 以前の家計簿があれば即表示する
+  restoreDashboardCache();
 
 
   const initialPage =
@@ -3870,6 +3964,17 @@ async function initializeApp() {
   );
 
 
+  // 最新データは表示後に裏で更新する
+  void loadDashboard();
+
+
+  // ホーム以外ではカレンダー通信も画面初期表示を止めない
+  // （ホームは switchPage 内で開始済み）
+  if (initialPage !== "home") {
+    void loadTodaySchedules();
+  }
+
+
   startAutoRefresh();
 
 }
@@ -3879,7 +3984,11 @@ async function initializeApp() {
 // START
 // =========================================================
 
-document.addEventListener(
-  "DOMContentLoaded",
-  initializeApp
-);
+if (document.readyState === "loading") {
+  document.addEventListener(
+    "DOMContentLoaded",
+    initializeApp
+  );
+} else {
+  initializeApp();
+}
