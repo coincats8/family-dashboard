@@ -1492,21 +1492,126 @@ function renderCategoryList(
   }
 
 
-  container.innerHTML =
+  const toNumber =
+    value => {
+
+      const direct =
+        Number(value);
+
+
+      if (
+        !Number.isNaN(direct)
+      ) {
+
+        return direct;
+
+      }
+
+
+      return (
+        Number(
+          String(value || "")
+            .replace(
+              /[^\d.-]/g,
+              ""
+            )
+        ) || 0
+      );
+
+    };
+
+
+  const sortedCategories =
     categories
+      .map(
+        (
+          category,
+          index
+        ) => ({
+
+          category,
+
+          index,
+
+          amount:
+            toNumber(
+              category.amount
+            )
+
+        })
+      )
+      .sort(
+        (a, b) => {
+
+          const aHasAmount =
+            a.amount > 0;
+
+
+          const bHasAmount =
+            b.amount > 0;
+
+
+          if (
+            aHasAmount &&
+            !bHasAmount
+          ) {
+
+            return -1;
+
+          }
+
+
+          if (
+            !aHasAmount &&
+            bHasAmount
+          ) {
+
+            return 1;
+
+          }
+
+
+          if (
+            aHasAmount &&
+            bHasAmount
+          ) {
+
+            return (
+              b.amount -
+              a.amount
+            );
+
+          }
+
+
+          return (
+            a.index -
+            b.index
+          );
+
+        }
+      )
+      .map(
+        item =>
+          item.category
+      );
+
+
+  container.innerHTML =
+    sortedCategories
       .map(
         category => {
 
           const budget =
-            Number(
+            toNumber(
               category.budget
-            ) || 0;
+            );
 
 
           const amount =
-            Number(
+            toNumber(
               category.amount
-            ) || 0;
+            );
 
 
           const remaining =
