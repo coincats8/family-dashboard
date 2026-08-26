@@ -4277,3 +4277,841 @@ renderAdvice = function() {
     ) +
     "からスタートです。";
 };
+// =========================================================
+// 購入明細ページ＋AIアドバイス 最終修正版
+// app.jsの一番最後に追加
+// =========================================================
+
+
+// ---------------------------------------------------------
+// 購入明細を取得
+// ---------------------------------------------------------
+
+loadReceiptsFor =
+  async function(
+    year,
+    month
+  ) {
+    try {
+      const data =
+        await fetchJson(
+          API_BASE +
+          "?mode=purchaseItems" +
+          "&year=" +
+          encodeURIComponent(year) +
+          "&month=" +
+          encodeURIComponent(month)
+        );
+
+      if (
+        data &&
+        Array.isArray(
+          data.items
+        )
+      ) {
+        receiptData =
+          data.items;
+      }
+      else if (
+        Array.isArray(data)
+      ) {
+        receiptData =
+          data;
+      }
+      else if (
+        data &&
+        Array.isArray(
+          data.data
+        )
+      ) {
+        receiptData =
+          data.data;
+      }
+      else {
+        receiptData = [];
+      }
+
+      return receiptData;
+    }
+    catch (error) {
+      console.error(
+        "Purchase Items Error:",
+        error
+      );
+
+      receiptData = [];
+
+      showToast(
+        "購入明細を取得できませんでした"
+      );
+
+      return [];
+    }
+  };
+
+
+// ---------------------------------------------------------
+// 金額変換
+// ---------------------------------------------------------
+
+function purchaseItemAmount_(value) {
+  if (
+    typeof value === "number"
+  ) {
+    return Number.isFinite(value)
+      ? value
+      : 0;
+  }
+
+  const number =
+    Number(
+      String(value || "")
+        .replace(/,/g, "")
+        .replace(/[¥￥円]/g, "")
+        .replace(/\s/g, "")
+    );
+
+  return Number.isFinite(number)
+    ? number
+    : 0;
+}
+
+
+// ---------------------------------------------------------
+// 購入明細の商品名
+// C列「商品名」を優先
+// ---------------------------------------------------------
+
+function purchaseItemName_(item) {
+  return String(
+    item.productName ||
+    item.name ||
+    item.itemName ||
+    "商品名未設定"
+  ).trim();
+}
+
+
+// ---------------------------------------------------------
+// 購入明細の分類
+// D列「分類」を表示
+// ---------------------------------------------------------
+
+function purchaseItemClassification_(
+  item
+) {
+  const productName =
+    purchaseItemName_(
+      item
+    );
+
+  const candidates = [
+    item.classification,
+    item.subCategory,
+    item.subcategory,
+    item.detailCategory,
+    item.normalizedName
+  ];
+
+  for (
+    let i = 0;
+    i < candidates.length;
+    i++
+  ) {
+    const value =
+      String(
+        candidates[i] || ""
+      ).trim();
+
+    if (
+      value &&
+      value !== productName
+    ) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+
+// ---------------------------------------------------------
+// 同じ商品を最近買っているか確認
+// ---------------------------------------------------------
+
+function purchaseItemDuplicateText_(
+  item,
+  items
+) {
+  const currentName =
+    purchaseItemName_(item)
+      .normalize("NFKC")
+      .toLowerCase()
+      .replace(/\s/g, "");
+
+  if (
+    !currentName ||
+    currentName ===
+      "商品名未設定"
+  ) {
+    return "";
+  }
+
+  const currentDate =
+    parseDateValue(
+      item.date
+    );
+
+  if (!currentDate) {
+    return "";
+  }
+
+  const duplicate =
+    items.find(
+      function(other) {
+        if (
+          other === item
+        ) {
+          return false;
+        }
+
+        const otherName =
+          purchaseItemName_(other)
+            .normalize("NFKC")
+            .toLowerCase()
+            .replace(/\s/g, "");
+
+        if (
+          currentName !==
+          otherName
+        ) {
+          return false;
+        }
+
+        const otherDate =
+          parseDateValue(
+            other.date
+          );
+
+        if (!otherDate) {
+          return false;
+        }
+
+        const difference =
+          Math.abs(
+            currentDate.getTime() -
+            otherDate.getTime()
+          );
+
+        const days =
+          difference /
+          (
+            1000 *
+            60 *
+            60 *
+            24
+          );
+
+        return (
+          days > 0 &&
+          days <= 14
+        );
+      }
+    );
+
+  if (!duplicate) {
+    return "";
+  }
+
+  return (
+    "最近も購入：" +
+    formatShortDate(
+      duplicate.date
+    )
+  );
+}
+
+
+// ---------------------------------------------------------
+// 購入明細一覧表示
+// ---------------------------------------------------------
+
+renderReceiptList =
+  function(
+    container,
+    receipts,
+    limit
+  ) {
+    if (!container) {
+      return;
+    }
+
+    const source =
+      Array.isArray(receipts)
+        ? receipts
+        : [];
+
+    const sorted =
+      source
+        .slice()
+        .sort(
+          function(a, b) {
+            const dateA =
+              parseDateValue(
+                a.date
+              );
+
+            const dateB =
+              parseDateValue(
+                b.date
+              );
+
+            const timeA =
+              dateA
+                ? dateA.getTime()
+                : 0;
+
+            const timeB =
+              dateB
+                ? dateB.getTime()
+                : 0;
+
+            if (
+              timeA !== timeB
+            ) {
+              return (
+                timeB -
+                timeA
+              );
+            }
+
+            return (
+              purchaseItemAmount_(
+                b.amount
+              ) -
+              purchaseItemAmount_(
+                a.amount
+              )
+            );
+          }
+        );
+
+    const items =
+      limit
+        ? sorted.slice(
+            0,
+            limit
+          )
+        : sorted;
+
+    if (
+      items.length === 0
+    ) {
+      container.innerHTML =
+        createEmptyState(
+          "shopping_cart",
+          "購入明細はありません",
+          "レシートの商品がここに表示されます"
+        );
+
+      return;
+    }
+
+    container.innerHTML =
+      items
+        .map(
+          function(item) {
+            const productName =
+              purchaseItemName_(
+                item
+              );
+
+            const classification =
+              purchaseItemClassification_(
+                item
+              );
+
+            const shop =
+              String(
+                item.shop ||
+                "店名未設定"
+              ).trim();
+
+            const category =
+              String(
+                item.category || ""
+              ).trim();
+
+            const payer =
+              String(
+                item.payer || ""
+              ).trim();
+
+            const quantity =
+              Number(
+                item.quantity || 1
+              ) || 1;
+
+            const unitPrice =
+              purchaseItemAmount_(
+                item.unitPrice
+              );
+
+            const amount =
+              purchaseItemAmount_(
+                item.amount
+              );
+
+            const duplicateText =
+              purchaseItemDuplicateText_(
+                item,
+                source
+              );
+
+            return `
+              <div class="receipt-item">
+
+                <div class="receipt-icon">
+                  <span class="material-symbols-rounded">
+                    shopping_bag
+                  </span>
+                </div>
+
+                <div class="receipt-main">
+
+                  <strong class="receipt-shop">
+                    ${escapeHTML(productName)}
+                  </strong>
+
+                  <div class="receipt-meta">
+
+                    ${
+                      classification
+                        ? `
+                          <span>
+                            ${escapeHTML(classification)}
+                          </span>
+                        `
+                        : ""
+                    }
+
+                    ${
+                      category
+                        ? `
+                          <span>
+                            ${escapeHTML(category)}
+                          </span>
+                        `
+                        : ""
+                    }
+
+                    <span>
+                      ${escapeHTML(formatShortDate(item.date))}
+                    </span>
+
+                  </div>
+
+                  <small>
+                    ${escapeHTML(shop)}
+                  </small>
+
+                  ${
+                    quantity > 1 ||
+                    unitPrice > 0
+                      ? `
+                        <small>
+                          数量 ${escapeHTML(quantity)}
+                          ${
+                            unitPrice > 0
+                              ? "・単価 " +
+                                escapeHTML(
+                                  yen(unitPrice)
+                                )
+                              : ""
+                          }
+                        </small>
+                      `
+                      : ""
+                  }
+
+                  ${
+                    payer
+                      ? `
+                        <small>
+                          支払者：
+                          ${escapeHTML(payer)}
+                        </small>
+                      `
+                      : ""
+                  }
+
+                  ${
+                    duplicateText
+                      ? `
+                        <small
+                          style="
+                            color:#ff9500;
+                            font-weight:700;
+                          "
+                        >
+                          ⚠️ ${escapeHTML(duplicateText)}
+                        </small>
+                      `
+                      : ""
+                  }
+
+                </div>
+
+                <strong class="receipt-price">
+                  ${yen(amount)}
+                </strong>
+
+              </div>
+            `;
+          }
+        )
+        .join("");
+  };
+
+
+// ---------------------------------------------------------
+// 購入明細ページ更新
+// ---------------------------------------------------------
+
+refreshReceiptPage =
+  async function() {
+    const year =
+      receiptDate.getFullYear();
+
+    const month =
+      receiptDate.getMonth() + 1;
+
+    const monthLabel =
+      document.getElementById(
+        "receiptMonthLabel"
+      );
+
+    if (monthLabel) {
+      monthLabel.textContent =
+        year +
+        "年" +
+        month +
+        "月";
+    }
+
+    await loadReceiptsFor(
+      year,
+      month
+    );
+
+    const filtered =
+      receiptData
+        .filter(
+          function(item) {
+            const date =
+              parseDateValue(
+                item.date
+              );
+
+            if (!date) {
+              return false;
+            }
+
+            return (
+              date.getFullYear() ===
+                year &&
+              date.getMonth() + 1 ===
+                month
+            );
+          }
+        )
+        .sort(
+          function(a, b) {
+            const dateA =
+              parseDateValue(
+                a.date
+              );
+
+            const dateB =
+              parseDateValue(
+                b.date
+              );
+
+            const timeA =
+              dateA
+                ? dateA.getTime()
+                : 0;
+
+            const timeB =
+              dateB
+                ? dateB.getTime()
+                : 0;
+
+            if (
+              timeA !== timeB
+            ) {
+              return (
+                timeB -
+                timeA
+              );
+            }
+
+            return (
+              purchaseItemAmount_(
+                b.amount
+              ) -
+              purchaseItemAmount_(
+                a.amount
+              )
+            );
+          }
+        );
+
+    const total =
+      filtered.reduce(
+        function(sum, item) {
+          return (
+            sum +
+            purchaseItemAmount_(
+              item.amount
+            )
+          );
+        },
+        0
+      );
+
+    const totalTarget =
+      document.getElementById(
+        "receiptMonthTotal"
+      );
+
+    if (totalTarget) {
+      totalTarget.textContent =
+        yen(total);
+    }
+
+    const countTarget =
+      document.getElementById(
+        "receiptCount"
+      );
+
+    if (countTarget) {
+      countTarget.textContent =
+        filtered.length +
+        "件";
+    }
+
+    renderReceiptList(
+      document.getElementById(
+        "receiptFullList"
+      ),
+      filtered
+    );
+  };
+
+
+// ---------------------------------------------------------
+// レシート画面の見出しを購入明細へ変更
+// ---------------------------------------------------------
+
+const updatePageHeaderBeforePurchaseFix =
+  updatePageHeader;
+
+updatePageHeader =
+  function() {
+    updatePageHeaderBeforePurchaseFix();
+
+    if (
+      currentPage !==
+      "receipt"
+    ) {
+      return;
+    }
+
+    const title =
+      document.getElementById(
+        "pageTitle"
+      );
+
+    const kicker =
+      document.getElementById(
+        "pageKicker"
+      );
+
+    if (title) {
+      title.textContent =
+        "購入明細";
+    }
+
+    if (kicker) {
+      kicker.textContent =
+        "🛒 PURCHASE ITEMS";
+    }
+  };
+
+
+// ---------------------------------------------------------
+// AIアドバイス
+// 家賃を判定対象から除外するが、文章には書かない
+// ---------------------------------------------------------
+
+renderAdvice =
+  function() {
+    const target =
+      document.getElementById(
+        "aiAdvice"
+      );
+
+    if (
+      !target ||
+      !dashboardData
+    ) {
+      return;
+    }
+
+    const living =
+      dashboardData.living || {};
+
+    const budget =
+      Number(
+        living.budget ??
+        SETTINGS.monthlyBudget ??
+        250000
+      ) || 250000;
+
+    const expense =
+      Number(
+        living.expense ?? 0
+      ) || 0;
+
+    const remaining =
+      Number(
+        living.remaining ??
+        (
+          budget -
+          expense
+        )
+      );
+
+    const categories =
+      Array.isArray(
+        dashboardData.categories
+      )
+        ? dashboardData.categories.slice()
+        : [];
+
+    const top =
+      categories
+        .filter(
+          function(category) {
+            const name =
+              String(
+                category.name || ""
+              );
+
+            const amount =
+              purchaseItemAmount_(
+                category.amount
+              );
+
+            const isRent =
+              name.indexOf("家賃") !== -1 ||
+              name.indexOf("賃料") !== -1;
+
+            return (
+              !isRent &&
+              amount > 0
+            );
+          }
+        )
+        .sort(
+          function(a, b) {
+            return (
+              purchaseItemAmount_(
+                b.amount
+              ) -
+              purchaseItemAmount_(
+                a.amount
+              )
+            );
+          }
+        )[0];
+
+    if (
+      remaining < 0
+    ) {
+      if (top) {
+        target.textContent =
+          "今月は生活費予算を" +
+          yen(
+            Math.abs(
+              remaining
+            )
+          ) +
+          "超えています。「" +
+          String(
+            top.name || ""
+          ) +
+          "」の支出が最も多く" +
+          yen(
+            purchaseItemAmount_(
+              top.amount
+            )
+          ) +
+          "です。";
+      }
+      else {
+        target.textContent =
+          "今月は生活費予算を" +
+          yen(
+            Math.abs(
+              remaining
+            )
+          ) +
+          "超えています。";
+      }
+
+      return;
+    }
+
+    if (top) {
+      target.textContent =
+        "今月は「" +
+        String(
+          top.name || ""
+        ) +
+        "」の支出が最も多く" +
+        yen(
+          purchaseItemAmount_(
+            top.amount
+          )
+        ) +
+        "です。生活費はあと" +
+        yen(
+          remaining
+        ) +
+        "残っています。";
+
+      return;
+    }
+
+    if (
+      expense > 0
+    ) {
+      target.textContent =
+        "今月の生活費はあと" +
+        yen(
+          remaining
+        ) +
+        "残っています。";
+
+      return;
+    }
+
+    target.textContent =
+      "今月の生活費は" +
+      yen(
+        budget
+      ) +
+      "からスタートです。";
+  };
