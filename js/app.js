@@ -5605,3 +5605,493 @@ updatePageHeader =
       changeReceiptLabelsToPurchaseItems_();
     }
   };
+// =========================================================
+// 購入明細表示フィルター
+//
+// 表示するもの：
+// ・スーパーの商品
+// ・ドラッグストアの商品
+// ・コンビニの商品
+// ・冷蔵庫や食品に関係する商品
+// ・日用品
+// ・医薬品
+//
+// 表示しないもの：
+// ・家賃
+// ・外食
+// ・洋服
+// ・水道光熱費
+// ・税金
+// ・交通費
+// =========================================================
+
+
+// ---------------------------------------------------------
+// 購入明細に表示する商品か判定
+// ---------------------------------------------------------
+
+function isShoppingManagementItem_(
+  item
+) {
+  const shop =
+    String(
+      item.shop || ""
+    )
+      .normalize("NFKC")
+      .toLowerCase();
+
+  const productName =
+    String(
+      item.productName ||
+      item.name ||
+      item.itemName ||
+      ""
+    )
+      .normalize("NFKC")
+      .toLowerCase();
+
+  const classification =
+    String(
+      item.classification ||
+      item.subCategory ||
+      item.subcategory ||
+      item.normalizedName ||
+      ""
+    )
+      .normalize("NFKC")
+      .toLowerCase();
+
+  const category =
+    String(
+      item.category || ""
+    )
+      .normalize("NFKC")
+      .toLowerCase();
+
+  const text =
+    [
+      shop,
+      productName,
+      classification,
+      category
+    ].join(" ");
+
+  const excludedWords = [
+    "家賃",
+    "賃料",
+    "外食",
+    "ガスト",
+    "サイゼ",
+    "マクドナルド",
+    "マック",
+    "すき家",
+    "松屋",
+    "吉野家",
+    "ケンタッキー",
+    "モスバーガー",
+    "レストラン",
+    "食堂",
+    "カフェ",
+    "ドリンクバー",
+    "定食",
+    "洋服",
+    "衣類",
+    "靴下",
+    "ズボン",
+    "上着",
+    "下着",
+    "シャツ",
+    "カットソー",
+    "スニーカー",
+    "水道",
+    "電気",
+    "ガス料金",
+    "税金",
+    "交通費"
+  ];
+
+  for (
+    let i = 0;
+    i < excludedWords.length;
+    i++
+  ) {
+    if (
+      text.indexOf(
+        excludedWords[i]
+      ) !== -1
+    ) {
+      return false;
+    }
+  }
+
+  const targetCategories = [
+    "食費",
+    "日用品",
+    "医療"
+  ];
+
+  for (
+    let i = 0;
+    i < targetCategories.length;
+    i++
+  ) {
+    if (
+      category.indexOf(
+        targetCategories[i]
+      ) !== -1
+    ) {
+      return true;
+    }
+  }
+
+  const targetStores = [
+    "マルエツ",
+    "イオン",
+    "ライフ",
+    "西友",
+    "イトーヨーカドー",
+    "ヨーク",
+    "オーケーストア",
+    "okストア",
+    "業務スーパー",
+    "ベルク",
+    "ヤオコー",
+    "サミット",
+    "東武ストア",
+    "まいばすけっと",
+    "成城石井",
+    "コープ",
+    "ダイエー",
+    "アコレ",
+    "マツキヨ",
+    "マツモトキヨシ",
+    "matsukiyo",
+    "ウエルシア",
+    "ウェルシア",
+    "サンドラッグ",
+    "スギ薬局",
+    "ツルハ",
+    "ココカラファイン",
+    "クリエイト",
+    "ぱぱす",
+    "セブンイレブン",
+    "セブン-イレブン",
+    "ファミリーマート",
+    "ファミマ",
+    "ローソン",
+    "ミニストップ",
+    "デイリーヤマザキ"
+  ];
+
+  for (
+    let i = 0;
+    i < targetStores.length;
+    i++
+  ) {
+    if (
+      shop.indexOf(
+        targetStores[i]
+          .toLowerCase()
+      ) !== -1
+    ) {
+      return true;
+    }
+  }
+
+  const targetItems = [
+    "野菜",
+    "果物",
+    "肉",
+    "魚",
+    "卵",
+    "乳製品",
+    "牛乳",
+    "ヨーグルト",
+    "チーズ",
+    "豆腐",
+    "納豆",
+    "パン",
+    "米",
+    "麺",
+    "調味料",
+    "飲料",
+    "お菓子",
+    "冷凍食品",
+    "惣菜",
+    "弁当",
+    "洗剤",
+    "柔軟剤",
+    "漂白剤",
+    "ティッシュ",
+    "トイレットペーパー",
+    "キッチンペーパー",
+    "ラップ",
+    "ゴミ袋",
+    "歯ブラシ",
+    "歯磨き",
+    "シャンプー",
+    "ボディソープ",
+    "医薬品",
+    "薬",
+    "風邪薬",
+    "頭痛薬",
+    "胃薬",
+    "目薬",
+    "湿布",
+    "絆創膏",
+    "マスク"
+  ];
+
+  for (
+    let i = 0;
+    i < targetItems.length;
+    i++
+  ) {
+    if (
+      text.indexOf(
+        targetItems[i]
+      ) !== -1
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+
+// ---------------------------------------------------------
+// レシート関連の表示文字を購入明細へ変更
+// ---------------------------------------------------------
+
+function changeReceiptLabelsToPurchaseItems_() {
+  const replacements = {
+    "レシート": "購入明細",
+    "支出・レシート": "購入明細",
+    "RECEIPTS": "PURCHASE ITEMS",
+    "支出一覧": "購入明細一覧",
+    "この月の支出": "この月の購入額",
+    "支出はありません": "購入明細はありません",
+    "登録した支出がここに表示されます":
+      "購入した商品がここに表示されます"
+  };
+
+  document
+    .querySelectorAll(
+      "h1, h2, h3, h4, p, span, strong, small"
+    )
+    .forEach(
+      function(element) {
+        if (
+          element.children.length > 0
+        ) {
+          return;
+        }
+
+        const currentText =
+          String(
+            element.textContent || ""
+          ).trim();
+
+        if (
+          Object.prototype.hasOwnProperty.call(
+            replacements,
+            currentText
+          )
+        ) {
+          element.textContent =
+            replacements[currentText];
+        }
+      }
+    );
+
+  const pageTitle =
+    document.getElementById(
+      "pageTitle"
+    );
+
+  if (
+    pageTitle &&
+    currentPage === "receipt"
+  ) {
+    pageTitle.textContent =
+      "購入明細";
+  }
+
+  const pageKicker =
+    document.getElementById(
+      "pageKicker"
+    );
+
+  if (
+    pageKicker &&
+    currentPage === "receipt"
+  ) {
+    pageKicker.textContent =
+      "🛒 PURCHASE ITEMS";
+  }
+}
+
+
+// ---------------------------------------------------------
+// 購入明細ページ更新
+// 対象商品のみ表示
+// ---------------------------------------------------------
+
+refreshReceiptPage =
+  async function() {
+    const year =
+      receiptDate.getFullYear();
+
+    const month =
+      receiptDate.getMonth() + 1;
+
+    const monthLabel =
+      document.getElementById(
+        "receiptMonthLabel"
+      );
+
+    if (monthLabel) {
+      monthLabel.textContent =
+        year +
+        "年" +
+        month +
+        "月";
+    }
+
+    await loadReceiptsFor(
+      year,
+      month
+    );
+
+    const filtered =
+      receiptData
+        .filter(
+          function(item) {
+            const date =
+              parseDateValue(
+                item.date
+              );
+
+            if (!date) {
+              return false;
+            }
+
+            const sameMonth =
+              date.getFullYear() ===
+                year &&
+              date.getMonth() + 1 ===
+                month;
+
+            return (
+              sameMonth &&
+              isShoppingManagementItem_(
+                item
+              )
+            );
+          }
+        )
+        .sort(
+          function(a, b) {
+            const dateA =
+              parseDateValue(
+                a.date
+              );
+
+            const dateB =
+              parseDateValue(
+                b.date
+              );
+
+            const timeA =
+              dateA
+                ? dateA.getTime()
+                : 0;
+
+            const timeB =
+              dateB
+                ? dateB.getTime()
+                : 0;
+
+            if (
+              timeA !== timeB
+            ) {
+              return (
+                timeB -
+                timeA
+              );
+            }
+
+            return (
+              purchaseItemAmount_(
+                b.amount
+              ) -
+              purchaseItemAmount_(
+                a.amount
+              )
+            );
+          }
+        );
+
+    const total =
+      filtered.reduce(
+        function(sum, item) {
+          return (
+            sum +
+            purchaseItemAmount_(
+              item.amount
+            )
+          );
+        },
+        0
+      );
+
+    const totalTarget =
+      document.getElementById(
+        "receiptMonthTotal"
+      );
+
+    if (totalTarget) {
+      totalTarget.textContent =
+        yen(total);
+    }
+
+    const countTarget =
+      document.getElementById(
+        "receiptCount"
+      );
+
+    if (countTarget) {
+      countTarget.textContent =
+        filtered.length +
+        "件";
+    }
+
+    renderReceiptList(
+      document.getElementById(
+        "receiptFullList"
+      ),
+      filtered
+    );
+
+    changeReceiptLabelsToPurchaseItems_();
+  };
+
+
+// ---------------------------------------------------------
+// ページ切替時にも見出しを修正
+// ---------------------------------------------------------
+
+const updatePageHeaderBeforeShoppingFilter_ =
+  updatePageHeader;
+
+updatePageHeader =
+  function() {
+    updatePageHeaderBeforeShoppingFilter_();
+
+    if (
+      currentPage === "receipt"
+    ) {
+      changeReceiptLabelsToPurchaseItems_();
+    }
+  };
