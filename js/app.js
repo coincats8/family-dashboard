@@ -5115,3 +5115,994 @@ renderAdvice =
       ) +
       "からスタートです。";
   };
+// =========================================================
+// 購入明細 最終表示設定
+//
+// 対象：
+// ・スーパー
+// ・ドラッグストア
+// ・コンビニ
+// ・食品、冷蔵庫に入れる商品、医薬品
+//
+// 除外：
+// ・家賃
+// ・外食
+// ・洋服
+// ・水道光熱費
+// ・交通費
+// ・税金
+//
+// 表示項目：
+// ・日付
+// ・店名
+// ・商品名
+// ・数量
+// ・分類
+// =========================================================
+
+
+// ---------------------------------------------------------
+// 文字を検索用に整える
+// ---------------------------------------------------------
+
+function purchaseSearchText_(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+
+// ---------------------------------------------------------
+// 購入明細に表示する商品か判定
+// ---------------------------------------------------------
+
+function isPurchaseManagementItem_(
+  item
+) {
+  const shop =
+    purchaseSearchText_(
+      item.shop
+    );
+
+  const productName =
+    purchaseSearchText_(
+      item.productName ||
+      item.name ||
+      item.itemName
+    );
+
+  const classification =
+    purchaseSearchText_(
+      item.classification ||
+      item.subCategory ||
+      item.subcategory ||
+      item.detailCategory ||
+      item.normalizedName
+    );
+
+  const category =
+    purchaseSearchText_(
+      item.category
+    );
+
+  const text =
+    [
+      shop,
+      productName,
+      classification,
+      category
+    ].join("");
+
+
+  // -------------------------------------------------------
+  // 必ず除外するもの
+  // -------------------------------------------------------
+
+  const excludedWords = [
+    "家賃",
+    "賃料",
+    "住宅",
+    "外食",
+    "ガスト",
+    "サイゼリヤ",
+    "サイゼ",
+    "マクドナルド",
+    "マック",
+    "すき家",
+    "松屋",
+    "吉野家",
+    "ケンタッキー",
+    "モスバーガー",
+    "レストラン",
+    "食堂",
+    "カフェ",
+    "ドリンクバー",
+    "定食",
+    "ハンバーグ",
+    "洋服",
+    "衣類",
+    "靴下",
+    "ズボン",
+    "上着",
+    "下着",
+    "シャツ",
+    "カットソー",
+    "スニーカー",
+    "靴",
+    "水道料金",
+    "電気料金",
+    "ガス料金",
+    "税金",
+    "交通費"
+  ];
+
+  for (
+    let i = 0;
+    i < excludedWords.length;
+    i++
+  ) {
+    if (
+      text.indexOf(
+        purchaseSearchText_(
+          excludedWords[i]
+        )
+      ) !== -1
+    ) {
+      return false;
+    }
+  }
+
+
+  // -------------------------------------------------------
+  // 医薬品は店名に関係なく表示
+  // -------------------------------------------------------
+
+  const medicineWords = [
+    "医療",
+    "医薬品",
+    "薬",
+    "風邪薬",
+    "かぜ薬",
+    "頭痛薬",
+    "鎮痛剤",
+    "解熱剤",
+    "胃薬",
+    "整腸薬",
+    "便秘薬",
+    "目薬",
+    "点眼",
+    "湿布",
+    "絆創膏",
+    "ばんそうこう",
+    "消毒液",
+    "体温計",
+    "マスク",
+    "花粉",
+    "鼻炎",
+    "のど飴",
+    "ビタミン",
+    "サプリメント"
+  ];
+
+  for (
+    let i = 0;
+    i < medicineWords.length;
+    i++
+  ) {
+    if (
+      text.indexOf(
+        purchaseSearchText_(
+          medicineWords[i]
+        )
+      ) !== -1
+    ) {
+      return true;
+    }
+  }
+
+
+  // -------------------------------------------------------
+  // 食品・冷蔵庫関連商品
+  // -------------------------------------------------------
+
+  const foodWords = [
+    "食費",
+    "食品",
+    "野菜",
+    "果物",
+    "肉",
+    "魚",
+    "卵",
+    "乳製品",
+    "牛乳",
+    "ヨーグルト",
+    "チーズ",
+    "バター",
+    "豆腐",
+    "納豆",
+    "油揚げ",
+    "厚揚げ",
+    "ハム",
+    "ベーコン",
+    "ウインナー",
+    "ソーセージ",
+    "パン",
+    "食パン",
+    "米",
+    "麺",
+    "うどん",
+    "そば",
+    "ラーメン",
+    "パスタ",
+    "調味料",
+    "醤油",
+    "味噌",
+    "砂糖",
+    "塩",
+    "酢",
+    "油",
+    "ソース",
+    "ケチャップ",
+    "マヨネーズ",
+    "ドレッシング",
+    "飲料",
+    "お茶",
+    "コーヒー",
+    "ジュース",
+    "お菓子",
+    "冷凍食品",
+    "惣菜",
+    "弁当",
+    "おにぎり",
+    "デザート",
+    "アイス",
+    "プリン",
+    "ゼリー"
+  ];
+
+  let isFood = false;
+
+  for (
+    let i = 0;
+    i < foodWords.length;
+    i++
+  ) {
+    if (
+      text.indexOf(
+        purchaseSearchText_(
+          foodWords[i]
+        )
+      ) !== -1
+    ) {
+      isFood = true;
+      break;
+    }
+  }
+
+  if (!isFood) {
+    return false;
+  }
+
+
+  // -------------------------------------------------------
+  // 対象店舗
+  // -------------------------------------------------------
+
+  const targetStores = [
+    "マルエツ",
+    "イオン",
+    "ライフ",
+    "西友",
+    "イトーヨーカドー",
+    "ヨーク",
+    "オーケーストア",
+    "okストア",
+    "業務スーパー",
+    "ベルク",
+    "ヤオコー",
+    "サミット",
+    "東武ストア",
+    "まいばすけっと",
+    "成城石井",
+    "コープ",
+    "ダイエー",
+    "アコレ",
+    "マツキヨ",
+    "マツモトキヨシ",
+    "matsukiyo",
+    "matsukiyolab",
+    "ウエルシア",
+    "ウェルシア",
+    "サンドラッグ",
+    "スギ薬局",
+    "ツルハ",
+    "ココカラファイン",
+    "クリエイト",
+    "ぱぱす",
+    "セブンイレブン",
+    "セブン-イレブン",
+    "ファミリーマート",
+    "ファミマ",
+    "ローソン",
+    "ミニストップ",
+    "デイリーヤマザキ"
+  ];
+
+  for (
+    let i = 0;
+    i < targetStores.length;
+    i++
+  ) {
+    if (
+      shop.indexOf(
+        purchaseSearchText_(
+          targetStores[i]
+        )
+      ) !== -1
+    ) {
+      return true;
+    }
+  }
+
+
+  // 食費カテゴリなら、未登録店舗でも表示
+  if (
+    category.indexOf("食費") !== -1
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+
+// ---------------------------------------------------------
+// 日付表示
+// ---------------------------------------------------------
+
+function simplePurchaseDate_(value) {
+  const date =
+    parseDateValue(
+      value
+    );
+
+  if (!date) {
+    return "";
+  }
+
+  const year =
+    date.getFullYear();
+
+  const month =
+    String(
+      date.getMonth() + 1
+    ).padStart(
+      2,
+      "0"
+    );
+
+  const day =
+    String(
+      date.getDate()
+    ).padStart(
+      2,
+      "0"
+    );
+
+  return (
+    year +
+    "/" +
+    month +
+    "/" +
+    day
+  );
+}
+
+
+// ---------------------------------------------------------
+// 表示用商品名
+// ---------------------------------------------------------
+
+function simplePurchaseName_(
+  item
+) {
+  return String(
+    item.productName ||
+    item.name ||
+    item.itemName ||
+    "商品名未設定"
+  ).trim();
+}
+
+
+// ---------------------------------------------------------
+// 表示用分類
+// ---------------------------------------------------------
+
+function simplePurchaseClassification_(
+  item
+) {
+  const productName =
+    simplePurchaseName_(
+      item
+    );
+
+  const candidates = [
+    item.classification,
+    item.subCategory,
+    item.subcategory,
+    item.detailCategory,
+    item.normalizedName
+  ];
+
+  for (
+    let i = 0;
+    i < candidates.length;
+    i++
+  ) {
+    const value =
+      String(
+        candidates[i] || ""
+      ).trim();
+
+    if (
+      value &&
+      purchaseSearchText_(value) !==
+        purchaseSearchText_(productName)
+    ) {
+      return value;
+    }
+  }
+
+  return "未分類";
+}
+
+
+// ---------------------------------------------------------
+// シンプル表示用CSS
+// ---------------------------------------------------------
+
+function addSimplePurchaseStyles_() {
+  if (
+    document.getElementById(
+      "simplePurchaseStyles"
+    )
+  ) {
+    return;
+  }
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.id =
+    "simplePurchaseStyles";
+
+  style.textContent = `
+    .simple-purchase-list {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .simple-purchase-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 48px;
+      gap: 12px;
+      align-items: center;
+      padding: 0 3px 11px;
+      border-bottom: 1px solid #e6ebe7;
+      color: #89918c;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .simple-purchase-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 48px;
+      gap: 12px;
+      align-items: center;
+      padding: 16px 3px;
+      border-bottom: 1px solid #edf0ee;
+    }
+
+    .simple-purchase-item:last-child {
+      border-bottom: 0;
+    }
+
+    .simple-purchase-main {
+      min-width: 0;
+    }
+
+    .simple-purchase-product {
+      display: block;
+      margin: 0 0 7px;
+      color: #171a18;
+      font-size: 15px;
+      font-weight: 750;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .simple-purchase-details {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px 8px;
+      color: #838b86;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .simple-purchase-date {
+      white-space: nowrap;
+    }
+
+    .simple-purchase-shop {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .simple-purchase-classification {
+      display: inline-flex;
+      align-items: center;
+      min-height: 23px;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: #edf9f0;
+      color: #249a49;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .simple-purchase-quantity {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 45px;
+      min-height: 45px;
+      padding: 5px;
+      border-radius: 13px;
+      background: #f3f6f4;
+      color: #202421;
+    }
+
+    .simple-purchase-quantity strong {
+      font-size: 16px;
+      line-height: 1.1;
+    }
+
+    .simple-purchase-quantity small {
+      margin-top: 3px;
+      color: #929994;
+      font-size: 9px;
+      font-weight: 700;
+    }
+
+    @media (max-width: 420px) {
+      .simple-purchase-item {
+        gap: 9px;
+        padding: 14px 2px;
+      }
+
+      .simple-purchase-product {
+        font-size: 14px;
+      }
+
+      .simple-purchase-details {
+        font-size: 10px;
+      }
+
+      .simple-purchase-quantity {
+        min-width: 42px;
+        min-height: 42px;
+      }
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+}
+
+
+// ---------------------------------------------------------
+// 購入明細一覧をシンプル表示
+// ---------------------------------------------------------
+
+renderReceiptList =
+  function(
+    container,
+    receipts,
+    limit
+  ) {
+    if (!container) {
+      return;
+    }
+
+    addSimplePurchaseStyles_();
+
+    const source =
+      Array.isArray(receipts)
+        ? receipts
+        : [];
+
+    const sorted =
+      source
+        .slice()
+        .sort(
+          function(a, b) {
+            const dateA =
+              parseDateValue(
+                a.date
+              );
+
+            const dateB =
+              parseDateValue(
+                b.date
+              );
+
+            const timeA =
+              dateA
+                ? dateA.getTime()
+                : 0;
+
+            const timeB =
+              dateB
+                ? dateB.getTime()
+                : 0;
+
+            if (
+              timeA !== timeB
+            ) {
+              return (
+                timeB -
+                timeA
+              );
+            }
+
+            return String(
+              a.shop || ""
+            ).localeCompare(
+              String(
+                b.shop || ""
+              ),
+              "ja"
+            );
+          }
+        );
+
+    const items =
+      limit
+        ? sorted.slice(
+            0,
+            limit
+          )
+        : sorted;
+
+    if (
+      items.length === 0
+    ) {
+      container.innerHTML =
+        createEmptyState(
+          "shopping_cart",
+          "購入明細はありません",
+          "食品や医薬品を購入すると、ここに表示されます"
+        );
+
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="simple-purchase-list">
+
+        <div class="simple-purchase-header">
+          <span>購入明細</span>
+          <span>数量</span>
+        </div>
+
+        ${
+          items
+            .map(
+              function(item) {
+                const productName =
+                  simplePurchaseName_(
+                    item
+                  );
+
+                const shop =
+                  String(
+                    item.shop ||
+                    "店名未設定"
+                  ).trim();
+
+                const classification =
+                  simplePurchaseClassification_(
+                    item
+                  );
+
+                const quantity =
+                  Number(
+                    item.quantity || 1
+                  ) || 1;
+
+                const date =
+                  simplePurchaseDate_(
+                    item.date
+                  );
+
+                return `
+                  <div class="simple-purchase-item">
+
+                    <div class="simple-purchase-main">
+
+                      <strong class="simple-purchase-product">
+                        ${escapeHTML(productName)}
+                      </strong>
+
+                      <div class="simple-purchase-details">
+
+                        <span class="simple-purchase-date">
+                          ${escapeHTML(date)}
+                        </span>
+
+                        <span aria-hidden="true">
+                          ・
+                        </span>
+
+                        <span class="simple-purchase-shop">
+                          ${escapeHTML(shop)}
+                        </span>
+
+                        <span class="simple-purchase-classification">
+                          ${escapeHTML(classification)}
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                    <div class="simple-purchase-quantity">
+
+                      <strong>
+                        ${escapeHTML(quantity)}
+                      </strong>
+
+                      <small>
+                        数量
+                      </small>
+
+                    </div>
+
+                  </div>
+                `;
+              }
+            )
+            .join("")
+        }
+
+      </div>
+    `;
+  };
+
+
+// ---------------------------------------------------------
+// レシート表記を購入明細へ変更
+// ---------------------------------------------------------
+
+function updatePurchaseLabels_() {
+  const replacements = {
+    "レシート": "購入明細",
+    "支出・レシート": "購入明細",
+    "RECEIPTS": "PURCHASE ITEMS",
+    "支出一覧": "購入明細一覧",
+    "この月の支出": "この月の購入額",
+    "支出はありません": "購入明細はありません",
+    "登録した支出がここに表示されます":
+      "食品や医薬品を購入すると、ここに表示されます"
+  };
+
+  document
+    .querySelectorAll(
+      "h1, h2, h3, h4, p, span, strong, small"
+    )
+    .forEach(
+      function(element) {
+        if (
+          element.children.length > 0
+        ) {
+          return;
+        }
+
+        const current =
+          String(
+            element.textContent || ""
+          ).trim();
+
+        if (
+          Object.prototype.hasOwnProperty.call(
+            replacements,
+            current
+          )
+        ) {
+          element.textContent =
+            replacements[current];
+        }
+      }
+    );
+
+  const pageTitle =
+    document.getElementById(
+      "pageTitle"
+    );
+
+  if (
+    pageTitle &&
+    currentPage === "receipt"
+  ) {
+    pageTitle.textContent =
+      "購入明細";
+  }
+
+  const pageKicker =
+    document.getElementById(
+      "pageKicker"
+    );
+
+  if (
+    pageKicker &&
+    currentPage === "receipt"
+  ) {
+    pageKicker.textContent =
+      "🛒 PURCHASE ITEMS";
+  }
+}
+
+
+// ---------------------------------------------------------
+// 購入明細ページ更新
+// ---------------------------------------------------------
+
+refreshReceiptPage =
+  async function() {
+    const year =
+      receiptDate.getFullYear();
+
+    const month =
+      receiptDate.getMonth() + 1;
+
+    const monthLabel =
+      document.getElementById(
+        "receiptMonthLabel"
+      );
+
+    if (monthLabel) {
+      monthLabel.textContent =
+        year +
+        "年" +
+        month +
+        "月";
+    }
+
+    await loadReceiptsFor(
+      year,
+      month
+    );
+
+    const filtered =
+      receiptData
+        .filter(
+          function(item) {
+            const date =
+              parseDateValue(
+                item.date
+              );
+
+            if (!date) {
+              return false;
+            }
+
+            const sameMonth =
+              date.getFullYear() ===
+                year &&
+              date.getMonth() + 1 ===
+                month;
+
+            return (
+              sameMonth &&
+              isPurchaseManagementItem_(
+                item
+              )
+            );
+          }
+        )
+        .sort(
+          function(a, b) {
+            const dateA =
+              parseDateValue(
+                a.date
+              );
+
+            const dateB =
+              parseDateValue(
+                b.date
+              );
+
+            const timeA =
+              dateA
+                ? dateA.getTime()
+                : 0;
+
+            const timeB =
+              dateB
+                ? dateB.getTime()
+                : 0;
+
+            if (
+              timeA !== timeB
+            ) {
+              return (
+                timeB -
+                timeA
+              );
+            }
+
+            return String(
+              a.shop || ""
+            ).localeCompare(
+              String(
+                b.shop || ""
+              ),
+              "ja"
+            );
+          }
+        );
+
+    const total =
+      filtered.reduce(
+        function(sum, item) {
+          return (
+            sum +
+            purchaseItemAmount_(
+              item.amount
+            )
+          );
+        },
+        0
+      );
+
+    const totalTarget =
+      document.getElementById(
+        "receiptMonthTotal"
+      );
+
+    if (totalTarget) {
+      totalTarget.textContent =
+        yen(total);
+    }
+
+    const countTarget =
+      document.getElementById(
+        "receiptCount"
+      );
+
+    if (countTarget) {
+      countTarget.textContent =
+        filtered.length +
+        "件";
+    }
+
+    renderReceiptList(
+      document.getElementById(
+        "receiptFullList"
+      ),
+      filtered
+    );
+
+    updatePurchaseLabels_();
+  };
