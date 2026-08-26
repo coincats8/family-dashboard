@@ -1,10 +1,11 @@
 /* =========================================================
    Family Dashboard
    style.css
-   v3.0
+   v4.0
 
    ・5画面完全分離
-   ・Apple風UI
+   ・Google Calendar
+   ・今日の予定
    ・夫婦共有カレンダー
    ・iPhone / LINE内ブラウザ対応
 ========================================================= */
@@ -140,6 +141,15 @@ button:disabled {
   --pink:
     #ff5c93;
 
+  --pink-soft:
+    rgba(255, 92, 147, 0.1);
+
+  --purple:
+    #8e6cef;
+
+  --purple-soft:
+    rgba(142, 108, 239, 0.1);
+
   --orange:
     #ff9500;
 
@@ -215,16 +225,12 @@ button:disabled {
 
   from {
     opacity: 0;
-
-    transform:
-      translateY(7px);
+    transform: translateY(7px);
   }
 
   to {
     opacity: 1;
-
-    transform:
-      translateY(0);
+    transform: translateY(0);
   }
 
 }
@@ -305,7 +311,7 @@ button:disabled {
 
   font-size: 14px;
 
-  font-weight: 500;
+  font-weight: 600;
 }
 
 
@@ -353,21 +359,17 @@ button:disabled {
 
 
 .bell:active {
-  transform:
-    scale(0.92);
+  transform: scale(0.92);
 }
 
 
-.bell
-.material-symbols-rounded {
+.bell .material-symbols-rounded {
   font-size: 27px;
 }
 
 
 /* =========================================================
    PAGE SECTION TITLE
-
-   各ページの境界をハッキリさせる
 ========================================================= */
 
 .page-section-title {
@@ -516,6 +518,428 @@ button:disabled {
   font-size: 18px;
 
   font-weight: 800;
+}
+
+
+/* =========================================================
+   TODAY SCHEDULE
+========================================================= */
+
+.today-schedule-card {
+  padding:
+    21px
+    20px
+    17px;
+
+  border:
+    1px solid
+    rgba(52, 199, 89, 0.13);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.99),
+      rgba(246, 255, 249, 0.98)
+    );
+
+  box-shadow:
+    0 12px 36px
+    rgba(52, 199, 89, 0.07);
+}
+
+
+.today-schedule-card::before {
+  content: "";
+
+  position: absolute;
+
+  top: -65px;
+  right: -55px;
+
+  width: 150px;
+  height: 150px;
+
+  border-radius: 50%;
+
+  background:
+    rgba(52, 199, 89, 0.055);
+
+  pointer-events: none;
+}
+
+
+.today-schedule-card
+.section-header {
+  position: relative;
+
+  z-index: 1;
+
+  margin-bottom: 10px;
+}
+
+
+.today-schedule-list {
+  position: relative;
+
+  z-index: 1;
+
+  width: 100%;
+}
+
+
+/* =========================================================
+   TODAY ITEM
+========================================================= */
+
+.today-schedule-item {
+  display: grid;
+
+  grid-template-columns:
+    38px
+    50px
+    minmax(0, 1fr)
+    22px;
+
+  align-items: center;
+
+  gap: 8px;
+
+  width: 100%;
+
+  min-height: 58px;
+
+  padding:
+    10px
+    0;
+
+  border: 0;
+
+  border-bottom:
+    1px solid
+    var(--border);
+
+  color:
+    var(--text);
+
+  background:
+    transparent;
+
+  text-align: left;
+
+  cursor: pointer;
+}
+
+
+.today-schedule-item:last-child {
+  border-bottom: 0;
+}
+
+
+.today-schedule-item:active {
+  opacity: 0.65;
+}
+
+
+.today-person {
+  display: grid;
+
+  place-items: center;
+
+  width: 38px;
+  height: 38px;
+
+  border-radius: 13px;
+
+  background:
+    #f2f4f5;
+
+  font-size: 19px;
+}
+
+
+.today-time {
+  color:
+    var(--text);
+
+  font-size: 12px;
+
+  font-weight: 800;
+
+  font-variant-numeric:
+    tabular-nums;
+}
+
+
+.today-event {
+  display: flex;
+
+  flex-direction: column;
+
+  min-width: 0;
+
+  gap: 3px;
+}
+
+
+.today-event strong {
+  overflow: hidden;
+
+  color:
+    var(--text);
+
+  font-size: 13px;
+
+  font-weight: 800;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+}
+
+
+.today-event small {
+  color:
+    var(--text-tertiary);
+
+  font-size: 9px;
+}
+
+
+.today-arrow {
+  color:
+    #c7c7cc;
+
+  font-size:
+    19px !important;
+}
+
+
+/* =========================================================
+   TODAY EMPTY
+========================================================= */
+
+.today-empty {
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+
+  min-height: 65px;
+
+  padding:
+    10px
+    0
+    13px;
+}
+
+
+.today-empty-icon {
+  display: grid;
+
+  place-items: center;
+
+  width: 42px;
+  height: 42px;
+
+  flex: 0 0 42px;
+
+  border-radius: 14px;
+
+  color:
+    var(--green);
+
+  background:
+    var(--green-soft);
+}
+
+
+.today-empty-icon
+.material-symbols-rounded {
+  font-size: 23px;
+}
+
+
+.today-empty > div:last-child {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 3px;
+}
+
+
+.today-empty strong {
+  font-size: 12px;
+
+  font-weight: 800;
+}
+
+
+.today-empty small {
+  color:
+    var(--text-tertiary);
+
+  font-size: 9px;
+}
+
+
+/* =========================================================
+   TODAY ERROR
+========================================================= */
+
+.today-schedule-error {
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+
+  padding:
+    13px
+    0;
+}
+
+
+.today-schedule-error >
+.material-symbols-rounded {
+  display: grid;
+
+  place-items: center;
+
+  width: 42px;
+  height: 42px;
+
+  flex: 0 0 42px;
+
+  border-radius: 14px;
+
+  color:
+    var(--orange);
+
+  background:
+    rgba(255, 149, 0, 0.1);
+}
+
+
+.today-schedule-error div {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 3px;
+}
+
+
+.today-schedule-error strong {
+  font-size: 11px;
+}
+
+
+.today-schedule-error small {
+  color:
+    var(--text-tertiary);
+
+  font-size: 9px;
+}
+
+
+/* =========================================================
+   TODAY ADD
+========================================================= */
+
+.today-add-schedule {
+  position: relative;
+
+  z-index: 1;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  gap: 4px;
+
+  width: 100%;
+
+  min-height: 42px;
+
+  margin-top: 10px;
+
+  padding:
+    9px
+    12px;
+
+  border:
+    1px solid
+    rgba(52, 199, 89, 0.13);
+
+  border-radius: 14px;
+
+  color:
+    var(--green-dark);
+
+  background:
+    var(--green-soft);
+
+  font-size: 11px;
+
+  font-weight: 800;
+
+  cursor: pointer;
+}
+
+
+.today-add-schedule:active {
+  transform:
+    scale(0.98);
+}
+
+
+.today-add-schedule
+.material-symbols-rounded {
+  font-size: 18px;
+}
+
+
+/* =========================================================
+   SECTION HEADER
+========================================================= */
+
+.section-header {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 15px;
+
+  margin-bottom: 12px;
+}
+
+
+.text-button {
+  flex: 0 0 auto;
+
+  padding:
+    8px
+    4px;
+
+  border: 0;
+
+  color:
+    var(--green-dark);
+
+  background:
+    transparent;
+
+  font-size: 11px;
+
+  font-weight: 800;
+
+  cursor: pointer;
 }
 
 
@@ -745,15 +1169,13 @@ button:disabled {
 
   margin-bottom: 18px;
 
-  padding:
-    21px;
+  padding: 21px;
 
   border:
     1px solid
     rgba(255, 255, 255, 0.85);
 
-  border-radius:
-    25px;
+  border-radius: 25px;
 
   background:
     linear-gradient(
@@ -827,44 +1249,6 @@ button:disabled {
     var(--text-tertiary);
 
   font-size: 10px;
-}
-
-
-/* =========================================================
-   SECTION HEADER
-========================================================= */
-
-.section-header {
-  display: flex;
-
-  align-items: center;
-
-  justify-content: space-between;
-
-  gap: 15px;
-
-  margin-bottom: 12px;
-}
-
-
-.text-button {
-  padding:
-    8px
-    4px;
-
-  border: 0;
-
-  color:
-    var(--green-dark);
-
-  background:
-    transparent;
-
-  font-size: 12px;
-
-  font-weight: 800;
-
-  cursor: pointer;
 }
 
 
@@ -1009,7 +1393,7 @@ button:disabled {
 
 
 /* =========================================================
-   RECEIPT PAGE MONTH SWITCHER
+   MONTH SWITCHER
 ========================================================= */
 
 .month-switcher {
@@ -1026,8 +1410,7 @@ button:disabled {
 
   margin-bottom: 16px;
 
-  padding:
-    11px;
+  padding: 11px;
 
   border-radius: 22px;
 
@@ -1345,15 +1728,13 @@ button:disabled {
 .mini-stat-card {
   min-width: 0;
 
-  padding:
-    17px;
+  padding: 17px;
 
   border:
     1px solid
     rgba(255, 255, 255, 0.8);
 
-  border-radius:
-    21px;
+  border-radius: 21px;
 
   background:
     rgba(255, 255, 255, 0.94);
@@ -1400,6 +1781,90 @@ button:disabled {
   text-overflow: ellipsis;
 
   white-space: nowrap;
+}
+
+
+/* =========================================================
+   GOOGLE CALENDAR SYNC
+========================================================= */
+
+.calendar-sync-status {
+  display: flex;
+
+  align-items: center;
+
+  gap: 11px;
+
+  margin-bottom: 13px;
+
+  padding:
+    13px
+    15px;
+
+  border:
+    1px solid
+    rgba(52, 199, 89, 0.12);
+
+  border-radius: 18px;
+
+  background:
+    rgba(52, 199, 89, 0.075);
+}
+
+
+.calendar-sync-status >
+.material-symbols-rounded {
+  display: grid;
+
+  place-items: center;
+
+  width: 36px;
+  height: 36px;
+
+  flex: 0 0 36px;
+
+  border-radius: 12px;
+
+  color:
+    var(--green-dark);
+
+  background:
+    rgba(255, 255, 255, 0.75);
+
+  font-size: 20px;
+}
+
+
+.calendar-sync-status div {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 2px;
+}
+
+
+.calendar-sync-status strong {
+  color:
+    var(--green-dark);
+
+  font-size: 11px;
+
+  font-weight: 800;
+}
+
+
+.calendar-sync-status small {
+  color:
+    var(--text-tertiary);
+
+  font-size: 8px;
+}
+
+
+.sync-ok {
+  color:
+    var(--green-dark);
 }
 
 
@@ -1537,8 +2002,7 @@ button:disabled {
     1px solid
     rgba(255, 255, 255, 0.85);
 
-  border-radius:
-    27px;
+  border-radius: 27px;
 
   background:
     rgba(255, 255, 255, 0.96);
@@ -1700,8 +2164,6 @@ button:disabled {
 }
 
 
-/* 今日 */
-
 .calendar-day.is-today
 .calendar-day-number {
   color: #fff;
@@ -1710,8 +2172,6 @@ button:disabled {
     var(--green);
 }
 
-
-/* 選択日 */
 
 .calendar-day.is-selected {
   background:
@@ -1877,15 +2337,13 @@ button:disabled {
 
   margin-bottom: 18px;
 
-  padding:
-    21px;
+  padding: 21px;
 
   border:
     1px solid
     rgba(255, 255, 255, 0.85);
 
-  border-radius:
-    27px;
+  border-radius: 27px;
 
   background:
     rgba(255, 255, 255, 0.96);
@@ -2144,7 +2602,8 @@ button:disabled {
   color:
     #c7c7cc;
 
-  font-size: 19px !important;
+  font-size:
+    19px !important;
 }
 
 
@@ -2239,7 +2698,7 @@ button:disabled {
 
 
 /* =========================================================
-   SETTINGS GROUP
+   SETTINGS
 ========================================================= */
 
 .settings-group {
@@ -2322,8 +2781,7 @@ button:disabled {
     1px solid
     rgba(255, 255, 255, 0.84);
 
-  border-radius:
-    23px;
+  border-radius: 23px;
 
   background:
     rgba(255, 255, 255, 0.95);
@@ -2534,19 +2992,16 @@ button:disabled {
       35px
     );
 
-  padding:
-    23px;
+  padding: 23px;
 
   overflow-y: auto;
 
   overscroll-behavior:
     contain;
 
-  border-radius:
-    29px;
+  border-radius: 29px;
 
-  background:
-    #fff;
+  background: #fff;
 
   box-shadow:
     0 25px 70px
@@ -3228,6 +3683,14 @@ input:checked + span {
   }
 
 
+  .today-schedule-card {
+    padding:
+      19px
+      17px
+      15px;
+  }
+
+
   .header h1 {
     font-size: 29px;
   }
@@ -3235,6 +3698,30 @@ input:checked + span {
 
   #totalMoney {
     font-size: 39px;
+  }
+
+
+  .today-schedule-item {
+    grid-template-columns:
+      34px
+      45px
+      minmax(0, 1fr)
+      18px;
+
+    gap: 6px;
+  }
+
+
+  .today-person {
+    width: 34px;
+    height: 34px;
+
+    font-size: 17px;
+  }
+
+
+  .today-time {
+    font-size: 11px;
   }
 
 
@@ -3388,6 +3875,19 @@ input:checked + span {
   }
 
 
+  .today-schedule-card {
+    border-color:
+      rgba(52, 199, 89, 0.13);
+
+    background:
+      linear-gradient(
+        145deg,
+        rgba(29, 29, 31, 0.98),
+        rgba(24, 37, 28, 0.98)
+      );
+  }
+
+
   .summary-card,
   .saving-summary {
     background:
@@ -3423,7 +3923,21 @@ input:checked + span {
 
   .receipt-thumbnail,
   .schedule-person-icon,
-  .family-avatar {
+  .family-avatar,
+  .today-person {
+    background:
+      #2c2c2e;
+  }
+
+
+  .calendar-sync-status {
+    background:
+      rgba(52, 199, 89, 0.09);
+  }
+
+
+  .calendar-sync-status >
+  .material-symbols-rounded {
     background:
       #2c2c2e;
   }
