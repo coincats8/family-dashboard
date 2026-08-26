@@ -6106,3 +6106,232 @@ refreshReceiptPage =
 
     updatePurchaseLabels_();
   };
+// =========================================================
+// ホーム画面も購入明細の商品データを表示
+// =========================================================
+
+
+// 商品名が取れない場合の表示
+simplePurchaseName_ =
+  function(item) {
+    return String(
+      item.productName ||
+      item.name ||
+      item.itemName ||
+      item.memo ||
+      "商品名"
+    ).trim();
+  };
+
+
+// 分類が取れない場合は大カテゴリを使用
+simplePurchaseClassification_ =
+  function(item) {
+    const productName =
+      simplePurchaseName_(
+        item
+      );
+
+    const candidates = [
+      item.classification,
+      item.subCategory,
+      item.subcategory,
+      item.detailCategory,
+      item.normalizedName,
+      item.category
+    ];
+
+    for (
+      let i = 0;
+      i < candidates.length;
+      i++
+    ) {
+      const value =
+        String(
+          candidates[i] || ""
+        ).trim();
+
+      if (
+        value &&
+        purchaseSearchText_(value) !==
+          purchaseSearchText_(productName)
+      ) {
+        return value;
+      }
+    }
+
+    return "分類";
+  };
+
+
+// 購入明細の見出しを「商品名」に変更
+var renderReceiptListBeforeProductNameFix_ =
+  renderReceiptList;
+
+renderReceiptList =
+  function(
+    container,
+    receipts,
+    limit
+  ) {
+    renderReceiptListBeforeProductNameFix_(
+      container,
+      receipts,
+      limit
+    );
+
+    if (!container) {
+      return;
+    }
+
+    const heading =
+      container.querySelector(
+        ".simple-purchase-header span:first-child"
+      );
+
+    if (heading) {
+      heading.textContent =
+        "商品名";
+    }
+  };
+
+
+// ホーム画面用に購入明細も取得
+loadDashboard =
+  async function() {
+    try {
+      const currentDate =
+        new Date();
+
+      const year =
+        currentDate.getFullYear();
+
+      const month =
+        currentDate.getMonth() + 1;
+
+      const results =
+        await Promise.all([
+          fetchJson(
+            API_BASE +
+            "?mode=dashboard"
+          ),
+          fetchJson(
+            API_BASE +
+            "?mode=purchaseItems" +
+            "&year=" +
+            encodeURIComponent(year) +
+            "&month=" +
+            encodeURIComponent(month)
+          )
+        ]);
+
+      dashboardData =
+        results[0];
+
+      const purchaseResult =
+        results[1];
+
+      let purchaseItems = [];
+
+      if (
+        purchaseResult &&
+        Array.isArray(
+          purchaseResult.items
+        )
+      ) {
+        purchaseItems =
+          purchaseResult.items;
+      }
+      else if (
+        Array.isArray(
+          purchaseResult
+        )
+      ) {
+        purchaseItems =
+          purchaseResult;
+      }
+      else if (
+        purchaseResult &&
+        Array.isArray(
+          purchaseResult.data
+        )
+      ) {
+        purchaseItems =
+          purchaseResult.data;
+      }
+
+      const recentPurchaseItems =
+        purchaseItems
+          .filter(
+            function(item) {
+              return (
+                isPurchaseManagementItem_(
+                  item
+                )
+              );
+            }
+          )
+          .sort(
+            function(a, b) {
+              const dateA =
+                parseDateValue(
+                  a.date
+                );
+
+              const dateB =
+                parseDateValue(
+                  b.date
+                );
+
+              const timeA =
+                dateA
+                  ? dateA.getTime()
+                  : 0;
+
+              const timeB =
+                dateB
+                  ? dateB.getTime()
+                  : 0;
+
+              if (
+                timeA !== timeB
+              ) {
+                return (
+                  timeB -
+                  timeA
+                );
+              }
+
+              return (
+                purchaseItemAmount_(
+                  b.amount
+                ) -
+                purchaseItemAmount_(
+                  a.amount
+                )
+              );
+            }
+          );
+
+      dashboardData.recent =
+        recentPurchaseItems;
+
+      saveDashboardCache();
+
+      renderHome();
+
+      renderReport();
+
+      updateLastUpdated();
+    }
+    catch (error) {
+      console.error(
+        "Dashboard Error:",
+        error
+      );
+
+      showToast(
+        "家計データを取得できませんでした"
+      );
+    }
+  };
