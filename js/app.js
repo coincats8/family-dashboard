@@ -4097,3 +4097,183 @@ if (document.readyState === "loading") {
 } else {
   initializeApp();
 }
+// AIアドバイス修正版：家賃は判定から外すが、文章には書かない
+renderAdvice = function() {
+  const target =
+    document.getElementById(
+      "aiAdvice"
+    );
+
+  if (
+    !target ||
+    !dashboardData
+  ) {
+    return;
+  }
+
+  const living =
+    dashboardData.living || {};
+
+  const budget =
+    Number(
+      living.budget ??
+      SETTINGS.monthlyBudget ??
+      250000
+    ) || 250000;
+
+  const expense =
+    Number(
+      living.expense ?? 0
+    ) || 0;
+
+  const remaining =
+    Number(
+      living.remaining ??
+      (
+        budget -
+        expense
+      )
+    );
+
+  const categories =
+    Array.isArray(
+      dashboardData.categories
+    )
+      ? dashboardData.categories.slice()
+      : [];
+
+  const amountNumber =
+    function(value) {
+      if (
+        typeof value === "number"
+      ) {
+        return Number.isFinite(value)
+          ? value
+          : 0;
+      }
+
+      const result =
+        Number(
+          String(value || "")
+            .replace(/,/g, "")
+            .replace(/[¥￥円]/g, "")
+            .replace(/\s/g, "")
+        );
+
+      return Number.isFinite(result)
+        ? result
+        : 0;
+    };
+
+  const top =
+    categories
+      .filter(
+        function(category) {
+          const name =
+            String(
+              category.name || ""
+            );
+
+          const isRent =
+            name.indexOf("家賃") !== -1 ||
+            name.indexOf("賃料") !== -1;
+
+          return (
+            !isRent &&
+            amountNumber(
+              category.amount
+            ) > 0
+          );
+        }
+      )
+      .sort(
+        function(a, b) {
+          return (
+            amountNumber(
+              b.amount
+            ) -
+            amountNumber(
+              a.amount
+            )
+          );
+        }
+      )[0];
+
+  if (
+    remaining < 0
+  ) {
+    if (top) {
+      target.textContent =
+        "今月は生活費予算を" +
+        yen(
+          Math.abs(
+            remaining
+          )
+        ) +
+        "超えています。「" +
+        String(
+          top.name || ""
+        ) +
+        "」の支出が最も多く" +
+        yen(
+          amountNumber(
+            top.amount
+          )
+        ) +
+        "です。";
+    }
+    else {
+      target.textContent =
+        "今月は生活費予算を" +
+        yen(
+          Math.abs(
+            remaining
+          )
+        ) +
+        "超えています。";
+    }
+
+    return;
+  }
+
+  if (top) {
+    target.textContent =
+      "今月は「" +
+      String(
+        top.name || ""
+      ) +
+      "」の支出が最も多く" +
+      yen(
+        amountNumber(
+          top.amount
+        )
+      ) +
+      "です。生活費はあと" +
+      yen(
+        remaining
+      ) +
+      "残っています。";
+
+    return;
+  }
+
+  if (
+    expense > 0
+  ) {
+    target.textContent =
+      "今月の生活費はあと" +
+      yen(
+        remaining
+      ) +
+      "残っています。";
+
+    return;
+  }
+
+  target.textContent =
+    "今月の生活費は" +
+    yen(
+      budget
+    ) +
+    "からスタートです。";
+};
