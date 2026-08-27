@@ -10043,3 +10043,371 @@ loadDashboard =
       );
     };
 })();
+// =========================================================
+// カレンダー：内容がない支出を店舗別に合算
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    window.calendarShopSummaryAdded_
+  ) {
+    return;
+  }
+
+  window.calendarShopSummaryAdded_ =
+    true;
+
+  const originalRenderSelectedDay_ =
+    renderSelectedDay;
+
+  renderSelectedDay =
+    function () {
+      originalRenderSelectedDay_();
+
+      if (
+        !selectedCalendarDate
+      ) {
+        return;
+      }
+
+      const expenses =
+        getExpensesForDate(
+          selectedCalendarDate
+        );
+
+      if (
+        !Array.isArray(expenses) ||
+        expenses.length === 0
+      ) {
+        return;
+      }
+
+      const container =
+        document.getElementById(
+          "selectedDayList"
+        );
+
+      if (!container) {
+        return;
+      }
+
+      const blocks =
+        Array.from(
+          container.querySelectorAll(
+            ".day-detail-block"
+          )
+        );
+
+      const expenseBlock =
+        blocks.find(
+          function (block) {
+            const heading =
+              block.querySelector(
+                ".day-detail-heading strong"
+              );
+
+            return (
+              heading &&
+              heading.textContent
+                .trim() ===
+                "この日の支出"
+            );
+          }
+        );
+
+      if (!expenseBlock) {
+        return;
+      }
+
+      // 元の支出一覧と合計を削除
+      expenseBlock
+        .querySelectorAll(
+          ".day-expense-row, .day-expense-total"
+        )
+        .forEach(
+          function (element) {
+            element.remove();
+          }
+        );
+
+      const groupedByShop = {};
+      const detailedExpenses = [];
+
+      expenses.forEach(
+        function (expense) {
+          const content =
+            String(
+              expense.content ||
+              expense.memo ||
+              expense.description ||
+              expense.productName ||
+              expense.itemName ||
+              ""
+            ).trim();
+
+          const shop =
+            String(
+              expense.shop ||
+              "店舗不明"
+            ).trim();
+
+          const amount =
+            Number(
+              expense.amount
+            ) || 0;
+
+          // 内容があるものは個別表示
+          if (content) {
+            detailedExpenses.push({
+              shop:
+                shop,
+              content:
+                content,
+              category:
+                String(
+                  expense.category ||
+                  "🧾 雑費"
+                ),
+              payer:
+                String(
+                  expense.payer ||
+                  ""
+                ),
+              amount:
+                amount
+            });
+
+            return;
+          }
+
+          // 内容がないものは店舗別に合算
+          if (!groupedByShop[shop]) {
+            groupedByShop[shop] = {
+              shop:
+                shop,
+              amount:
+                0,
+              count:
+                0,
+              categories:
+                [],
+              payers:
+                []
+            };
+          }
+
+          const group =
+            groupedByShop[shop];
+
+          group.amount +=
+            amount;
+
+          group.count++;
+
+          const category =
+            String(
+              expense.category ||
+              "🧾 雑費"
+            ).trim();
+
+          if (
+            category &&
+            !group.categories.includes(
+              category
+            )
+          ) {
+            group.categories.push(
+              category
+            );
+          }
+
+          const payer =
+            String(
+              expense.payer ||
+              ""
+            ).trim();
+
+          if (
+            payer &&
+            !group.payers.includes(
+              payer
+            )
+          ) {
+            group.payers.push(
+              payer
+            );
+          }
+        }
+      );
+
+      const shopGroups =
+        Object.values(
+          groupedByShop
+        ).sort(
+          function (a, b) {
+            return (
+              b.amount -
+              a.amount
+            );
+          }
+        );
+
+      let expenseHtml = "";
+
+      shopGroups.forEach(
+        function (group) {
+          const details = [];
+
+          if (
+            group.categories.length
+          ) {
+            details.push(
+              group.categories.join(
+                "・"
+              )
+            );
+          }
+
+          if (
+            group.payers.length
+          ) {
+            details.push(
+              group.payers.join(
+                "・"
+              )
+            );
+          }
+
+          details.push(
+            group.count +
+            "件を合算"
+          );
+
+          expenseHtml += `
+            <div class="day-expense-row">
+
+              <div class="day-expense-main">
+
+                <strong>
+                  ${escapeHTML(group.shop)}
+                </strong>
+
+                <span>
+                  ${escapeHTML(details.join(" ・ "))}
+                </span>
+
+              </div>
+
+              <strong class="day-expense-price">
+                ${yen(group.amount)}
+              </strong>
+
+            </div>
+          `;
+        }
+      );
+
+      detailedExpenses.forEach(
+        function (expense) {
+          const details = [
+            expense.shop,
+            expense.category
+          ];
+
+          if (expense.payer) {
+            details.push(
+              expense.payer
+            );
+          }
+
+          expenseHtml += `
+            <div class="day-expense-row">
+
+              <div class="day-expense-main">
+
+                <strong>
+                  ${escapeHTML(expense.content)}
+                </strong>
+
+                <span>
+                  ${escapeHTML(details.join(" ・ "))}
+                </span>
+
+              </div>
+
+              <strong class="day-expense-price">
+                ${yen(expense.amount)}
+              </strong>
+
+            </div>
+          `;
+        }
+      );
+
+      const total =
+        expenses.reduce(
+          function (sum, expense) {
+            return (
+              sum +
+              (
+                Number(
+                  expense.amount
+                ) || 0
+              )
+            );
+          },
+          0
+        );
+
+      const displayedStoreCount =
+        new Set(
+          expenses.map(
+            function (expense) {
+              return String(
+                expense.shop ||
+                "店舗不明"
+              ).trim();
+            }
+          )
+        ).size;
+
+      expenseHtml += `
+        <div class="day-expense-total">
+
+          <span>
+            ${
+              displayedStoreCount > 1
+                ? "全店舗合計"
+                : "合計"
+            }
+          </span>
+
+          <strong>
+            ${yen(total)}
+          </strong>
+
+        </div>
+      `;
+
+      expenseBlock.insertAdjacentHTML(
+        "beforeend",
+        expenseHtml
+      );
+
+      const countElement =
+        expenseBlock.querySelector(
+          ".day-detail-heading small"
+        );
+
+      if (countElement) {
+        countElement.textContent =
+          displayedStoreCount +
+          "店舗・" +
+          expenses.length +
+          "件";
+      }
+    };
+})();
