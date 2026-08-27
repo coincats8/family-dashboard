@@ -7448,3 +7448,1656 @@ loadDashboard =
         );
     };
 })();
+// =========================================================
+// レポート：カテゴリ別購入履歴＋共通データ編集
+// app.js の一番最後に追加してください。
+// =========================================================
+
+(function () {
+  "use strict";
+
+  let reportPurchaseItems_ = [];
+  let reportSelectedCategory_ = "";
+  let reportEditingItem_ = null;
+  let reportLoadSerial_ = 0;
+
+  const originalRenderReport_ =
+    renderReport;
+
+  const originalRenderCategoryList_ =
+    renderCategoryList;
+
+  function rpText_(value, fallback) {
+    const text =
+      String(value ?? "").trim();
+
+    return text || fallback || "";
+  }
+
+  function rpNumber_(value) {
+    const number =
+      Number(
+        String(value ?? "")
+          .replace(
+            /[^0-9.-]/g,
+            ""
+          )
+      );
+
+    return Number.isFinite(number)
+      ? number
+      : 0;
+  }
+
+  function rpCategoryKey_(value) {
+    return rpText_(
+      value,
+      "その他"
+    )
+      .normalize("NFKC")
+      .replace(
+        /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu,
+        ""
+      )
+      .replace(/\s+/g, "")
+      .replace(/費$/g, "")
+      .toLowerCase();
+  }
+
+  function rpCategoryName_(item) {
+    const raw =
+      rpText_(
+        item.category,
+        "その他"
+      );
+
+    const key =
+      rpCategoryKey_(raw);
+
+    if (
+      key.includes("外食")
+    ) {
+      return "🍽 外食";
+    }
+
+    if (
+      key.includes("日用品") ||
+      key.includes("生活用品")
+    ) {
+      return "🧻 日用品";
+    }
+
+    if (
+      key.includes("医療") ||
+      key.includes("医薬")
+    ) {
+      return "🏥 医療";
+    }
+
+    if (
+      key.includes("食")
+    ) {
+      return "🍎 食費";
+    }
+
+    return raw === "その他"
+      ? "🧾 その他"
+      : raw;
+  }
+
+  function rpProductName_(item) {
+    return rpText_(
+      item.productName ||
+      item.name ||
+      item.itemName ||
+      item.memo,
+      "商品名"
+    );
+  }
+
+  function rpClassification_(item) {
+    return rpText_(
+      item.classification ||
+      item.normalizedName ||
+      item.subCategory ||
+      item.subcategory,
+      "未分類"
+    );
+  }
+
+  function rpUnitPrice_(item) {
+    const unitPrice =
+      rpNumber_(
+        item.unitPrice
+      );
+
+    if (unitPrice > 0) {
+      return Math.round(
+        unitPrice
+      );
+    }
+
+    const quantity =
+      Math.max(
+        1,
+        rpNumber_(
+          item.quantity
+        ) || 1
+      );
+
+    return Math.round(
+      rpNumber_(
+        item.amount
+      ) / quantity
+    );
+  }
+
+  function rpDate_(value) {
+    const date =
+      typeof parseDateValue ===
+      "function"
+        ? parseDateValue(value)
+        : new Date(value);
+
+    if (
+      !date ||
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return "";
+    }
+
+    return (
+      date.getFullYear() +
+      "/" +
+      String(
+        date.getMonth() + 1
+      ).padStart(
+        2,
+        "0"
+      ) +
+      "/" +
+      String(
+        date.getDate()
+      ).padStart(
+        2,
+        "0"
+      )
+    );
+  }
+
+  function rpYen_(value) {
+    return (
+      "¥" +
+      Math.round(
+        rpNumber_(value)
+      ).toLocaleString(
+        "ja-JP"
+      )
+    );
+  }
+
+  function addReportPurchaseStyles_() {
+    if (
+      document.getElementById(
+        "reportPurchaseHistoryStyles"
+      )
+    ) {
+      return;
+    }
+
+    const style =
+      document.createElement(
+        "style"
+      );
+
+    style.id =
+      "reportPurchaseHistoryStyles";
+
+    style.textContent = `
+      .category-item.is-report-link {
+        cursor: pointer;
+        border-radius: 12px;
+        transition: background 0.15s ease;
+      }
+
+      .category-item.is-report-link:active {
+        background: #f3f7f4;
+      }
+
+      .category-item.is-report-link
+      .category-top::after {
+        content: "›";
+        margin-left: 7px;
+        color: #2db857;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .report-purchase-intro {
+        margin: 0 0 12px;
+        color: #7e8781;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .report-history-group {
+        margin-bottom: 10px;
+        overflow: hidden;
+        border: 1px solid #e8ede9;
+        border-radius: 16px;
+        background: #ffffff;
+      }
+
+      .report-history-summary {
+        display: grid;
+        grid-template-columns:
+          minmax(0, 1fr)
+          auto
+          auto;
+        gap: 8px;
+        align-items: center;
+        width: 100%;
+        padding: 13px 14px;
+        border: 0;
+        background: #ffffff;
+        color: #171a18;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .report-history-title {
+        min-width: 0;
+        overflow: hidden;
+        font-size: 14px;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .report-history-total {
+        color: #188b40;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .report-history-count {
+        color: #8a928d;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+
+      .report-history-chevron {
+        display: inline-block;
+        margin-left: 4px;
+        transition: transform 0.18s ease;
+      }
+
+      .report-history-group.is-open
+      .report-history-chevron {
+        transform: rotate(90deg);
+      }
+
+      .report-history-body {
+        display: none;
+        padding: 0 12px;
+        border-top: 1px solid #edf0ee;
+      }
+
+      .report-history-group.is-open
+      .report-history-body {
+        display: block;
+      }
+
+      .report-history-item {
+        display: grid;
+        grid-template-columns:
+          minmax(0, 1fr)
+          auto;
+        grid-template-rows:
+          auto
+          auto;
+        gap: 4px 7px;
+        align-items: center;
+        min-width: 0;
+        padding: 11px 0;
+        border-bottom: 1px solid #eef1ef;
+      }
+
+      .report-history-item:last-child {
+        border-bottom: 0;
+      }
+
+      .report-history-name {
+        min-width: 0;
+        overflow: hidden;
+        color: #202421;
+        font-size: 13px;
+        font-weight: 760;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .report-history-actions {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        white-space: nowrap;
+      }
+
+      .report-history-price {
+        color: #188b40;
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .report-history-quantity {
+        color: #606862;
+        font-size: 10px;
+        font-weight: 800;
+      }
+
+      .report-history-edit {
+        display: grid;
+        place-items: center;
+        width: 27px;
+        height: 27px;
+        padding: 0;
+        border: 0;
+        border-radius: 8px;
+        background: #f1f5f2;
+        color: #5c655f;
+        cursor: pointer;
+      }
+
+      .report-history-edit
+      .material-symbols-rounded {
+        font-size: 16px;
+      }
+
+      .report-history-meta {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+        overflow: hidden;
+        color: #89908c;
+        font-size: 9px;
+        white-space: nowrap;
+      }
+
+      .report-history-shop {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .report-history-class {
+        flex: 0 1 auto;
+        max-width: 38%;
+        overflow: hidden;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: #edf9f0;
+        color: #249a49;
+        font-weight: 700;
+        text-overflow: ellipsis;
+      }
+
+      .report-history-corrected {
+        color: #249a49;
+        font-size: 8px;
+      }
+
+      .report-history-empty {
+        padding: 25px 10px;
+        color: #89908c;
+        font-size: 12px;
+        text-align: center;
+      }
+
+      .rp-edit-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 10008;
+        display: none;
+        background:
+          rgba(
+            20,
+            25,
+            22,
+            0.34
+          );
+      }
+
+      .rp-edit-backdrop.is-open {
+        display: block;
+      }
+
+      .rp-edit-sheet {
+        position: fixed;
+        left: 50%;
+        bottom: 0;
+        z-index: 10009;
+        box-sizing: border-box;
+        width: min(100%, 480px);
+        max-height: 90vh;
+        overflow: auto;
+        transform:
+          translate(
+            -50%,
+            105%
+          );
+        transition:
+          transform
+          0.2s ease;
+        padding:
+          10px
+          15px
+          calc(
+            15px +
+            env(safe-area-inset-bottom)
+          );
+        border-radius:
+          22px
+          22px
+          0
+          0;
+        background: #ffffff;
+        box-shadow:
+          0 -10px 40px
+          rgba(
+            0,
+            0,
+            0,
+            0.16
+          );
+      }
+
+      .rp-edit-sheet.is-open {
+        transform:
+          translate(
+            -50%,
+            0
+          );
+      }
+
+      .rp-edit-handle {
+        width: 38px;
+        height: 4px;
+        margin: 0 auto 9px;
+        border-radius: 9px;
+        background: #d9ddda;
+      }
+
+      .rp-edit-title {
+        margin: 0 0 11px;
+        font-size: 16px;
+        font-weight: 800;
+      }
+
+      .rp-edit-grid {
+        display: grid;
+        grid-template-columns:
+          minmax(0, 1fr)
+          82px;
+        gap: 8px;
+      }
+
+      .rp-edit-field {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+      }
+
+      .rp-edit-wide {
+        grid-column:
+          1 /
+          -1;
+      }
+
+      .rp-edit-field label {
+        color: #7c847f;
+        font-size: 9px;
+        font-weight: 700;
+      }
+
+      .rp-edit-field input,
+      .rp-edit-field select {
+        box-sizing: border-box;
+        width: 100%;
+        height: 38px;
+        padding: 0 10px;
+        border: 1px solid #dfe5e1;
+        border-radius: 10px;
+        outline: none;
+        background: #fafcfb;
+        color: #171a18;
+        font-size: 13px;
+      }
+
+      .rp-edit-total {
+        grid-column:
+          1 /
+          -1;
+        color: #707a73;
+        font-size: 10px;
+        text-align: right;
+      }
+
+      .rp-edit-buttons {
+        display: grid;
+        grid-template-columns:
+          1fr
+          1.6fr;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .rp-edit-buttons button {
+        height: 41px;
+        border: 0;
+        border-radius: 11px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .rp-edit-cancel {
+        background: #f1f4f2;
+        color: #646d68;
+      }
+
+      .rp-edit-save {
+        background: #2db857;
+        color: #ffffff;
+      }
+
+      .rp-edit-save:disabled {
+        opacity: 0.55;
+      }
+
+      body.rp-edit-lock {
+        overflow: hidden;
+      }
+    `;
+
+    document.head.appendChild(
+      style
+    );
+  }
+
+  async function fetchAllPurchaseItems_() {
+    const result =
+      await fetchJson(
+        API_BASE +
+        "?mode=purchaseItems"
+      );
+
+    if (
+      result &&
+      Array.isArray(
+        result.items
+      )
+    ) {
+      return result.items;
+    }
+
+    if (
+      Array.isArray(result)
+    ) {
+      return result;
+    }
+
+    if (
+      result &&
+      Array.isArray(
+        result.data
+      )
+    ) {
+      return result.data;
+    }
+
+    return [];
+  }
+
+  function groupedPurchaseItems_() {
+    const groups =
+      new Map();
+
+    reportPurchaseItems_
+      .forEach(
+        function(item) {
+          const name =
+            rpCategoryName_(
+              item
+            );
+
+          const key =
+            rpCategoryKey_(
+              name
+            );
+
+          if (
+            !groups.has(key)
+          ) {
+            groups.set(
+              key,
+              {
+                key:
+                  key,
+                name:
+                  name,
+                items:
+                  [],
+                total:
+                  0
+              }
+            );
+          }
+
+          const group =
+            groups.get(key);
+
+          group.items.push(
+            item
+          );
+
+          group.total +=
+            rpNumber_(
+              item.amount
+            ) ||
+            (
+              rpUnitPrice_(item) *
+              (
+                rpNumber_(
+                  item.quantity
+                ) || 1
+              )
+            );
+        }
+      );
+
+    return [
+      ...groups.values()
+    ]
+      .map(
+        function(group) {
+          group.items.sort(
+            function(a, b) {
+              const dateA =
+                typeof parseDateValue ===
+                "function"
+                  ? parseDateValue(
+                      a.date
+                    )
+                  : new Date(
+                      a.date
+                    );
+
+              const dateB =
+                typeof parseDateValue ===
+                "function"
+                  ? parseDateValue(
+                      b.date
+                    )
+                  : new Date(
+                      b.date
+                    );
+
+              const timeA =
+                dateA &&
+                typeof dateA.getTime ===
+                  "function"
+                  ? dateA.getTime()
+                  : 0;
+
+              const timeB =
+                dateB &&
+                typeof dateB.getTime ===
+                  "function"
+                  ? dateB.getTime()
+                  : 0;
+
+              return (
+                timeB -
+                timeA
+              );
+            }
+          );
+
+          return group;
+        }
+      )
+      .sort(
+        function(a, b) {
+          return (
+            b.total -
+            a.total
+          );
+        }
+      );
+  }
+
+  function renderReportPurchaseHistory_() {
+    const container =
+      el(
+        "reportCategoryList"
+      );
+
+    if (!container) {
+      return;
+    }
+
+    const groups =
+      groupedPurchaseItems_();
+
+    if (
+      !groups.length
+    ) {
+      container.innerHTML = `
+        <div class="report-history-empty">
+          購入履歴はまだありません
+        </div>
+      `;
+
+      return;
+    }
+
+    container.innerHTML = `
+      <p class="report-purchase-intro">
+        カテゴリを押すと、これまで購入した商品を確認できます。
+      </p>
+
+      ${
+        groups
+          .map(
+            function(group) {
+              const open =
+                reportSelectedCategory_ &&
+                rpCategoryKey_(
+                  reportSelectedCategory_
+                ) ===
+                group.key;
+
+              return `
+                <section
+                  class="
+                    report-history-group
+                    ${open ? "is-open" : ""}
+                  "
+                  data-report-group="${escapeHTML(group.key)}">
+
+                  <button
+                    type="button"
+                    class="report-history-summary"
+                    data-report-toggle="${escapeHTML(group.key)}">
+
+                    <span class="report-history-title">
+                      ${escapeHTML(group.name)}
+                    </span>
+
+                    <span class="report-history-total">
+                      ${escapeHTML(rpYen_(group.total))}
+                    </span>
+
+                    <span class="report-history-count">
+                      ${group.items.length}件
+                      <span class="report-history-chevron">
+                        ›
+                      </span>
+                    </span>
+
+                  </button>
+
+                  <div class="report-history-body">
+
+                    ${
+                      group.items
+                        .map(
+                          function(item) {
+                            const quantity =
+                              rpNumber_(
+                                item.quantity
+                              ) || 1;
+
+                            return `
+                              <article class="report-history-item">
+
+                                <strong
+                                  class="report-history-name"
+                                  title="${escapeHTML(rpProductName_(item))}">
+                                  ${escapeHTML(rpProductName_(item))}
+                                </strong>
+
+                                <div class="report-history-actions">
+
+                                  <span class="report-history-price">
+                                    ${escapeHTML(rpYen_(rpUnitPrice_(item)))}/個
+                                  </span>
+
+                                  <span class="report-history-quantity">
+                                    ×${escapeHTML(quantity)}
+                                  </span>
+
+                                  <button
+                                    type="button"
+                                    class="report-history-edit"
+                                    data-report-edit-row="${escapeHTML(item.row)}"
+                                    aria-label="編集">
+
+                                    <span class="material-symbols-rounded">
+                                      edit
+                                    </span>
+
+                                  </button>
+
+                                </div>
+
+                                <div class="report-history-meta">
+
+                                  <span>
+                                    ${escapeHTML(rpDate_(item.date))}
+                                  </span>
+
+                                  <span
+                                    class="report-history-shop"
+                                    title="${escapeHTML(rpText_(item.shop, "店名"))}">
+                                    ${escapeHTML(rpText_(item.shop, "店名"))}
+                                  </span>
+
+                                  <span class="report-history-class">
+                                    ${escapeHTML(rpClassification_(item))}
+                                  </span>
+
+                                  ${
+                                    item.manualCorrection
+                                      ? `
+                                        <span class="report-history-corrected">
+                                          修正済
+                                        </span>
+                                      `
+                                      : ""
+                                  }
+
+                                </div>
+
+                              </article>
+                            `;
+                          }
+                        )
+                        .join("")
+                    }
+
+                  </div>
+
+                </section>
+              `;
+            }
+          )
+          .join("")
+      }
+    `;
+
+    container
+      .querySelectorAll(
+        "[data-report-toggle]"
+      )
+      .forEach(
+        function(button) {
+          button.addEventListener(
+            "click",
+            function() {
+              const group =
+                button.closest(
+                  ".report-history-group"
+                );
+
+              const willOpen =
+                !group.classList.contains(
+                  "is-open"
+                );
+
+              container
+                .querySelectorAll(
+                  ".report-history-group"
+                )
+                .forEach(
+                  function(node) {
+                    node.classList.remove(
+                      "is-open"
+                    );
+                  }
+                );
+
+              if (willOpen) {
+                group.classList.add(
+                  "is-open"
+                );
+
+                reportSelectedCategory_ =
+                  button.dataset
+                    .reportToggle;
+              }
+              else {
+                reportSelectedCategory_ =
+                  "";
+              }
+            }
+          );
+        }
+      );
+
+    container
+      .querySelectorAll(
+        "[data-report-edit-row]"
+      )
+      .forEach(
+        function(button) {
+          button.addEventListener(
+            "click",
+            function() {
+              const row =
+                Number(
+                  button.dataset
+                    .reportEditRow
+                );
+
+              const item =
+                reportPurchaseItems_
+                  .find(
+                    function(entry) {
+                      return (
+                        Number(
+                          entry.row
+                        ) === row
+                      );
+                    }
+                  );
+
+              if (item) {
+                openReportPurchaseEditor_(
+                  item
+                );
+              }
+            }
+          );
+        }
+      );
+  }
+
+  async function loadReportPurchaseHistory_() {
+    const serial =
+      ++reportLoadSerial_;
+
+    const container =
+      el(
+        "reportCategoryList"
+      );
+
+    if (container) {
+      container.innerHTML = `
+        <div class="report-history-empty">
+          購入履歴を読み込んでいます…
+        </div>
+      `;
+    }
+
+    try {
+      const items =
+        await fetchAllPurchaseItems_();
+
+      if (
+        serial !==
+        reportLoadSerial_
+      ) {
+        return;
+      }
+
+      reportPurchaseItems_ =
+        items;
+
+      renderReportPurchaseHistory_();
+    }
+    catch (error) {
+      console.error(
+        "Report purchase history error:",
+        error
+      );
+
+      if (container) {
+        container.innerHTML = `
+          <div class="report-history-empty">
+            購入履歴を取得できませんでした
+          </div>
+        `;
+      }
+    }
+  }
+
+  renderReport =
+    function() {
+      originalRenderReport_();
+
+      addReportPurchaseStyles_();
+
+      loadReportPurchaseHistory_();
+    };
+
+  renderCategoryList =
+    function(
+      container,
+      categories
+    ) {
+      originalRenderCategoryList_(
+        container,
+        categories
+      );
+
+      if (
+        !container ||
+        container.id !==
+          "categoryList"
+      ) {
+        return;
+      }
+
+      container
+        .querySelectorAll(
+          ".category-item"
+        )
+        .forEach(
+          function(node) {
+            const label =
+              node
+                .querySelector(
+                  ".category-name"
+                )
+                ?.textContent ||
+              "";
+
+            node.classList.add(
+              "is-report-link"
+            );
+
+            node.setAttribute(
+              "role",
+              "button"
+            );
+
+            node.setAttribute(
+              "tabindex",
+              "0"
+            );
+
+            node.dataset
+              .reportCategory =
+                label;
+          }
+        );
+    };
+
+  document.addEventListener(
+    "click",
+    function(event) {
+      const row =
+        event.target.closest(
+          "#categoryList .category-item[data-report-category]"
+        );
+
+      if (!row) {
+        return;
+      }
+
+      reportSelectedCategory_ =
+        row.dataset
+          .reportCategory ||
+        "";
+
+      switchPage(
+        "report"
+      );
+    }
+  );
+
+  document.addEventListener(
+    "keydown",
+    function(event) {
+      if (
+        event.key !== "Enter" &&
+        event.key !== " "
+      ) {
+        return;
+      }
+
+      const row =
+        event.target.closest(
+          "#categoryList .category-item[data-report-category]"
+        );
+
+      if (!row) {
+        return;
+      }
+
+      event.preventDefault();
+
+      reportSelectedCategory_ =
+        row.dataset
+          .reportCategory ||
+        "";
+
+      switchPage(
+        "report"
+      );
+    }
+  );
+
+  function ensureReportPurchaseEditor_() {
+    addReportPurchaseStyles_();
+
+    if (
+      document.getElementById(
+        "rpEditSheet"
+      )
+    ) {
+      return;
+    }
+
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+        <div
+          class="rp-edit-backdrop"
+          id="rpEditBackdrop">
+        </div>
+
+        <section
+          class="rp-edit-sheet"
+          id="rpEditSheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rpEditTitle">
+
+          <div class="rp-edit-handle">
+          </div>
+
+          <h3
+            class="rp-edit-title"
+            id="rpEditTitle">
+            購入履歴を編集
+          </h3>
+
+          <div class="rp-edit-grid">
+
+            <div class="rp-edit-field rp-edit-wide">
+              <label for="rpEditName">
+                商品名
+              </label>
+              <input
+                id="rpEditName"
+                autocomplete="off">
+            </div>
+
+            <div class="rp-edit-field rp-edit-wide">
+              <label for="rpEditShop">
+                店名
+              </label>
+              <input
+                id="rpEditShop"
+                autocomplete="off">
+            </div>
+
+            <div class="rp-edit-field">
+              <label for="rpEditDate">
+                購入日
+              </label>
+              <input
+                id="rpEditDate"
+                type="date">
+            </div>
+
+            <div class="rp-edit-field">
+              <label for="rpEditQuantity">
+                数量
+              </label>
+              <input
+                id="rpEditQuantity"
+                type="number"
+                min="0.01"
+                step="0.01"
+                inputmode="decimal">
+            </div>
+
+            <div class="rp-edit-field rp-edit-wide">
+              <label for="rpEditClass">
+                分類
+              </label>
+              <input
+                id="rpEditClass"
+                autocomplete="off">
+            </div>
+
+            <div class="rp-edit-field">
+              <label for="rpEditCategory">
+                大カテゴリ
+              </label>
+
+              <select id="rpEditCategory">
+                <option value="🍎 食費">
+                  食費
+                </option>
+                <option value="🧻 日用品">
+                  日用品
+                </option>
+                <option value="🍽 外食">
+                  外食
+                </option>
+                <option value="🏥 医療">
+                  医療
+                </option>
+                <option value="🧾 その他">
+                  その他
+                </option>
+              </select>
+            </div>
+
+            <div class="rp-edit-field">
+              <label for="rpEditUnitPrice">
+                単価（円）
+              </label>
+              <input
+                id="rpEditUnitPrice"
+                type="number"
+                min="0"
+                step="1"
+                inputmode="numeric">
+            </div>
+
+            <div
+              class="rp-edit-total"
+              id="rpEditTotal">
+              合計 ¥0
+            </div>
+
+          </div>
+
+          <div class="rp-edit-buttons">
+
+            <button
+              type="button"
+              class="rp-edit-cancel"
+              id="rpEditCancel">
+              キャンセル
+            </button>
+
+            <button
+              type="button"
+              class="rp-edit-save"
+              id="rpEditSave">
+              保存
+            </button>
+
+          </div>
+
+        </section>
+      `
+    );
+
+    el("rpEditBackdrop")
+      .addEventListener(
+        "click",
+        closeReportPurchaseEditor_
+      );
+
+    el("rpEditCancel")
+      .addEventListener(
+        "click",
+        closeReportPurchaseEditor_
+      );
+
+    el("rpEditSave")
+      .addEventListener(
+        "click",
+        saveReportPurchaseEditor_
+      );
+
+    el("rpEditQuantity")
+      .addEventListener(
+        "input",
+        updateReportEditTotal_
+      );
+
+    el("rpEditUnitPrice")
+      .addEventListener(
+        "input",
+        updateReportEditTotal_
+      );
+  }
+
+  function updateReportEditTotal_() {
+    const quantity =
+      rpNumber_(
+        el(
+          "rpEditQuantity"
+        ).value
+      );
+
+    const unitPrice =
+      rpNumber_(
+        el(
+          "rpEditUnitPrice"
+        ).value
+      );
+
+    el(
+      "rpEditTotal"
+    ).textContent =
+      "合計 " +
+      rpYen_(
+        quantity *
+        unitPrice
+      );
+  }
+
+  function openReportPurchaseEditor_(item) {
+    ensureReportPurchaseEditor_();
+
+    reportEditingItem_ =
+      item;
+
+    el("rpEditName").value =
+      rpProductName_(item);
+
+    el("rpEditShop").value =
+      rpText_(item.shop);
+
+    el("rpEditDate").value =
+      rpDate_(item.date)
+        .replaceAll(
+          "/",
+          "-"
+        );
+
+    el("rpEditQuantity").value =
+      rpNumber_(
+        item.quantity
+      ) || 1;
+
+    el("rpEditClass").value =
+      rpClassification_(item);
+
+    const category =
+      rpCategoryName_(item);
+
+    const select =
+      el(
+        "rpEditCategory"
+      );
+
+    const categoryExists =
+      [
+        ...select.options
+      ].some(
+        function(option) {
+          return (
+            option.value ===
+            category
+          );
+        }
+      );
+
+    if (!categoryExists) {
+      select.add(
+        new Option(
+          category,
+          category
+        )
+      );
+    }
+
+    select.value =
+      category;
+
+    el("rpEditUnitPrice").value =
+      rpUnitPrice_(item) || "";
+
+    updateReportEditTotal_();
+
+    el("rpEditBackdrop")
+      .classList.add(
+        "is-open"
+      );
+
+    el("rpEditSheet")
+      .classList.add(
+        "is-open"
+      );
+
+    document.body.classList.add(
+      "rp-edit-lock"
+    );
+  }
+
+  function closeReportPurchaseEditor_() {
+    el("rpEditBackdrop")
+      ?.classList.remove(
+        "is-open"
+      );
+
+    el("rpEditSheet")
+      ?.classList.remove(
+        "is-open"
+      );
+
+    document.body.classList.remove(
+      "rp-edit-lock"
+    );
+
+    reportEditingItem_ =
+      null;
+  }
+
+  async function saveReportPurchaseEditor_() {
+    if (!reportEditingItem_) {
+      return;
+    }
+
+    const productName =
+      rpText_(
+        el(
+          "rpEditName"
+        ).value
+      );
+
+    const shop =
+      rpText_(
+        el(
+          "rpEditShop"
+        ).value
+      );
+
+    const date =
+      rpText_(
+        el(
+          "rpEditDate"
+        ).value
+      );
+
+    const normalizedName =
+      rpText_(
+        el(
+          "rpEditClass"
+        ).value
+      );
+
+    const category =
+      rpText_(
+        el(
+          "rpEditCategory"
+        ).value
+      );
+
+    const quantity =
+      rpNumber_(
+        el(
+          "rpEditQuantity"
+        ).value
+      );
+
+    const unitPrice =
+      rpNumber_(
+        el(
+          "rpEditUnitPrice"
+        ).value
+      );
+
+    if (
+      !productName ||
+      !shop ||
+      !date ||
+      !normalizedName ||
+      !category ||
+      quantity <= 0 ||
+      unitPrice < 0
+    ) {
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          "入力内容を確認してください"
+        );
+      }
+
+      return;
+    }
+
+    const button =
+      el(
+        "rpEditSave"
+      );
+
+    button.disabled = true;
+    button.textContent =
+      "保存中…";
+
+    try {
+      const response =
+        await fetch(
+          API_BASE,
+          {
+            method:
+              "POST",
+            headers: {
+              "Content-Type":
+                "text/plain;charset=utf-8"
+            },
+            body:
+              JSON.stringify({
+                action:
+                  "updatePurchaseItem",
+                row:
+                  Number(
+                    reportEditingItem_.row
+                  ),
+                date:
+                  date,
+                shop:
+                  shop,
+                productName:
+                  productName,
+                normalizedName:
+                  normalizedName,
+                category:
+                  category,
+                quantity:
+                  quantity,
+                unitPrice:
+                  unitPrice,
+                amount:
+                  Math.round(
+                    quantity *
+                    unitPrice
+                  )
+              })
+          }
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          "HTTP " +
+          response.status
+        );
+      }
+
+      const result =
+        await response.json();
+
+      if (
+        !result ||
+        result.success !== true
+      ) {
+        throw new Error(
+          result?.error ||
+          "保存できませんでした"
+        );
+      }
+
+      reportSelectedCategory_ =
+        category;
+
+      closeReportPurchaseEditor_();
+
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          "全画面の購入データを更新しました"
+        );
+      }
+
+      await loadReportPurchaseHistory_();
+
+      if (
+        typeof refreshReceiptPage ===
+        "function"
+      ) {
+        await refreshReceiptPage();
+      }
+
+      if (
+        typeof loadDashboard ===
+        "function"
+      ) {
+        await loadDashboard();
+      }
+    }
+    catch (error) {
+      console.error(
+        "Report purchase update error:",
+        error
+      );
+
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          "保存できませんでした：" +
+          (
+            error.message ||
+            error
+          )
+        );
+      }
+    }
+    finally {
+      button.disabled = false;
+      button.textContent =
+        "保存";
+    }
+  }
+})();
