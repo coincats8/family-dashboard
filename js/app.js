@@ -9667,9 +9667,7 @@ loadDashboard =
     }
   );
 })();
-// =========================================================
-// 古い購入履歴のレシートID不足を自動補完
-// =========================================================
+})();
 
 (function () {
   "use strict";
@@ -9760,3 +9758,92 @@ loadDashboard =
       }
     };
 })();
+// =========================================================
+// 古い購入明細のレシートIDを一括補完
+//
+// 購入明細シートのJ列が空欄の場合だけ、
+// 保存用の固有IDを設定します。
+// =========================================================
+
+function repairMissingPurchaseReceiptIds() {
+  const spreadsheet =
+    SpreadsheetApp
+      .getActiveSpreadsheet();
+
+  const sheet =
+    spreadsheet.getSheetByName(
+      SHEET_PURCHASE_ITEMS
+    );
+
+  if (!sheet) {
+    throw new Error(
+      "購入明細シートが見つかりません"
+    );
+  }
+
+  const lastRow =
+    sheet.getLastRow();
+
+  if (lastRow < 2) {
+    SpreadsheetApp
+      .getActiveSpreadsheet()
+      .toast(
+        "修正対象の購入明細はありません"
+      );
+
+    return;
+  }
+
+  const receiptIdRange =
+    sheet.getRange(
+      2,
+      10,
+      lastRow - 1,
+      1
+    );
+
+  const receiptIds =
+    receiptIdRange.getValues();
+
+  let repairedCount = 0;
+
+  receiptIds.forEach(
+    function(row, index) {
+      const currentId =
+        String(
+          row[0] || ""
+        ).trim();
+
+      if (currentId) {
+        return;
+      }
+
+      const sheetRow =
+        index + 2;
+
+      row[0] =
+        "legacy-purchase-" +
+        sheetRow +
+        "-" +
+        Utilities.getUuid();
+
+      repairedCount++;
+    }
+  );
+
+  receiptIdRange.setValues(
+    receiptIds
+  );
+
+  SpreadsheetApp.flush();
+
+  spreadsheet.toast(
+    repairedCount +
+    "件のレシートIDを補完しました"
+  );
+
+  console.log(
+    "レシートID補完件数:",
+    repairedCount
+  );
+}
