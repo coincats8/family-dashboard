@@ -9667,3 +9667,96 @@ loadDashboard =
     }
   );
 })();
+// =========================================================
+// 古い購入履歴のレシートID不足を自動補完
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    window.purchaseReceiptIdFixAdded_
+  ) {
+    return;
+  }
+
+  window.purchaseReceiptIdFixAdded_ =
+    true;
+
+  const originalPurchaseFetch_ =
+    window.fetch.bind(window);
+
+  window.fetch =
+    function(
+      input,
+      options
+    ) {
+      try {
+        const requestOptions =
+          options
+            ? {
+                ...options
+              }
+            : {};
+
+        const method =
+          String(
+            requestOptions.method ||
+            "GET"
+          ).toUpperCase();
+
+        if (
+          method === "POST" &&
+          typeof requestOptions.body ===
+            "string"
+        ) {
+          const data =
+            JSON.parse(
+              requestOptions.body
+            );
+
+          if (
+            data &&
+            data.action ===
+              "updatePurchaseItem"
+          ) {
+            const row =
+              Number(
+                data.row
+              );
+
+            if (
+              !data.receiptId &&
+              Number.isInteger(row) &&
+              row >= 2
+            ) {
+              data.receiptId =
+                "manual-purchase-row-" +
+                row;
+            }
+
+            requestOptions.body =
+              JSON.stringify(
+                data
+              );
+          }
+        }
+
+        return originalPurchaseFetch_(
+          input,
+          requestOptions
+        );
+      }
+      catch (error) {
+        console.warn(
+          "購入履歴ID補完:",
+          error
+        );
+
+        return originalPurchaseFetch_(
+          input,
+          options
+        );
+      }
+    };
+})();
