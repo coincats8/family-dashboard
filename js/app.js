@@ -9667,3 +9667,254 @@ loadDashboard =
     }
   );
 })();
+// =========================================================
+// 購入履歴保存：Failed to fetch対策
+//
+// 通常送信が失敗した場合だけ再送し、
+// スプレッドシートの更新結果まで確認する。
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    window.purchaseSaveRetryAdded_
+  ) {
+    return;
+  }
+
+  window.purchaseSaveRetryAdded_ =
+    true;
+
+  const purchaseNativeFetch_ =
+    window.fetch.bind(window);
+
+  function waitPurchaseSave_(milliseconds) {
+    return new Promise(
+      function(resolve) {
+        setTimeout(
+          resolve,
+          milliseconds
+        );
+      }
+    );
+  }
+
+  async function verifyPurchaseSaved_(
+    data
+  ) {
+    await waitPurchaseSave_(
+      1200
+    );
+
+    const response =
+      await purchaseNativeFetch_(
+        API_BASE +
+        "?mode=purchaseItems" +
+        "&_=" +
+        Date.now(),
+        {
+          method:
+            "GET",
+          cache:
+            "no-store"
+        }
+      );
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const result =
+      await response.json();
+
+    let items = [];
+
+    if (
+      result &&
+      Array.isArray(
+        result.items
+      )
+    ) {
+      items =
+        result.items;
+    }
+    else if (
+      Array.isArray(result)
+    ) {
+      items =
+        result;
+    }
+    else if (
+      result &&
+      Array.isArray(
+        result.data
+      )
+    ) {
+      items =
+        result.data;
+    }
+
+    const savedItem =
+      items.find(
+        function(item) {
+          return (
+            Number(item.row) ===
+            Number(data.row)
+          );
+        }
+      );
+
+    if (!savedItem) {
+      return false;
+    }
+
+    const sameName =
+      String(
+        savedItem.productName || ""
+      ).trim() ===
+      String(
+        data.productName || ""
+      ).trim();
+
+    const sameCategory =
+      String(
+        savedItem.category || ""
+      )
+        .replace(/\s+/g, "")
+        .includes(
+          String(
+            data.category || ""
+          )
+            .replace(
+              /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu,
+              ""
+            )
+            .replace(/\s+/g, "")
+        );
+
+    const sameQuantity =
+      Number(
+        savedItem.quantity
+      ) ===
+      Number(
+        data.quantity
+      );
+
+    return (
+      sameName &&
+      sameCategory &&
+      sameQuantity
+    );
+  }
+
+  window.fetch =
+    async function(
+      input,
+      options
+    ) {
+      const requestOptions =
+        options || {};
+
+      const method =
+        String(
+          requestOptions.method ||
+          "GET"
+        ).toUpperCase();
+
+      let updateData = null;
+
+      if (
+        method === "POST" &&
+        typeof requestOptions.body ===
+          "string"
+      ) {
+        try {
+          const parsed =
+            JSON.parse(
+              requestOptions.body
+            );
+
+          if (
+            parsed &&
+            parsed.action ===
+              "updatePurchaseItem"
+          ) {
+            updateData =
+              parsed;
+          }
+        }
+        catch (error) {
+          updateData =
+            null;
+        }
+      }
+
+      // 購入明細の更新以外は通常通信
+      if (!updateData) {
+        return purchaseNativeFetch_(
+          input,
+          options
+        );
+      }
+
+      try {
+        // 最初は通常方式で保存
+        return await purchaseNativeFetch_(
+          input,
+          options
+        );
+      }
+      catch (firstError) {
+        console.warn(
+          "通常保存に失敗したため再送します:",
+          firstError
+        );
+
+        // 応答が遮断される場合の再送
+        await purchaseNativeFetch_(
+          input,
+          {
+            method:
+              "POST",
+            mode:
+              "no-cors",
+            headers: {
+              "Content-Type":
+                "text/plain;charset=utf-8"
+            },
+            body:
+              requestOptions.body
+          }
+        );
+
+        const saved =
+          await verifyPurchaseSaved_(
+            updateData
+          );
+
+        if (!saved) {
+          throw new Error(
+            "スプレッドシートへの保存を確認できませんでした"
+          );
+        }
+
+        // 元の保存処理へ成功結果を返す
+        return {
+          ok:
+            true,
+          status:
+            200,
+          json:
+            async function() {
+              return {
+                success:
+                  true,
+                verified:
+                  true
+              };
+            }
+        };
+      }
+    };
+})();
