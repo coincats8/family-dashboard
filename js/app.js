@@ -9101,3 +9101,176 @@ loadDashboard =
     }
   }
 })();
+// =========================================================
+// 編集画面：保存ボタンを押したらすぐ閉じる
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    window.purchaseEditorImmediateCloseAdded_
+  ) {
+    return;
+  }
+
+  window.purchaseEditorImmediateCloseAdded_ =
+    true;
+
+  function editorValue_(id) {
+    const target =
+      document.getElementById(id);
+
+    return target
+      ? String(
+          target.value || ""
+        ).trim()
+      : "";
+  }
+
+  function editorNumber_(id) {
+    const value =
+      Number(
+        editorValue_(id)
+      );
+
+    return Number.isFinite(value)
+      ? value
+      : 0;
+  }
+
+  function closeReportEditorVisually_() {
+    document
+      .getElementById(
+        "rpEditBackdrop"
+      )
+      ?.classList.remove(
+        "is-open"
+      );
+
+    document
+      .getElementById(
+        "rpEditSheet"
+      )
+      ?.classList.remove(
+        "is-open"
+      );
+
+    document.body.classList.remove(
+      "rp-edit-lock"
+    );
+  }
+
+  function closePurchaseEditorVisually_() {
+    document
+      .getElementById(
+        "purchaseEditBackdrop"
+      )
+      ?.classList.remove(
+        "is-open"
+      );
+
+    document
+      .getElementById(
+        "purchaseEditSheet"
+      )
+      ?.classList.remove(
+        "is-open"
+      );
+
+    document.body.classList.remove(
+      "purchase-edit-lock"
+    );
+  }
+
+  document.addEventListener(
+    "click",
+    function(event) {
+      const reportSaveButton =
+        event.target.closest(
+          "#rpEditSave"
+        );
+
+      if (reportSaveButton) {
+        const valid =
+          editorValue_(
+            "rpEditName"
+          ) &&
+          editorValue_(
+            "rpEditShop"
+          ) &&
+          editorValue_(
+            "rpEditDate"
+          ) &&
+          editorValue_(
+            "rpEditClass"
+          ) &&
+          editorValue_(
+            "rpEditCategory"
+          ) &&
+          editorNumber_(
+            "rpEditQuantity"
+          ) > 0 &&
+          editorNumber_(
+            "rpEditUnitPrice"
+          ) >= 0;
+
+        if (!valid) {
+          return;
+        }
+
+        closeReportEditorVisually_();
+
+        if (
+          typeof showToast ===
+          "function"
+        ) {
+          showToast(
+            "保存しています…"
+          );
+        }
+
+        return;
+      }
+
+      const purchaseSaveButton =
+        event.target.closest(
+          "#purchaseEditSave"
+        );
+
+      if (purchaseSaveButton) {
+        const valid =
+          editorValue_(
+            "purchaseEditName"
+          ) &&
+          editorValue_(
+            "purchaseEditShop"
+          ) &&
+          editorValue_(
+            "purchaseEditClass"
+          ) &&
+          editorNumber_(
+            "purchaseEditQuantity"
+          ) > 0 &&
+          editorNumber_(
+            "purchaseEditUnitPrice"
+          ) >= 0;
+
+        if (!valid) {
+          return;
+        }
+
+        closePurchaseEditorVisually_();
+
+        if (
+          typeof showToast ===
+          "function"
+        ) {
+          showToast(
+            "保存しています…"
+          );
+        }
+      }
+    }
+  );
+})();
