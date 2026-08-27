@@ -9447,3 +9447,223 @@ loadDashboard =
     }
   );
 })();
+// =========================================================
+// 編集画面の大カテゴリをホームと同じ全カテゴリにする
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    window.purchaseFullCategoryFixAdded_
+  ) {
+    return;
+  }
+
+  window.purchaseFullCategoryFixAdded_ =
+    true;
+
+  function categoryFixText_(value) {
+    return String(
+      value || ""
+    ).trim();
+  }
+
+  function categoryFixKey_(value) {
+    return categoryFixText_(
+      value
+    )
+      .normalize("NFKC")
+      .replace(
+        /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu,
+        ""
+      )
+      .replace(/\s+/g, "")
+      .toLowerCase();
+  }
+
+  function collectAllCategories_(
+    currentValue
+  ) {
+    const categoryMap =
+      new Map();
+
+    function addCategory_(value) {
+      const name =
+        categoryFixText_(
+          value
+        );
+
+      if (!name) {
+        return;
+      }
+
+      const key =
+        categoryFixKey_(
+          name
+        );
+
+      if (
+        !categoryMap.has(key)
+      ) {
+        categoryMap.set(
+          key,
+          name
+        );
+      }
+    }
+
+    // 現在の商品に設定されているカテゴリ
+    addCategory_(
+      currentValue
+    );
+
+    // ホーム画面で使用している全カテゴリ
+    if (
+      typeof dashboardData !==
+        "undefined" &&
+      dashboardData &&
+      Array.isArray(
+        dashboardData.categories
+      )
+    ) {
+      dashboardData.categories
+        .forEach(
+          function(category) {
+            addCategory_(
+              category.name ||
+              category.category ||
+              category.label
+            );
+          }
+        );
+    }
+
+    // 基本カテゴリ
+    [
+      "🏠 家賃",
+      "🍎 食費",
+      "🍽 外食",
+      "🧻 日用品",
+      "👕 洋服",
+      "💧 水道",
+      "💡 電気",
+      "🔥 ガス",
+      "🏥 医療",
+      "🚃 交通",
+      "📱 通信",
+      "🎮 娯楽",
+      "👶 子育て",
+      "💄 美容",
+      "🎁 特別費",
+      "🧾 その他"
+    ].forEach(
+      addCategory_
+    );
+
+    return [
+      ...categoryMap.values()
+    ];
+  }
+
+  function restoreAllCategoryOptions_() {
+    const select =
+      document.getElementById(
+        "rpEditCategory"
+      );
+
+    if (!select) {
+      return;
+    }
+
+    const currentValue =
+      categoryFixText_(
+        select.value
+      );
+
+    const categories =
+      collectAllCategories_(
+        currentValue
+      );
+
+    select.innerHTML = "";
+
+    categories.forEach(
+      function(category) {
+        const option =
+          document.createElement(
+            "option"
+          );
+
+        option.value =
+          category;
+
+        option.textContent =
+          category;
+
+        select.appendChild(
+          option
+        );
+      }
+    );
+
+    const currentKey =
+      categoryFixKey_(
+        currentValue
+      );
+
+    const matchingOption =
+      [
+        ...select.options
+      ].find(
+        function(option) {
+          return (
+            categoryFixKey_(
+              option.value
+            ) ===
+            currentKey
+          );
+        }
+      );
+
+    if (matchingOption) {
+      select.value =
+        matchingOption.value;
+    }
+  }
+
+  // 鉛筆ボタンで編集画面を開いた直後に
+  // ホームと同じ全カテゴリへ戻す
+  document.addEventListener(
+    "click",
+    function(event) {
+      const editButton =
+        event.target.closest(
+          ".report-history-edit"
+        );
+
+      if (!editButton) {
+        return;
+      }
+
+      setTimeout(
+        restoreAllCategoryOptions_,
+        0
+      );
+    }
+  );
+
+  // 編集画面内で大カテゴリを押した場合も確認
+  document.addEventListener(
+    "focusin",
+    function(event) {
+      if (
+        event.target &&
+        event.target.id ===
+          "rpEditCategory"
+      ) {
+        restoreAllCategoryOptions_();
+      }
+    }
+  );
+})();
