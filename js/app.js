@@ -9918,3 +9918,128 @@ loadDashboard =
       }
     };
 })();
+// =========================================================
+// 購入履歴の保存をGET方式へ切り替える
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    window.purchaseGetSaveAdded_
+  ) {
+    return;
+  }
+
+  window.purchaseGetSaveAdded_ =
+    true;
+
+  const fetchBeforeGetSave_ =
+    window.fetch.bind(window);
+
+  window.fetch =
+    function(
+      input,
+      options
+    ) {
+      const requestOptions =
+        options || {};
+
+      const method =
+        String(
+          requestOptions.method ||
+          "GET"
+        ).toUpperCase();
+
+      // POST以外は通常通信
+      if (
+        method !== "POST" ||
+        typeof requestOptions.body !==
+          "string"
+      ) {
+        return fetchBeforeGetSave_(
+          input,
+          options
+        );
+      }
+
+      let data;
+
+      try {
+        data =
+          JSON.parse(
+            requestOptions.body
+          );
+      }
+      catch (error) {
+        return fetchBeforeGetSave_(
+          input,
+          options
+        );
+      }
+
+      // 購入明細の修正以外は通常通信
+      if (
+        !data ||
+        data.action !==
+          "updatePurchaseItem"
+      ) {
+        return fetchBeforeGetSave_(
+          input,
+          options
+        );
+      }
+
+      const parameters =
+        new URLSearchParams();
+
+      parameters.set(
+        "action",
+        "updatePurchaseItem"
+      );
+
+      [
+        "row",
+        "date",
+        "shop",
+        "productName",
+        "normalizedName",
+        "category",
+        "quantity",
+        "unitPrice",
+        "amount",
+        "receiptId"
+      ].forEach(
+        function(key) {
+          if (
+            data[key] !==
+              undefined &&
+            data[key] !==
+              null
+          ) {
+            parameters.set(
+              key,
+              String(
+                data[key]
+              )
+            );
+          }
+        }
+      );
+
+      return fetchBeforeGetSave_(
+        API_BASE +
+        "?" +
+        parameters.toString() +
+        "&_=" +
+        Date.now(),
+        {
+          method:
+            "GET",
+          cache:
+            "no-store"
+        }
+      );
+    };
+})();
