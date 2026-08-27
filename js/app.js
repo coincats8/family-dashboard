@@ -6335,3 +6335,1116 @@ loadDashboard =
       );
     }
   };
+// =========================================================
+// 購入明細：スマホ向け2段表示＋手動編集
+// app.js の一番最後に追加してください。
+// =========================================================
+
+(function () {
+  "use strict";
+
+  let purchaseEditingItem_ = null;
+
+  function purchaseNumber_(value) {
+    const number = Number(
+      String(value ?? "")
+        .replace(/[^0-9.-]/g, "")
+    );
+
+    return Number.isFinite(number)
+      ? number
+      : 0;
+  }
+
+  function purchaseText_(value, fallback) {
+    const text = String(value ?? "").trim();
+
+    return text || fallback || "";
+  }
+
+  function purchaseNameForEdit_(item) {
+    return purchaseText_(
+      item.productName ||
+      item.name ||
+      item.itemName ||
+      item.memo,
+      "商品名"
+    );
+  }
+
+  function purchaseClassForEdit_(item) {
+    return purchaseText_(
+      item.classification ||
+      item.subCategory ||
+      item.subcategory ||
+      item.detailCategory ||
+      item.normalizedName ||
+      item.category,
+      "分類"
+    );
+  }
+
+  function purchaseDateCompact_(value) {
+    const date =
+      typeof parseDateValue === "function"
+        ? parseDateValue(value)
+        : new Date(value);
+
+    if (
+      !date ||
+      Number.isNaN(date.getTime())
+    ) {
+      return "";
+    }
+
+    return (
+      (date.getMonth() + 1) +
+      "/" +
+      date.getDate()
+    );
+  }
+
+  function purchaseUnitPrice_(item) {
+    const saved =
+      purchaseNumber_(
+        item.unitPrice
+      );
+
+    if (saved > 0) {
+      return Math.round(saved);
+    }
+
+    const quantity =
+      Math.max(
+        1,
+        purchaseNumber_(
+          item.quantity
+        ) || 1
+      );
+
+    const amount =
+      purchaseNumber_(
+        item.amount
+      );
+
+    return amount > 0
+      ? Math.round(
+          amount / quantity
+        )
+      : 0;
+  }
+
+  function purchaseYenCompact_(value) {
+    const amount =
+      purchaseNumber_(value);
+
+    return amount > 0
+      ? "¥" +
+          Math.round(amount)
+            .toLocaleString("ja-JP")
+      : "単価なし";
+  }
+
+  function addPurchaseMobileStyles_() {
+    if (
+      document.getElementById(
+        "purchaseMobileEditStyles"
+      )
+    ) {
+      return;
+    }
+
+    const style =
+      document.createElement("style");
+
+    style.id =
+      "purchaseMobileEditStyles";
+
+    style.textContent = `
+      .purchase-compact-list {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        overflow: hidden;
+      }
+
+      .purchase-compact-head {
+        padding: 0 2px 9px;
+        border-bottom: 1px solid #e7ebe8;
+        color: #8a918d;
+        font-size: 10px;
+        font-weight: 750;
+        letter-spacing: 0.05em;
+      }
+
+      .purchase-compact-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: auto auto;
+        column-gap: 8px;
+        row-gap: 5px;
+        align-items: center;
+        min-width: 0;
+        padding: 12px 2px;
+        border-bottom: 1px solid #edf0ee;
+      }
+
+      .purchase-compact-item:last-child {
+        border-bottom: 0;
+      }
+
+      .purchase-compact-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #171a18;
+        font-size: 14px;
+        font-weight: 760;
+        line-height: 1.35;
+      }
+
+      .purchase-compact-actions {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        white-space: nowrap;
+      }
+
+      .purchase-compact-price {
+        color: #188b40;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .purchase-compact-edit {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 0;
+        border-radius: 9px;
+        background: #f2f5f3;
+        color: #59625d;
+        cursor: pointer;
+      }
+
+      .purchase-compact-edit
+      .material-symbols-rounded {
+        font-size: 17px;
+      }
+
+      .purchase-compact-meta {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+        overflow: hidden;
+        color: #858c88;
+        font-size: 10px;
+        line-height: 1.25;
+        white-space: nowrap;
+      }
+
+      .purchase-compact-date {
+        flex: 0 0 auto;
+      }
+
+      .purchase-compact-shop {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .purchase-compact-class {
+        flex: 0 1 auto;
+        max-width: 34%;
+        overflow: hidden;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: #edf9f0;
+        color: #249a49;
+        font-weight: 700;
+        text-overflow: ellipsis;
+      }
+
+      .purchase-compact-quantity {
+        justify-self: end;
+        color: #555e59;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .purchase-manual-mark {
+        color: #249a49;
+        font-size: 9px;
+      }
+
+      .purchase-edit-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 9998;
+        display: none;
+        background: rgba(20, 25, 22, 0.34);
+      }
+
+      .purchase-edit-backdrop.is-open {
+        display: block;
+      }
+
+      .purchase-edit-sheet {
+        position: fixed;
+        left: 50%;
+        bottom: 0;
+        z-index: 9999;
+        width: min(100%, 480px);
+        max-height: 88vh;
+        overflow: auto;
+        transform: translate(-50%, 105%);
+        transition: transform 0.2s ease;
+        padding:
+          10px
+          16px
+          calc(16px + env(safe-area-inset-bottom));
+        border-radius: 22px 22px 0 0;
+        background: #ffffff;
+        box-shadow:
+          0 -10px 40px
+          rgba(0, 0, 0, 0.16);
+      }
+
+      .purchase-edit-sheet.is-open {
+        transform: translate(-50%, 0);
+      }
+
+      .purchase-edit-handle {
+        width: 38px;
+        height: 4px;
+        margin: 0 auto 10px;
+        border-radius: 9px;
+        background: #d9ddda;
+      }
+
+      .purchase-edit-title {
+        margin: 0 0 12px;
+        color: #171a18;
+        font-size: 16px;
+        font-weight: 800;
+      }
+
+      .purchase-edit-grid {
+        display: grid;
+        grid-template-columns: 1fr 88px;
+        gap: 9px;
+      }
+
+      .purchase-edit-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .purchase-edit-field.is-wide {
+        grid-column: 1 / -1;
+      }
+
+      .purchase-edit-field label {
+        color: #78807b;
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .purchase-edit-field input {
+        box-sizing: border-box;
+        width: 100%;
+        height: 39px;
+        padding: 0 11px;
+        border: 1px solid #dfe5e1;
+        border-radius: 10px;
+        outline: none;
+        background: #fafcfb;
+        color: #171a18;
+        font-size: 14px;
+      }
+
+      .purchase-edit-field input:focus {
+        border-color: #36b65f;
+        box-shadow:
+          0 0 0 3px
+          rgba(54, 182, 95, 0.10);
+      }
+
+      .purchase-edit-total {
+        grid-column: 1 / -1;
+        margin-top: 1px;
+        color: #77807a;
+        font-size: 11px;
+        text-align: right;
+      }
+
+      .purchase-edit-buttons {
+        display: grid;
+        grid-template-columns: 1fr 1.6fr;
+        gap: 9px;
+        margin-top: 13px;
+      }
+
+      .purchase-edit-buttons button {
+        height: 42px;
+        border: 0;
+        border-radius: 11px;
+        font-size: 13px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .purchase-edit-cancel {
+        background: #f1f4f2;
+        color: #646d68;
+      }
+
+      .purchase-edit-save {
+        background: #2db857;
+        color: #ffffff;
+      }
+
+      .purchase-edit-save:disabled {
+        opacity: 0.55;
+      }
+
+      body.purchase-edit-lock {
+        overflow: hidden;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function ensurePurchaseEditSheet_() {
+    addPurchaseMobileStyles_();
+
+    if (
+      document.getElementById(
+        "purchaseEditSheet"
+      )
+    ) {
+      return;
+    }
+
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+        <div
+          class="purchase-edit-backdrop"
+          id="purchaseEditBackdrop">
+        </div>
+
+        <section
+          class="purchase-edit-sheet"
+          id="purchaseEditSheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="purchaseEditTitle">
+
+          <div class="purchase-edit-handle">
+          </div>
+
+          <h3
+            class="purchase-edit-title"
+            id="purchaseEditTitle">
+            購入明細を編集
+          </h3>
+
+          <div class="purchase-edit-grid">
+
+            <div class="purchase-edit-field is-wide">
+              <label for="purchaseEditName">
+                商品名
+              </label>
+              <input
+                id="purchaseEditName"
+                autocomplete="off">
+            </div>
+
+            <div class="purchase-edit-field is-wide">
+              <label for="purchaseEditShop">
+                店名
+              </label>
+              <input
+                id="purchaseEditShop"
+                autocomplete="off">
+            </div>
+
+            <div class="purchase-edit-field">
+              <label for="purchaseEditClass">
+                分類
+              </label>
+              <input
+                id="purchaseEditClass"
+                autocomplete="off">
+            </div>
+
+            <div class="purchase-edit-field">
+              <label for="purchaseEditQuantity">
+                数量
+              </label>
+              <input
+                id="purchaseEditQuantity"
+                type="number"
+                min="0.01"
+                step="0.01"
+                inputmode="decimal">
+            </div>
+
+            <div class="purchase-edit-field is-wide">
+              <label for="purchaseEditUnitPrice">
+                単価（円）
+              </label>
+              <input
+                id="purchaseEditUnitPrice"
+                type="number"
+                min="0"
+                step="1"
+                inputmode="numeric">
+            </div>
+
+            <div
+              class="purchase-edit-total"
+              id="purchaseEditTotal">
+              合計 ¥0
+            </div>
+
+          </div>
+
+          <div class="purchase-edit-buttons">
+
+            <button
+              type="button"
+              class="purchase-edit-cancel"
+              id="purchaseEditCancel">
+              キャンセル
+            </button>
+
+            <button
+              type="button"
+              class="purchase-edit-save"
+              id="purchaseEditSave">
+              保存
+            </button>
+
+          </div>
+
+        </section>
+      `
+    );
+
+    document
+      .getElementById(
+        "purchaseEditBackdrop"
+      )
+      .addEventListener(
+        "click",
+        closePurchaseEditor_
+      );
+
+    document
+      .getElementById(
+        "purchaseEditCancel"
+      )
+      .addEventListener(
+        "click",
+        closePurchaseEditor_
+      );
+
+    document
+      .getElementById(
+        "purchaseEditSave"
+      )
+      .addEventListener(
+        "click",
+        savePurchaseEditor_
+      );
+
+    document
+      .getElementById(
+        "purchaseEditQuantity"
+      )
+      .addEventListener(
+        "input",
+        updatePurchaseEditTotal_
+      );
+
+    document
+      .getElementById(
+        "purchaseEditUnitPrice"
+      )
+      .addEventListener(
+        "input",
+        updatePurchaseEditTotal_
+      );
+  }
+
+  function updatePurchaseEditTotal_() {
+    const quantity =
+      purchaseNumber_(
+        document
+          .getElementById(
+            "purchaseEditQuantity"
+          )
+          .value
+      );
+
+    const unitPrice =
+      purchaseNumber_(
+        document
+          .getElementById(
+            "purchaseEditUnitPrice"
+          )
+          .value
+      );
+
+    document
+      .getElementById(
+        "purchaseEditTotal"
+      )
+      .textContent =
+        "合計 " +
+        purchaseYenCompact_(
+          Math.round(
+            quantity * unitPrice
+          )
+        );
+  }
+
+  function openPurchaseEditor_(item) {
+    ensurePurchaseEditSheet_();
+
+    if (
+      !Number.isInteger(
+        Number(item.row)
+      ) ||
+      Number(item.row) < 2
+    ) {
+      if (
+        typeof showToast === "function"
+      ) {
+        showToast(
+          "この明細は行番号を取得できないため編集できません"
+        );
+      }
+
+      return;
+    }
+
+    purchaseEditingItem_ = item;
+
+    document
+      .getElementById(
+        "purchaseEditName"
+      )
+      .value =
+        purchaseNameForEdit_(item);
+
+    document
+      .getElementById(
+        "purchaseEditShop"
+      )
+      .value =
+        purchaseText_(
+          item.shop,
+          ""
+        );
+
+    document
+      .getElementById(
+        "purchaseEditClass"
+      )
+      .value =
+        purchaseClassForEdit_(item);
+
+    document
+      .getElementById(
+        "purchaseEditQuantity"
+      )
+      .value =
+        purchaseNumber_(
+          item.quantity
+        ) || 1;
+
+    document
+      .getElementById(
+        "purchaseEditUnitPrice"
+      )
+      .value =
+        purchaseUnitPrice_(item) || "";
+
+    updatePurchaseEditTotal_();
+
+    document
+      .getElementById(
+        "purchaseEditBackdrop"
+      )
+      .classList.add(
+        "is-open"
+      );
+
+    document
+      .getElementById(
+        "purchaseEditSheet"
+      )
+      .classList.add(
+        "is-open"
+      );
+
+    document.body.classList.add(
+      "purchase-edit-lock"
+    );
+
+    setTimeout(
+      function() {
+        document
+          .getElementById(
+            "purchaseEditName"
+          )
+          .focus();
+      },
+      220
+    );
+  }
+
+  function closePurchaseEditor_() {
+    const backdrop =
+      document.getElementById(
+        "purchaseEditBackdrop"
+      );
+
+    const sheet =
+      document.getElementById(
+        "purchaseEditSheet"
+      );
+
+    if (backdrop) {
+      backdrop.classList.remove(
+        "is-open"
+      );
+    }
+
+    if (sheet) {
+      sheet.classList.remove(
+        "is-open"
+      );
+    }
+
+    document.body.classList.remove(
+      "purchase-edit-lock"
+    );
+
+    purchaseEditingItem_ = null;
+  }
+
+  async function savePurchaseEditor_() {
+    if (!purchaseEditingItem_) {
+      return;
+    }
+
+    const productName =
+      purchaseText_(
+        document
+          .getElementById(
+            "purchaseEditName"
+          )
+          .value
+      );
+
+    const shop =
+      purchaseText_(
+        document
+          .getElementById(
+            "purchaseEditShop"
+          )
+          .value
+      );
+
+    const normalizedName =
+      purchaseText_(
+        document
+          .getElementById(
+            "purchaseEditClass"
+          )
+          .value
+      );
+
+    const quantity =
+      purchaseNumber_(
+        document
+          .getElementById(
+            "purchaseEditQuantity"
+          )
+          .value
+      );
+
+    const unitPrice =
+      purchaseNumber_(
+        document
+          .getElementById(
+            "purchaseEditUnitPrice"
+          )
+          .value
+      );
+
+    if (
+      !productName ||
+      !shop ||
+      !normalizedName ||
+      quantity <= 0 ||
+      unitPrice < 0
+    ) {
+      if (
+        typeof showToast === "function"
+      ) {
+        showToast(
+          "商品名・店名・分類・数量を確認してください"
+        );
+      }
+
+      return;
+    }
+
+    const saveButton =
+      document.getElementById(
+        "purchaseEditSave"
+      );
+
+    saveButton.disabled = true;
+    saveButton.textContent =
+      "保存中…";
+
+    try {
+      const response =
+        await fetch(
+          API_BASE,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "text/plain;charset=utf-8"
+            },
+            body: JSON.stringify({
+              action:
+                "updatePurchaseItem",
+              row:
+                Number(
+                  purchaseEditingItem_.row
+                ),
+              shop:
+                shop,
+              productName:
+                productName,
+              normalizedName:
+                normalizedName,
+              quantity:
+                quantity,
+              unitPrice:
+                unitPrice,
+              amount:
+                Math.round(
+                  quantity *
+                  unitPrice
+                )
+            })
+          }
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          "HTTP " +
+          response.status
+        );
+      }
+
+      const result =
+        await response.json();
+
+      if (
+        !result ||
+        result.success !== true
+      ) {
+        throw new Error(
+          result?.error ||
+          "保存できませんでした"
+        );
+      }
+
+      closePurchaseEditor_();
+
+      if (
+        typeof showToast === "function"
+      ) {
+        showToast(
+          "購入明細を修正しました"
+        );
+      }
+
+      if (
+        typeof refreshReceiptPage ===
+        "function"
+      ) {
+        await refreshReceiptPage();
+      }
+
+      if (
+        typeof loadDashboard ===
+        "function"
+      ) {
+        loadDashboard();
+      }
+    }
+    catch (error) {
+      console.error(
+        "Purchase item update error:",
+        error
+      );
+
+      if (
+        typeof showToast === "function"
+      ) {
+        showToast(
+          "保存できませんでした：" +
+          (
+            error.message ||
+            error
+          )
+        );
+      }
+    }
+    finally {
+      saveButton.disabled = false;
+      saveButton.textContent =
+        "保存";
+    }
+  }
+
+  // ---------------------------------------------------------
+  // 購入明細一覧をスマホ向け2段表示に変更
+  // ---------------------------------------------------------
+
+  renderReceiptList =
+    function(
+      container,
+      receipts,
+      limit
+    ) {
+      if (!container) {
+        return;
+      }
+
+      ensurePurchaseEditSheet_();
+
+      const source =
+        Array.isArray(receipts)
+          ? receipts.slice()
+          : [];
+
+      source.sort(
+        function(a, b) {
+          const dateA =
+            typeof parseDateValue ===
+            "function"
+              ? parseDateValue(a.date)
+              : new Date(a.date);
+
+          const dateB =
+            typeof parseDateValue ===
+            "function"
+              ? parseDateValue(b.date)
+              : new Date(b.date);
+
+          const timeA =
+            dateA &&
+            typeof dateA.getTime ===
+              "function"
+              ? dateA.getTime()
+              : 0;
+
+          const timeB =
+            dateB &&
+            typeof dateB.getTime ===
+              "function"
+              ? dateB.getTime()
+              : 0;
+
+          return timeB - timeA;
+        }
+      );
+
+      const items =
+        limit
+          ? source.slice(
+              0,
+              limit
+            )
+          : source;
+
+      if (!items.length) {
+        container.innerHTML =
+          typeof createEmptyState ===
+          "function"
+            ? createEmptyState(
+                "shopping_cart",
+                "購入明細はありません",
+                "食品や医薬品を購入すると、ここに表示されます"
+              )
+            : "<p>購入明細はありません</p>";
+
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="purchase-compact-list">
+
+          <div class="purchase-compact-head">
+            商品名・単価
+          </div>
+
+          ${
+            items
+              .map(
+                function(item, index) {
+                  const name =
+                    purchaseNameForEdit_(
+                      item
+                    );
+
+                  const shop =
+                    purchaseText_(
+                      item.shop,
+                      "店名"
+                    );
+
+                  const classification =
+                    purchaseClassForEdit_(
+                      item
+                    );
+
+                  const quantity =
+                    purchaseNumber_(
+                      item.quantity
+                    ) || 1;
+
+                  const unitPrice =
+                    purchaseUnitPrice_(
+                      item
+                    );
+
+                  const manualMark =
+                    item.manualCorrection
+                      ? `
+                        <span class="purchase-manual-mark">
+                          修正済
+                        </span>
+                      `
+                      : "";
+
+                  return `
+                    <article class="purchase-compact-item">
+
+                      <strong
+                        class="purchase-compact-name"
+                        title="${escapeHTML(name)}">
+                        ${escapeHTML(name)}
+                      </strong>
+
+                      <div class="purchase-compact-actions">
+
+                        <span class="purchase-compact-price">
+                          ${
+                            escapeHTML(
+                              purchaseYenCompact_(
+                                unitPrice
+                              )
+                            )
+                          }/個
+                        </span>
+
+                        <button
+                          type="button"
+                          class="purchase-compact-edit"
+                          data-purchase-index="${index}"
+                          aria-label="${escapeHTML(name)}を編集">
+
+                          <span class="material-symbols-rounded">
+                            edit
+                          </span>
+
+                        </button>
+
+                      </div>
+
+                      <div class="purchase-compact-meta">
+
+                        <span class="purchase-compact-date">
+                          ${
+                            escapeHTML(
+                              purchaseDateCompact_(
+                                item.date
+                              )
+                            )
+                          }
+                        </span>
+
+                        <span
+                          class="purchase-compact-shop"
+                          title="${escapeHTML(shop)}">
+                          ${escapeHTML(shop)}
+                        </span>
+
+                        <span
+                          class="purchase-compact-class"
+                          title="${escapeHTML(classification)}">
+                          ${escapeHTML(classification)}
+                        </span>
+
+                        ${manualMark}
+
+                      </div>
+
+                      <span class="purchase-compact-quantity">
+                        ×${escapeHTML(quantity)}
+                      </span>
+
+                    </article>
+                  `;
+                }
+              )
+              .join("")
+          }
+
+        </div>
+      `;
+
+      container
+        .querySelectorAll(
+          "[data-purchase-index]"
+        )
+        .forEach(
+          function(button) {
+            button.addEventListener(
+              "click",
+              function() {
+                openPurchaseEditor_(
+                  items[
+                    Number(
+                      button.dataset
+                        .purchaseIndex
+                    )
+                  ]
+                );
+              }
+            );
+          }
+        );
+    };
+})();
