@@ -15447,3 +15447,419 @@ loadDashboard =
     true
   );
 })();
+// =========================================================
+// カテゴリ別予算の編集ボタン
+// 空欄で「予算未設定」へ戻す
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.categoryBudgetEditorAdded_) {
+    return;
+  }
+
+  window.categoryBudgetEditorAdded_ =
+    true;
+
+
+  function categoryBudgetNumber_(value) {
+    const number =
+      Number(
+        String(value ?? "")
+          .replace(/,/g, "")
+          .replace(/[¥￥円]/g, "")
+      );
+
+    return Number.isFinite(number)
+      ? number
+      : 0;
+  }
+
+
+  function categoryBudgetName_(value) {
+    return String(value || "")
+      .normalize("NFKC")
+      .replace(
+        /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu,
+        ""
+      )
+      .replace(/[\uFE0E\uFE0F]/g, "")
+      .replace(/\s+/g, "")
+      .trim();
+  }
+
+
+  function findCategoryData_(
+    name
+  ) {
+    if (
+      typeof dashboardData ===
+        "undefined" ||
+      !dashboardData ||
+      !Array.isArray(
+        dashboardData.categories
+      )
+    ) {
+      return null;
+    }
+
+    const target =
+      categoryBudgetName_(name);
+
+    return (
+      dashboardData.categories.find(
+        function(category) {
+          return (
+            categoryBudgetName_(
+              category.name
+            ) === target
+          );
+        }
+      ) ||
+      null
+    );
+  }
+
+
+  async function openCategoryBudgetEditor_(
+    categoryName
+  ) {
+    const category =
+      findCategoryData_(
+        categoryName
+      );
+
+    const cleanName =
+      categoryBudgetName_(
+        categoryName
+      );
+
+    const currentBudget =
+      categoryBudgetNumber_(
+        category?.budget
+      );
+
+    const entered =
+      window.prompt(
+        cleanName +
+        "の月予算を入力してください\n" +
+        "未設定に戻す場合は空欄のままOKを押してください",
+        currentBudget > 0
+          ? String(currentBudget)
+          : ""
+      );
+
+    if (entered === null) {
+      return;
+    }
+
+    const trimmed =
+      String(entered)
+        .trim();
+
+    const unset =
+      trimmed === "" ||
+      trimmed === "未設定";
+
+    const budget =
+      unset
+        ? 0
+        : Math.round(
+            categoryBudgetNumber_(
+              trimmed
+            )
+          );
+
+    if (
+      !unset &&
+      (
+        budget < 0 ||
+        budget > 10000000
+      )
+    ) {
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          "正しい予算金額を入力してください"
+        );
+      }
+
+      return;
+    }
+
+    try {
+      const result =
+        await fetchJson(
+          API_BASE +
+          "?action=saveCategoryBudget" +
+          "&category=" +
+          encodeURIComponent(
+            cleanName
+          ) +
+          "&budget=" +
+          encodeURIComponent(
+            unset
+              ? ""
+              : budget
+          ) +
+          "&unset=" +
+          (
+            unset
+              ? "1"
+              : "0"
+          ) +
+          "&_=" +
+          Date.now()
+        );
+
+      if (
+        !result ||
+        result.success !== true
+      ) {
+        throw new Error(
+          result?.error ||
+          "カテゴリ予算を保存できませんでした"
+        );
+      }
+
+      if (
+        typeof loadDashboard ===
+        "function"
+      ) {
+        await loadDashboard();
+      }
+
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          unset
+            ? cleanName +
+              "の予算を未設定にしました"
+            : cleanName +
+              "の予算を¥" +
+              budget.toLocaleString(
+                "ja-JP"
+              ) +
+              "へ変更しました"
+        );
+      }
+    }
+    catch (error) {
+      console.error(
+        "カテゴリ予算保存エラー:",
+        error
+      );
+
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          "保存できませんでした：" +
+          String(
+            error.message ||
+            error
+          )
+        );
+      }
+    }
+  }
+
+
+  function addCategoryBudgetButtons_() {
+    const container =
+      document.getElementById(
+        "categoryList"
+      );
+
+    if (!container) {
+      return;
+    }
+
+    container
+      .querySelectorAll(
+        ".category-item"
+      )
+      .forEach(
+        function(row) {
+          if (
+            row.querySelector(
+              ".category-budget-edit"
+            )
+          ) {
+            return;
+          }
+
+          const nameElement =
+            row.querySelector(
+              ".category-name"
+            );
+
+          const top =
+            row.querySelector(
+              ".category-top"
+            );
+
+          if (
+            !nameElement ||
+            !top
+          ) {
+            return;
+          }
+
+          const categoryName =
+            nameElement.textContent || "";
+
+          const button =
+            document.createElement(
+              "button"
+            );
+
+          button.type =
+            "button";
+
+          button.className =
+            "category-budget-edit";
+
+          button.title =
+            "カテゴリ予算を変更";
+
+          button.setAttribute(
+            "aria-label",
+            categoryBudgetName_(
+              categoryName
+            ) +
+            "の予算を変更"
+          );
+
+          button.innerHTML =
+            '<span class="material-symbols-rounded">edit</span>';
+
+          button.addEventListener(
+            "click",
+            function(event) {
+              event.preventDefault();
+              event.stopPropagation();
+
+              openCategoryBudgetEditor_(
+                categoryName
+              );
+            }
+          );
+
+          button.addEventListener(
+            "keydown",
+            function(event) {
+              event.stopPropagation();
+            }
+          );
+
+          top.appendChild(
+            button
+          );
+        }
+      );
+  }
+
+
+  // カテゴリ再描画後にも鉛筆を追加
+  if (
+    typeof renderCategoryList ===
+    "function"
+  ) {
+    const renderCategoryListBeforeBudgetEdit_ =
+      renderCategoryList;
+
+    renderCategoryList =
+      function(
+        container,
+        categories
+      ) {
+        renderCategoryListBeforeBudgetEdit_(
+          container,
+          categories
+        );
+
+        if (
+          container &&
+          container.id === "categoryList"
+        ) {
+          addCategoryBudgetButtons_();
+        }
+      };
+  }
+
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.textContent = `
+    #categoryList .category-top {
+      display: flex !important;
+      align-items: center !important;
+    }
+
+    #categoryList .category-name {
+      min-width: 0 !important;
+      margin-right: auto !important;
+    }
+
+    #categoryList .category-amount {
+      margin-left: 8px !important;
+      white-space: nowrap !important;
+    }
+
+    .category-budget-edit {
+      display: inline-grid !important;
+      place-items: center !important;
+      width: 25px !important;
+      height: 25px !important;
+      flex: 0 0 25px !important;
+      margin-left: 6px !important;
+      padding: 0 !important;
+      border: 0 !important;
+      border-radius: 8px !important;
+      background: #edf8f0 !important;
+      color: #25ae52 !important;
+      cursor: pointer !important;
+    }
+
+    .category-budget-edit
+    .material-symbols-rounded {
+      font-size: 14px !important;
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+
+
+  setTimeout(
+    addCategoryBudgetButtons_,
+    300
+  );
+
+  setTimeout(
+    addCategoryBudgetButtons_,
+    1200
+  );
+
+  window.addEventListener(
+    "hashchange",
+    function() {
+      setTimeout(
+        addCategoryBudgetButtons_,
+        200
+      );
+    }
+  );
+})();
