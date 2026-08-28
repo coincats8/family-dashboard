@@ -12750,3 +12750,64 @@ loadDashboard =
   buildShoppingMemoPage_();
   updateShoppingMemoLabels_();
 })();
+// =========================================================
+// 買い物メモを自動更新
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    window.shoppingMemoAutoRefreshAdded_
+  ) {
+    return;
+  }
+
+  window.shoppingMemoAutoRefreshAdded_ =
+    true;
+
+  function refreshShoppingMemoIfOpen_() {
+    if (
+      typeof currentPage ===
+        "undefined" ||
+      currentPage !==
+        "settings"
+    ) {
+      return;
+    }
+
+    const button =
+      document.getElementById(
+        "shoppingRefreshButton"
+      );
+
+    if (button) {
+      button.click();
+    }
+  }
+
+  // メモ画面を開いている間は15秒ごとに確認
+  setInterval(
+    refreshShoppingMemoIfOpen_,
+    15000
+  );
+
+  // 別画面・LINEから戻ったときに確認
+  document.addEventListener(
+    "visibilitychange",
+    function () {
+      if (
+        document.visibilityState ===
+        "visible"
+      ) {
+        refreshShoppingMemoIfOpen_();
+      }
+    }
+  );
+
+  window.addEventListener(
+    "focus",
+    refreshShoppingMemoIfOpen_
+  );
+})();
