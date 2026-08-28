@@ -14529,3 +14529,599 @@ loadDashboard =
     }
   );
 })();
+// =========================================================
+// スマート家計助言＋生活費予算編集
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.smartBudgetAdviceAdded_) {
+    return;
+  }
+
+  window.smartBudgetAdviceAdded_ =
+    true;
+
+
+  function smartNumber_(value) {
+    const number =
+      Number(
+        String(value ?? 0)
+          .replace(/,/g, "")
+          .replace(/[¥￥円]/g, "")
+      );
+
+    return Number.isFinite(number)
+      ? number
+      : 0;
+  }
+
+
+  function smartYen_(value) {
+    return (
+      "¥" +
+      Math.max(
+        0,
+        Math.round(
+          smartNumber_(value)
+        )
+      ).toLocaleString("ja-JP")
+    );
+  }
+
+
+  function getSmartDashboard_() {
+    if (
+      typeof dashboardData !==
+        "undefined" &&
+      dashboardData
+    ) {
+      window.dashboardData =
+        dashboardData;
+
+      return dashboardData;
+    }
+
+    return null;
+  }
+
+
+  // -------------------------------------------------------
+  // 残り日数・予算・カテゴリから助言を作成
+  // -------------------------------------------------------
+
+  function createSmartAdvice_() {
+    const data =
+      getSmartDashboard_();
+
+    if (!data) {
+      return "右上の更新ボタンを押してください";
+    }
+
+    const living =
+      data.living || {};
+
+    const budget =
+      smartNumber_(
+        living.budget ??
+        data.budget ??
+        250000
+      );
+
+    const expense =
+      smartNumber_(
+        living.expense ??
+        data.expense ??
+        0
+      );
+
+    const remaining =
+      smartNumber_(
+        living.remaining ??
+        data.balance ??
+        (
+          budget -
+          expense
+        )
+      );
+
+    const now =
+      new Date();
+
+    const lastDay =
+      new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0
+      ).getDate();
+
+    const daysLeft =
+      Math.max(
+        1,
+        lastDay -
+        now.getDate() +
+        1
+      );
+
+    const dailyAllowance =
+      remaining > 0
+        ? Math.floor(
+            remaining /
+            daysLeft
+          )
+        : 0;
+
+    const categories =
+      Array.isArray(
+        data.categories
+      )
+        ? data.categories
+        : [];
+
+    const variableCategories =
+      categories
+        .filter(
+          function(category) {
+            const name =
+              String(
+                category.name || ""
+              );
+
+            return (
+              name.indexOf("家賃") === -1 &&
+              name.indexOf("賃料") === -1 &&
+              smartNumber_(
+                category.amount
+              ) > 0
+            );
+          }
+        )
+        .sort(
+          function(a, b) {
+            return (
+              smartNumber_(
+                b.amount
+              ) -
+              smartNumber_(
+                a.amount
+              )
+            );
+          }
+        );
+
+    const overCategory =
+      variableCategories.find(
+        function(category) {
+          const categoryBudget =
+            smartNumber_(
+              category.budget
+            );
+
+          const categoryAmount =
+            smartNumber_(
+              category.amount
+            );
+
+          return (
+            categoryBudget > 0 &&
+            categoryAmount /
+            categoryBudget >= 0.9
+          );
+        }
+      );
+
+    const topCategory =
+      variableCategories[0];
+
+    if (remaining < 0) {
+      return (
+        "予算を" +
+        smartYen_(
+          Math.abs(remaining)
+        ) +
+        "超過。今月は必要品だけ"
+      );
+    }
+
+    if (overCategory) {
+      const name =
+        String(
+          overCategory.name || "支出"
+        )
+          .replace(
+            /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu,
+            ""
+          )
+          .trim();
+
+      return (
+        name +
+        "が予算間近。残り" +
+        daysLeft +
+        "日は1日" +
+        smartYen_(dailyAllowance) +
+        "まで"
+      );
+    }
+
+    if (topCategory) {
+      const name =
+        String(
+          topCategory.name || "支出"
+        )
+          .replace(
+            /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu,
+            ""
+          )
+          .trim();
+
+      let shoppingAdvice =
+        "買い物メモを優先";
+
+      if (
+        name.indexOf("外食") !== -1
+      ) {
+        shoppingAdvice =
+          "外食回数を抑えると安心";
+      }
+      else if (
+        name.indexOf("日用品") !== -1
+      ) {
+        shoppingAdvice =
+          "在庫確認してから購入";
+      }
+      else if (
+        name.indexOf("洋服") !== -1
+      ) {
+        shoppingAdvice =
+          "買い足しは慎重に";
+      }
+
+      return (
+        "残り" +
+        daysLeft +
+        "日、1日" +
+        smartYen_(dailyAllowance) +
+        "まで。" +
+        name +
+        "が最多、" +
+        shoppingAdvice
+      );
+    }
+
+    return (
+      "残り" +
+      daysLeft +
+      "日、1日" +
+      smartYen_(dailyAllowance) +
+      "まで使えます"
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // AIという見出しを消して助言だけ表示
+  // -------------------------------------------------------
+
+  function updateSmartAdvice_() {
+    const row =
+      document.getElementById(
+        "homeAiSummaryRow"
+      );
+
+    if (!row) {
+      return;
+    }
+
+    const oldTitle =
+      row.querySelector(
+        "strong"
+      );
+
+    if (oldTitle) {
+      oldTitle.style.setProperty(
+        "display",
+        "none",
+        "important"
+      );
+    }
+
+    let advice =
+      document.getElementById(
+        "smartHomeAdvice"
+      );
+
+    if (!advice) {
+      const oldAdvice =
+        document.getElementById(
+          "homeAiSummaryAdvice"
+        );
+
+      if (oldAdvice) {
+        // 前のAI処理から切り離す
+        oldAdvice.id =
+          "smartHomeAdvice";
+
+        advice =
+          oldAdvice;
+      }
+    }
+
+    if (advice) {
+      advice.textContent =
+        createSmartAdvice_();
+    }
+  }
+
+
+  // -------------------------------------------------------
+  // 予算編集ボタン
+  // -------------------------------------------------------
+
+  function addBudgetEditButton_() {
+    const budgetMoney =
+      document.getElementById(
+        "budgetMoney"
+      );
+
+    if (!budgetMoney) {
+      return;
+    }
+
+    if (
+      document.getElementById(
+        "monthlyBudgetEditButton"
+      )
+    ) {
+      return;
+    }
+
+    const button =
+      document.createElement(
+        "button"
+      );
+
+    button.id =
+      "monthlyBudgetEditButton";
+
+    button.type =
+      "button";
+
+    button.title =
+      "生活費予算を変更";
+
+    button.setAttribute(
+      "aria-label",
+      "生活費予算を変更"
+    );
+
+    button.innerHTML =
+      '<span class="material-symbols-rounded">edit</span>';
+
+    budgetMoney.insertAdjacentElement(
+      "afterend",
+      button
+    );
+
+    button.addEventListener(
+      "click",
+      async function() {
+        const data =
+          getSmartDashboard_();
+
+        const currentBudget =
+          smartNumber_(
+            data?.living?.budget ??
+            data?.budget ??
+            250000
+          );
+
+        const entered =
+          window.prompt(
+            "毎月の生活費予算を入力してください",
+            String(currentBudget)
+          );
+
+        if (entered === null) {
+          return;
+        }
+
+        const newBudget =
+          Math.round(
+            smartNumber_(entered)
+          );
+
+        if (
+          newBudget < 10000 ||
+          newBudget > 10000000
+        ) {
+          if (
+            typeof showToast ===
+            "function"
+          ) {
+            showToast(
+              "1万円以上で入力してください"
+            );
+          }
+
+          return;
+        }
+
+        button.disabled =
+          true;
+
+        button.classList.add(
+          "is-saving"
+        );
+
+        try {
+          const result =
+            await fetchJson(
+              API_BASE +
+              "?action=saveMonthlyBudget" +
+              "&budget=" +
+              encodeURIComponent(
+                newBudget
+              ) +
+              "&_=" +
+              Date.now()
+            );
+
+          if (
+            !result ||
+            result.success !== true
+          ) {
+            throw new Error(
+              result?.error ||
+              "予算を保存できませんでした"
+            );
+          }
+
+          if (
+            typeof loadDashboard ===
+            "function"
+          ) {
+            await loadDashboard();
+          }
+
+          updateSmartAdvice_();
+
+          if (
+            typeof showToast ===
+            "function"
+          ) {
+            showToast(
+              "生活費予算を" +
+              smartYen_(newBudget) +
+              "へ変更しました"
+            );
+          }
+        }
+        catch (error) {
+          console.error(
+            "予算保存エラー:",
+            error
+          );
+
+          if (
+            typeof showToast ===
+            "function"
+          ) {
+            showToast(
+              "予算を保存できませんでした"
+            );
+          }
+        }
+        finally {
+          button.disabled =
+            false;
+
+          button.classList.remove(
+            "is-saving"
+          );
+        }
+      }
+    );
+  }
+
+
+  function applySmartBudgetAdvice_() {
+    getSmartDashboard_();
+    updateSmartAdvice_();
+    addBudgetEditButton_();
+  }
+
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.textContent = `
+    #homeAiSummaryRow > strong {
+      display: none !important;
+    }
+
+    #smartHomeAdvice {
+      display: block !important;
+      flex: 1 1 auto !important;
+      width: 100% !important;
+      overflow: hidden !important;
+      color: #26312a !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      line-height: 1.4 !important;
+      text-overflow: ellipsis !important;
+      white-space: nowrap !important;
+    }
+
+    #monthlyBudgetEditButton {
+      display: inline-grid !important;
+      place-items: center !important;
+      width: 24px !important;
+      height: 24px !important;
+      margin: 2px 0 0 6px !important;
+      padding: 0 !important;
+      border: 0 !important;
+      border-radius: 9px !important;
+      background: #e8f8ed !important;
+      color: #25bd5d !important;
+      cursor: pointer !important;
+      vertical-align: middle !important;
+    }
+
+    #monthlyBudgetEditButton
+    .material-symbols-rounded {
+      font-size: 14px !important;
+    }
+
+    #monthlyBudgetEditButton.is-saving
+    .material-symbols-rounded {
+      animation:
+        budget-edit-spin
+        0.8s linear infinite !important;
+    }
+
+    @keyframes budget-edit-spin {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+
+
+  setTimeout(
+    applySmartBudgetAdvice_,
+    200
+  );
+
+  setTimeout(
+    applySmartBudgetAdvice_,
+    1000
+  );
+
+  setInterval(
+    applySmartBudgetAdvice_,
+    2000
+  );
+
+  window.addEventListener(
+    "hashchange",
+    function() {
+      setTimeout(
+        applySmartBudgetAdvice_,
+        200
+      );
+    }
+  );
+})();
