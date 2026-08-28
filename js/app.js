@@ -10411,3 +10411,333 @@ loadDashboard =
       }
     };
 })();
+// =========================================================
+// 現在の貯蓄を手動修正
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    window.currentSavingsEditAdded_
+  ) {
+    return;
+  }
+
+  window.currentSavingsEditAdded_ =
+    true;
+
+  let savingsLoaded_ =
+    false;
+
+  let savingsLoading_ =
+    false;
+
+  function savingsYen_(
+    amount
+  ) {
+    return (
+      "¥" +
+      Math.round(
+        Number(amount) || 0
+      ).toLocaleString(
+        "ja-JP"
+      )
+    );
+  }
+
+  function updateSavingsDisplay_(
+    amount
+  ) {
+    if (
+      !dashboardData
+    ) {
+      return;
+    }
+
+    if (
+      !dashboardData.saving
+    ) {
+      dashboardData.saving = {};
+    }
+
+    dashboardData.saving.current =
+      amount;
+
+    dashboardData.saving.actual =
+      amount;
+
+    const homeAmount =
+      document.getElementById(
+        "savingActual"
+      );
+
+    if (homeAmount) {
+      homeAmount.textContent =
+        savingsYen_(amount);
+    }
+
+    const reportAmount =
+      document.getElementById(
+        "reportSaving"
+      );
+
+    if (reportAmount) {
+      reportAmount.textContent =
+        savingsYen_(amount);
+    }
+  }
+
+  async function loadCurrentSavings_() {
+    if (
+      savingsLoaded_ ||
+      savingsLoading_
+    ) {
+      return;
+    }
+
+    savingsLoading_ =
+      true;
+
+    try {
+      const response =
+        await fetch(
+          API_BASE +
+          "?action=getCurrentSavings" +
+          "&_=" +
+          Date.now(),
+          {
+            method:
+              "GET",
+            cache:
+              "no-store"
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (
+        result &&
+        result.success === true &&
+        result.hasManualValue === true
+      ) {
+        updateSavingsDisplay_(
+          Number(result.amount) || 0
+        );
+      }
+
+      savingsLoaded_ =
+        true;
+    }
+    catch (error) {
+      console.warn(
+        "現在の貯蓄取得:",
+        error
+      );
+    }
+    finally {
+      savingsLoading_ =
+        false;
+    }
+  }
+
+  async function editCurrentSavings_() {
+    const currentAmount =
+      Number(
+        dashboardData?.saving?.current ??
+        dashboardData?.saving?.actual ??
+        0
+      ) || 0;
+
+    const input =
+      window.prompt(
+        "現在の貯蓄額を入力してください",
+        String(currentAmount)
+      );
+
+    if (
+      input === null
+    ) {
+      return;
+    }
+
+    const normalizedInput =
+      String(input)
+        .replace(/[¥￥,\s]/g, "");
+
+    const amount =
+      Number(
+        normalizedInput
+      );
+
+    if (
+      !Number.isFinite(amount) ||
+      amount < 0
+    ) {
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          "0円以上の金額を入力してください"
+        );
+      }
+
+      return;
+    }
+
+    try {
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          "貯蓄額を保存しています…"
+        );
+      }
+
+      const response =
+        await fetch(
+          API_BASE +
+          "?action=saveCurrentSavings" +
+          "&amount=" +
+          encodeURIComponent(
+            Math.round(amount)
+          ) +
+          "&_=" +
+          Date.now(),
+          {
+            method:
+              "GET",
+            cache:
+              "no-store"
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (
+        !result ||
+        result.success !== true
+      ) {
+        throw new Error(
+          result?.error ||
+          "保存できませんでした"
+        );
+      }
+
+      updateSavingsDisplay_(
+        Number(result.amount) || 0
+      );
+
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          "現在の貯蓄を修正しました"
+        );
+      }
+    }
+    catch (error) {
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          "保存できませんでした：" +
+          String(
+            error.message ||
+            error
+          )
+        );
+      }
+    }
+  }
+
+  function addSavingsEditButton_() {
+    const amountElement =
+      document.getElementById(
+        "savingActual"
+      );
+
+    if (
+      !amountElement ||
+      document.getElementById(
+        "currentSavingsEditButton"
+      )
+    ) {
+      return;
+    }
+
+    const button =
+      document.createElement(
+        "button"
+      );
+
+    button.id =
+      "currentSavingsEditButton";
+
+    button.type =
+      "button";
+
+    button.title =
+      "現在の貯蓄を修正";
+
+    button.innerHTML =
+      "✏️";
+
+    button.style.cssText = `
+      margin-left: 8px;
+      padding: 4px 7px;
+      border: 0;
+      border-radius: 10px;
+      background: #eef8f1;
+      cursor: pointer;
+      font-size: 13px;
+      vertical-align: middle;
+    `;
+
+    button.addEventListener(
+      "click",
+      editCurrentSavings_
+    );
+
+    amountElement.insertAdjacentElement(
+      "afterend",
+      button
+    );
+  }
+
+  const originalRenderHomeSavings_ =
+    renderHome;
+
+  renderHome =
+    function () {
+      originalRenderHomeSavings_();
+
+      addSavingsEditButton_();
+      loadCurrentSavings_();
+    };
+
+  const originalRenderReportSavings_ =
+    renderReport;
+
+  renderReport =
+    function () {
+      originalRenderReportSavings_();
+
+      loadCurrentSavings_();
+    };
+
+  setTimeout(
+    function () {
+      addSavingsEditButton_();
+      loadCurrentSavings_();
+    },
+    500
+  );
+})();
