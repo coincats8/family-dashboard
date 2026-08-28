@@ -15125,3 +15125,325 @@ loadDashboard =
     }
   );
 })();
+// =========================================================
+// 保存済み予算を全ページへ確実に反映
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.sharedBudgetDisplayRepairAdded_) {
+    return;
+  }
+
+  window.sharedBudgetDisplayRepairAdded_ =
+    true;
+
+
+  // -------------------------------------------------------
+  // 保存済み予算を専用APIから取得
+  // -------------------------------------------------------
+
+  async function loadSavedMonthlyBudget_() {
+    const result =
+      await fetchJson(
+        API_BASE +
+        "?mode=monthlyBudget" +
+        "&_=" +
+        Date.now()
+      );
+
+    if (
+      !result ||
+      result.success !== true
+    ) {
+      throw new Error(
+        result?.error ||
+        "保存済み予算を取得できません"
+      );
+    }
+
+    const budget =
+      Math.round(
+        Number(
+          result.budget
+        )
+      );
+
+    if (
+      !Number.isFinite(budget) ||
+      budget < 10000
+    ) {
+      throw new Error(
+        "保存済み予算が正しくありません"
+      );
+    }
+
+    return budget;
+  }
+
+
+  // -------------------------------------------------------
+  // 家計データへ保存済み予算を合成
+  // -------------------------------------------------------
+
+  function applySavedBudgetToData_(
+    budget
+  ) {
+    if (
+      typeof dashboardData ===
+        "undefined" ||
+      !dashboardData
+    ) {
+      return;
+    }
+
+    const living =
+      dashboardData.living || {};
+
+    const expense =
+      Number(
+        living.expense ??
+        dashboardData.expense ??
+        0
+      ) || 0;
+
+    const remaining =
+      budget - expense;
+
+    const rate =
+      budget > 0
+        ? Math.round(
+            expense /
+            budget *
+            100
+          )
+        : 0;
+
+    dashboardData.budget =
+      budget;
+
+    dashboardData.balance =
+      remaining;
+
+    dashboardData.living =
+      living;
+
+    dashboardData.living.budget =
+      budget;
+
+    dashboardData.living.expense =
+      expense;
+
+    dashboardData.living.remaining =
+      remaining;
+
+    dashboardData.living.rate =
+      rate;
+
+    // 既存の予算初期値も更新
+    if (
+      typeof SETTINGS !==
+        "undefined" &&
+      SETTINGS
+    ) {
+      SETTINGS.monthlyBudget =
+        budget;
+    }
+
+    window.dashboardData =
+      dashboardData;
+  }
+
+
+  // -------------------------------------------------------
+  // 全ページを同じ予算で再描画
+  // -------------------------------------------------------
+
+  function redrawAllPagesWithBudget_() {
+    if (
+      typeof renderHome ===
+      "function"
+    ) {
+      renderHome();
+    }
+
+    if (
+      typeof renderReport ===
+      "function"
+    ) {
+      renderReport();
+    }
+
+    if (
+      typeof saveDashboardCache ===
+      "function"
+    ) {
+      saveDashboardCache();
+    }
+
+    // 現在表示中の金額も直接更新
+    const budgetMoney =
+      document.getElementById(
+        "budgetMoney"
+      );
+
+    if (
+      budgetMoney &&
+      dashboardData?.living
+    ) {
+      budgetMoney.textContent =
+        "¥" +
+        Number(
+          dashboardData.living.budget
+        ).toLocaleString("ja-JP");
+    }
+
+    const balanceMoney =
+      document.getElementById(
+        "balanceMoney"
+      );
+
+    if (
+      balanceMoney &&
+      dashboardData?.living
+    ) {
+      balanceMoney.textContent =
+        "¥" +
+        Number(
+          dashboardData.living.remaining
+        ).toLocaleString("ja-JP");
+    }
+
+    const budgetPercent =
+      document.getElementById(
+        "budgetPercent"
+      );
+
+    if (
+      budgetPercent &&
+      dashboardData?.living
+    ) {
+      budgetPercent.textContent =
+        Math.round(
+          dashboardData.living.rate
+        ) +
+        "%";
+    }
+
+    const progressBar =
+      document.getElementById(
+        "progressBar"
+      );
+
+    if (
+      progressBar &&
+      dashboardData?.living
+    ) {
+      progressBar.style.width =
+        Math.min(
+          100,
+          Math.max(
+            0,
+            dashboardData.living.rate
+          )
+        ) +
+        "%";
+    }
+  }
+
+
+  // -------------------------------------------------------
+  // 保存済み予算を同期
+  // -------------------------------------------------------
+
+  async function synchronizeSavedBudget_() {
+    try {
+      const budget =
+        await loadSavedMonthlyBudget_();
+
+      applySavedBudgetToData_(
+        budget
+      );
+
+      redrawAllPagesWithBudget_();
+
+      return budget;
+    }
+    catch (error) {
+      console.error(
+        "共有予算取得エラー:",
+        error
+      );
+
+      return null;
+    }
+  }
+
+
+  // -------------------------------------------------------
+  // 通常の家計データ取得後に必ず予算を合成
+  // -------------------------------------------------------
+
+  if (
+    typeof loadDashboard ===
+    "function"
+  ) {
+    const loadDashboardBeforeBudgetRepair_ =
+      loadDashboard;
+
+    loadDashboard =
+      async function() {
+        await loadDashboardBeforeBudgetRepair_();
+
+        await synchronizeSavedBudget_();
+
+        return dashboardData;
+      };
+  }
+
+
+  // 初回表示にも反映
+  setTimeout(
+    synchronizeSavedBudget_,
+    300
+  );
+
+  setTimeout(
+    synchronizeSavedBudget_,
+    1500
+  );
+
+
+  // ページ移動時にも同じ予算を反映
+  window.addEventListener(
+    "hashchange",
+    function() {
+      setTimeout(
+        synchronizeSavedBudget_,
+        200
+      );
+    }
+  );
+
+
+  // 更新ボタンを押した後にも同期
+  document.addEventListener(
+    "click",
+    function(event) {
+      const refreshButton =
+        event.target.closest(
+          "#notificationButton"
+        );
+
+      if (refreshButton) {
+        setTimeout(
+          synchronizeSavedBudget_,
+          1000
+        );
+      }
+    },
+    true
+  );
+})();
