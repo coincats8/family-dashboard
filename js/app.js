@@ -10985,3 +10985,95 @@ loadDashboard =
     3500
   );
 })();
+// =========================================================
+// 生活費内訳：金額を右寄せして位置を統一
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    document.getElementById(
+      "categoryAmountAlignmentStyle"
+    )
+  ) {
+    return;
+  }
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.id =
+    "categoryAmountAlignmentStyle";
+
+  style.textContent = `
+    #categoryList .category-top {
+      display: grid !important;
+      grid-template-columns:
+        minmax(0, 1fr)
+        minmax(145px, auto)
+        14px !important;
+      column-gap: 7px !important;
+      align-items: center !important;
+      width: 100% !important;
+    }
+
+    #categoryList .category-name {
+      min-width: 0 !important;
+      text-align: left !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+
+    #categoryList .category-amount {
+      min-width: 145px !important;
+      margin: 0 !important;
+      text-align: right !important;
+      justify-self: end !important;
+      white-space: nowrap !important;
+      font-variant-numeric:
+        tabular-nums !important;
+      letter-spacing: 0 !important;
+    }
+
+    #categoryList
+    .category-item.is-report-link
+    .category-top::after {
+      display: block !important;
+      width: 14px !important;
+      margin: 0 !important;
+      text-align: right !important;
+      justify-self: end !important;
+    }
+
+    #categoryList .category-remaining {
+      width: 100% !important;
+      text-align: right !important;
+      font-variant-numeric:
+        tabular-nums !important;
+    }
+
+    @media (max-width: 390px) {
+      #categoryList .category-top {
+        grid-template-columns:
+          minmax(0, 1fr)
+          minmax(130px, auto)
+          12px !important;
+        column-gap: 5px !important;
+      }
+
+      #categoryList .category-amount {
+        min-width: 130px !important;
+        font-size: 12px !important;
+      }
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+})();
