@@ -11592,3 +11592,57 @@ loadDashboard =
     500
   );
 })();
+// =========================================================
+// レポート画面はカテゴリ別支出だけ表示
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    document.getElementById(
+      "reportSimpleDisplayStyle"
+    )
+  ) {
+    return;
+  }
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.id =
+    "reportSimpleDisplayStyle";
+
+  style.textContent = `
+    /* 今月の分析 */
+    #page-report .report-title,
+    #page-report .page-section-title.report-title {
+      display: none !important;
+    }
+
+    /* 今月の生活費 */
+    #page-report .report-hero,
+    #page-report .report-home-budget-card {
+      display: none !important;
+    }
+
+    /* 予算・残り・使用率・現在の貯蓄 */
+    #page-report .report-grid,
+    #page-report .report-grid-home-style,
+    #page-report .report-home-saving-card {
+      display: none !important;
+    }
+
+    /* カテゴリ別支出を上へ移動 */
+    #page-report > .card {
+      margin-top: 8px !important;
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+})();
