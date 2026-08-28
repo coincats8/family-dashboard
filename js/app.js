@@ -10741,3 +10741,247 @@ loadDashboard =
     500
   );
 })();
+// =========================================================
+// 現在の貯蓄：更新後に0円へ戻る問題を修正
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    window.savingsPersistenceV2Added_
+  ) {
+    return;
+  }
+
+  window.savingsPersistenceV2Added_ =
+    true;
+
+  let manualSavingsAmountV2_ =
+    null;
+
+  let savingsRequestRunningV2_ =
+    false;
+
+  function displaySavingsV2_(
+    amount
+  ) {
+    const fixedAmount =
+      Math.max(
+        0,
+        Math.round(
+          Number(amount) || 0
+        )
+      );
+
+    manualSavingsAmountV2_ =
+      fixedAmount;
+
+    if (
+      typeof dashboardData !==
+      "undefined" &&
+      dashboardData
+    ) {
+      if (
+        !dashboardData.saving
+      ) {
+        dashboardData.saving = {};
+      }
+
+      dashboardData.saving.current =
+        fixedAmount;
+
+      dashboardData.saving.actual =
+        fixedAmount;
+    }
+
+    const formatted =
+      "¥" +
+      fixedAmount.toLocaleString(
+        "ja-JP"
+      );
+
+    const homeAmount =
+      document.getElementById(
+        "savingActual"
+      );
+
+    if (homeAmount) {
+      homeAmount.textContent =
+        formatted;
+    }
+
+    const reportAmount =
+      document.getElementById(
+        "reportSaving"
+      );
+
+    if (reportAmount) {
+      reportAmount.textContent =
+        formatted;
+    }
+  }
+
+  async function reloadSavingsV2_() {
+    if (
+      savingsRequestRunningV2_
+    ) {
+      return;
+    }
+
+    savingsRequestRunningV2_ =
+      true;
+
+    try {
+      const response =
+        await fetch(
+          API_BASE +
+          "?action=getCurrentSavings" +
+          "&_=" +
+          Date.now(),
+          {
+            method:
+              "GET",
+            cache:
+              "no-store"
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (
+        result &&
+        result.success === true &&
+        result.hasManualValue === true
+      ) {
+        displaySavingsV2_(
+          result.amount
+        );
+      }
+    }
+    catch (error) {
+      console.warn(
+        "貯蓄額の再取得:",
+        error
+      );
+    }
+    finally {
+      savingsRequestRunningV2_ =
+        false;
+    }
+  }
+
+  // ホームが再表示されても手動金額を維持
+  const renderHomeBeforeSavingsV2_ =
+    renderHome;
+
+  renderHome =
+    function () {
+      renderHomeBeforeSavingsV2_();
+
+      if (
+        manualSavingsAmountV2_ !==
+        null
+      ) {
+        displaySavingsV2_(
+          manualSavingsAmountV2_
+        );
+      }
+      else {
+        reloadSavingsV2_();
+      }
+    };
+
+  // レポートでも同じ金額を維持
+  const renderReportBeforeSavingsV2_ =
+    renderReport;
+
+  renderReport =
+    function () {
+      renderReportBeforeSavingsV2_();
+
+      if (
+        manualSavingsAmountV2_ !==
+        null
+      ) {
+        displaySavingsV2_(
+          manualSavingsAmountV2_
+        );
+      }
+      else {
+        reloadSavingsV2_();
+      }
+    };
+
+  // 貯蓄の保存通信を監視して保存後の金額を保持
+  const fetchBeforeSavingsV2_ =
+    window.fetch.bind(
+      window
+    );
+
+  window.fetch =
+    async function(
+      input,
+      options
+    ) {
+      const response =
+        await fetchBeforeSavingsV2_(
+          input,
+          options
+        );
+
+      const url =
+        typeof input ===
+        "string"
+          ? input
+          : String(
+              input?.url || ""
+            );
+
+      if (
+        url.includes(
+          "action=saveCurrentSavings"
+        )
+      ) {
+        try {
+          const copy =
+            response.clone();
+
+          const result =
+            await copy.json();
+
+          if (
+            result &&
+            result.success === true
+          ) {
+            displaySavingsV2_(
+              result.amount
+            );
+          }
+        }
+        catch (error) {
+          console.warn(
+            "貯蓄保存結果:",
+            error
+          );
+        }
+      }
+
+      return response;
+    };
+
+  // 起動時とデータ読込後に再確認
+  reloadSavingsV2_();
+
+  setTimeout(
+    reloadSavingsV2_,
+    1500
+  );
+
+  setTimeout(
+    reloadSavingsV2_,
+    3500
+  );
+})();
