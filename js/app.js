@@ -11646,3 +11646,1107 @@ loadDashboard =
     style
   );
 })();
+// =========================================================
+// 設定画面を夫婦共有の買い物メモへ変更
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    window.shoppingMemoPageAdded_
+  ) {
+    return;
+  }
+
+  window.shoppingMemoPageAdded_ =
+    true;
+
+  let shoppingMemoItems_ = [];
+  let shoppingMemoLoading_ = false;
+  let shoppingMemoBuilt_ = false;
+
+  function shoppingEscape_(
+    value
+  ) {
+    return String(
+      value || ""
+    )
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function addShoppingMemoStyles_() {
+    if (
+      document.getElementById(
+        "shoppingMemoPageStyles"
+      )
+    ) {
+      return;
+    }
+
+    const style =
+      document.createElement(
+        "style"
+      );
+
+    style.id =
+      "shoppingMemoPageStyles";
+
+    style.textContent = `
+      #page-settings .shopping-memo-title {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 18px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #e4eae6;
+      }
+
+      #page-settings .shopping-memo-title-icon {
+        display: grid;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        flex: 0 0 48px;
+        border-radius: 16px;
+        background: #e1f9e8;
+        color: #20bd50;
+      }
+
+      #page-settings .shopping-memo-title-icon span {
+        font-size: 27px;
+      }
+
+      #page-settings .shopping-memo-title small {
+        display: block;
+        margin-bottom: 3px;
+        color: #8b938e;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 1.2px;
+      }
+
+      #page-settings .shopping-memo-title strong {
+        display: block;
+        color: #171a18;
+        font-size: 18px;
+      }
+
+      #page-settings .shopping-input-card {
+        box-sizing: border-box;
+        margin-bottom: 16px;
+        padding: 20px;
+        border: 1px solid #e8ede9;
+        border-radius: 25px;
+        background:
+          linear-gradient(
+            135deg,
+            #ffffff,
+            #f5fff7
+          );
+        box-shadow:
+          0 14px 30px
+          rgba(39, 74, 51, 0.07);
+      }
+
+      #page-settings .shopping-input-card h3 {
+        margin: 0 0 5px;
+        color: #171a18;
+        font-size: 17px;
+      }
+
+      #page-settings .shopping-input-card p {
+        margin: 0 0 15px;
+        color: #8d9690;
+        font-size: 11px;
+        line-height: 1.6;
+      }
+
+      #page-settings .shopping-input-row {
+        display: grid;
+        grid-template-columns:
+          minmax(0, 1fr)
+          auto;
+        gap: 9px;
+      }
+
+      #page-settings #shoppingMemoInput {
+        box-sizing: border-box;
+        width: 100%;
+        height: 49px;
+        min-width: 0;
+        padding: 0 15px;
+        border: 1px solid #dfe7e1;
+        border-radius: 15px;
+        outline: none;
+        background: #ffffff;
+        color: #171a18;
+        font-size: 16px;
+      }
+
+      #page-settings #shoppingMemoInput:focus {
+        border-color: #38c866;
+        box-shadow:
+          0 0 0 3px
+          rgba(56, 200, 102, 0.12);
+      }
+
+      #page-settings #shoppingMemoAddButton {
+        height: 49px;
+        padding: 0 18px;
+        border: 0;
+        border-radius: 15px;
+        background:
+          linear-gradient(
+            135deg,
+            #24bf55,
+            #48d473
+          );
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      #page-settings #shoppingMemoAddButton:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+
+      #page-settings .shopping-list-card {
+        overflow: hidden;
+        border: 1px solid #e8ede9;
+        border-radius: 25px;
+        background: #ffffff;
+        box-shadow:
+          0 14px 30px
+          rgba(39, 74, 51, 0.07);
+      }
+
+      #page-settings .shopping-list-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 17px 19px;
+        border-bottom: 1px solid #edf1ee;
+      }
+
+      #page-settings .shopping-list-heading strong {
+        color: #171a18;
+        font-size: 15px;
+      }
+
+      #page-settings .shopping-list-heading span {
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: #e6f9eb;
+        color: #22a94d;
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      #page-settings .shopping-empty {
+        padding: 42px 20px;
+        text-align: center;
+        color: #929b95;
+      }
+
+      #page-settings .shopping-empty-icon {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 35px;
+      }
+
+      #page-settings .shopping-empty strong {
+        display: block;
+        margin-bottom: 5px;
+        color: #59615c;
+        font-size: 14px;
+      }
+
+      #page-settings .shopping-empty p {
+        margin: 0;
+        font-size: 11px;
+      }
+
+      #page-settings .shopping-item {
+        display: grid;
+        grid-template-columns:
+          35px
+          minmax(0, 1fr)
+          34px;
+        gap: 10px;
+        align-items: center;
+        min-height: 62px;
+        padding: 9px 15px;
+        border-bottom: 1px solid #edf1ee;
+      }
+
+      #page-settings .shopping-item:last-child {
+        border-bottom: 0;
+      }
+
+      #page-settings .shopping-check {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 31px;
+        height: 31px;
+        padding: 0;
+        border: 2px solid #cfd8d1;
+        border-radius: 11px;
+        background: #ffffff;
+        color: transparent;
+        cursor: pointer;
+      }
+
+      #page-settings .shopping-check span {
+        font-size: 20px;
+      }
+
+      #page-settings
+      .shopping-item.is-completed
+      .shopping-check {
+        border-color: #2fc65e;
+        background: #2fc65e;
+        color: #ffffff;
+      }
+
+      #page-settings .shopping-item-text {
+        min-width: 0;
+        color: #171a18;
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+
+      #page-settings
+      .shopping-item.is-completed
+      .shopping-item-text {
+        color: #9ba39e;
+        text-decoration: line-through;
+      }
+
+      #page-settings .shopping-delete {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: 0;
+        border-radius: 11px;
+        background: #f6f7f6;
+        color: #9ba39e;
+        cursor: pointer;
+      }
+
+      #page-settings .shopping-delete span {
+        font-size: 19px;
+      }
+
+      #page-settings .shopping-completed-title {
+        padding: 11px 17px;
+        background: #f8faf8;
+        color: #929a95;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.8px;
+      }
+
+      #page-settings .shopping-memo-actions {
+        display: flex;
+        justify-content: center;
+        padding: 15px;
+        border-top: 1px solid #edf1ee;
+      }
+
+      #page-settings #shoppingClearCompletedButton {
+        padding: 10px 15px;
+        border: 0;
+        border-radius: 13px;
+        background: #f4f6f4;
+        color: #747c77;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      #page-settings .shopping-refresh {
+        display: flex;
+        justify-content: center;
+        margin-top: 13px;
+      }
+
+      #page-settings #shoppingRefreshButton {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+        padding: 9px 14px;
+        border: 0;
+        border-radius: 13px;
+        background: transparent;
+        color: #5f6b63;
+        font-size: 11px;
+        cursor: pointer;
+      }
+
+      #page-settings #shoppingRefreshButton span {
+        font-size: 18px;
+      }
+    `;
+
+    document.head.appendChild(
+      style
+    );
+  }
+
+  function buildShoppingMemoPage_() {
+    const page =
+      document.getElementById(
+        "page-settings"
+      );
+
+    if (!page) {
+      return;
+    }
+
+    addShoppingMemoStyles_();
+
+    page.innerHTML = `
+      <div class="shopping-memo-title">
+
+        <div class="shopping-memo-title-icon">
+          <span class="material-symbols-rounded">
+            edit_note
+          </span>
+        </div>
+
+        <div>
+          <small>SHOPPING LIST</small>
+          <strong>買い物メモ</strong>
+        </div>
+
+      </div>
+
+      <section class="shopping-input-card">
+
+        <h3>買うものを追加</h3>
+
+        <p>
+          1品ずつ入力してください。数量も一緒に書けます。
+        </p>
+
+        <div class="shopping-input-row">
+
+          <input
+            type="text"
+            id="shoppingMemoInput"
+            maxlength="80"
+            autocomplete="off"
+            placeholder="例：牛乳 2本"
+          >
+
+          <button
+            type="button"
+            id="shoppingMemoAddButton"
+          >
+            追加
+          </button>
+
+        </div>
+
+      </section>
+
+      <section class="shopping-list-card">
+
+        <div class="shopping-list-heading">
+
+          <strong>買い物リスト</strong>
+
+          <span id="shoppingMemoCount">
+            未購入 0品
+          </span>
+
+        </div>
+
+        <div id="shoppingMemoList">
+
+          <div class="shopping-empty">
+            読み込み中…
+          </div>
+
+        </div>
+
+      </section>
+
+      <div class="shopping-refresh">
+
+        <button
+          type="button"
+          id="shoppingRefreshButton"
+        >
+          <span class="material-symbols-rounded">
+            refresh
+          </span>
+
+          最新の状態に更新
+        </button>
+
+      </div>
+    `;
+
+    const input =
+      document.getElementById(
+        "shoppingMemoInput"
+      );
+
+    const addButton =
+      document.getElementById(
+        "shoppingMemoAddButton"
+      );
+
+    const refreshButton =
+      document.getElementById(
+        "shoppingRefreshButton"
+      );
+
+    if (addButton) {
+      addButton.addEventListener(
+        "click",
+        addShoppingMemoItem_
+      );
+    }
+
+    if (input) {
+      input.addEventListener(
+        "keydown",
+        function(event) {
+          if (
+            event.key === "Enter"
+          ) {
+            event.preventDefault();
+            addShoppingMemoItem_();
+          }
+        }
+      );
+    }
+
+    if (refreshButton) {
+      refreshButton.addEventListener(
+        "click",
+        loadShoppingMemo_
+      );
+    }
+
+    shoppingMemoBuilt_ = true;
+  }
+
+  async function shoppingMemoRequest_(
+    action,
+    parameters
+  ) {
+    const query =
+      new URLSearchParams();
+
+    query.set(
+      "action",
+      action
+    );
+
+    Object.entries(
+      parameters || {}
+    ).forEach(
+      function(entry) {
+        query.set(
+          entry[0],
+          String(entry[1])
+        );
+      }
+    );
+
+    query.set(
+      "_",
+      String(
+        Date.now()
+      )
+    );
+
+    const response =
+      await fetch(
+        API_BASE +
+        "?" +
+        query.toString(),
+        {
+          method:
+            "GET",
+          cache:
+            "no-store"
+        }
+      );
+
+    const result =
+      await response.json();
+
+    if (
+      !result ||
+      result.success !== true
+    ) {
+      throw new Error(
+        result?.error ||
+        "買い物メモを保存できませんでした"
+      );
+    }
+
+    return result;
+  }
+
+  async function loadShoppingMemo_() {
+    if (
+      shoppingMemoLoading_
+    ) {
+      return;
+    }
+
+    shoppingMemoLoading_ =
+      true;
+
+    try {
+      const result =
+        await shoppingMemoRequest_(
+          "getShoppingMemo"
+        );
+
+      shoppingMemoItems_ =
+        Array.isArray(
+          result.items
+        )
+          ? result.items
+          : [];
+
+      renderShoppingMemo_();
+    }
+    catch (error) {
+      const list =
+        document.getElementById(
+          "shoppingMemoList"
+        );
+
+      if (list) {
+        list.innerHTML = `
+          <div class="shopping-empty">
+            <strong>読み込めませんでした</strong>
+            <p>
+              ${shoppingEscape_(
+                error.message ||
+                error
+              )}
+            </p>
+          </div>
+        `;
+      }
+    }
+    finally {
+      shoppingMemoLoading_ =
+        false;
+    }
+  }
+
+  async function addShoppingMemoItem_() {
+    const input =
+      document.getElementById(
+        "shoppingMemoInput"
+      );
+
+    const button =
+      document.getElementById(
+        "shoppingMemoAddButton"
+      );
+
+    if (!input) {
+      return;
+    }
+
+    const text =
+      input.value
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (!text) {
+      input.focus();
+      return;
+    }
+
+    if (button) {
+      button.disabled = true;
+      button.textContent =
+        "追加中…";
+    }
+
+    try {
+      const result =
+        await shoppingMemoRequest_(
+          "addShoppingMemo",
+          {
+            text:
+              text
+          }
+        );
+
+      shoppingMemoItems_ =
+        result.items || [];
+
+      input.value = "";
+
+      renderShoppingMemo_();
+      input.focus();
+    }
+    catch (error) {
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          String(
+            error.message ||
+            error
+          )
+        );
+      }
+    }
+    finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent =
+          "追加";
+      }
+    }
+  }
+
+  async function toggleShoppingMemoItem_(
+    id,
+    completed
+  ) {
+    try {
+      const result =
+        await shoppingMemoRequest_(
+          "toggleShoppingMemo",
+          {
+            id:
+              id,
+            completed:
+              completed
+          }
+        );
+
+      shoppingMemoItems_ =
+        result.items || [];
+
+      renderShoppingMemo_();
+    }
+    catch (error) {
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          String(
+            error.message ||
+            error
+          )
+        );
+      }
+    }
+  }
+
+  async function deleteShoppingMemoItem_(
+    id
+  ) {
+    try {
+      const result =
+        await shoppingMemoRequest_(
+          "deleteShoppingMemo",
+          {
+            id:
+              id
+          }
+        );
+
+      shoppingMemoItems_ =
+        result.items || [];
+
+      renderShoppingMemo_();
+    }
+    catch (error) {
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          String(
+            error.message ||
+            error
+          )
+        );
+      }
+    }
+  }
+
+  async function clearCompletedShoppingMemo_() {
+    try {
+      const result =
+        await shoppingMemoRequest_(
+          "clearCompletedShoppingMemo"
+        );
+
+      shoppingMemoItems_ =
+        result.items || [];
+
+      renderShoppingMemo_();
+    }
+    catch (error) {
+      if (
+        typeof showToast ===
+        "function"
+      ) {
+        showToast(
+          String(
+            error.message ||
+            error
+          )
+        );
+      }
+    }
+  }
+
+  function renderShoppingMemo_() {
+    const list =
+      document.getElementById(
+        "shoppingMemoList"
+      );
+
+    const count =
+      document.getElementById(
+        "shoppingMemoCount"
+      );
+
+    if (!list) {
+      return;
+    }
+
+    const activeItems =
+      shoppingMemoItems_
+        .filter(
+          function(item) {
+            return (
+              item.completed !==
+              true
+            );
+          }
+        );
+
+    const completedItems =
+      shoppingMemoItems_
+        .filter(
+          function(item) {
+            return (
+              item.completed ===
+              true
+            );
+          }
+        );
+
+    if (count) {
+      count.textContent =
+        "未購入 " +
+        activeItems.length +
+        "品";
+    }
+
+    if (
+      shoppingMemoItems_.length === 0
+    ) {
+      list.innerHTML = `
+        <div class="shopping-empty">
+
+          <span class="shopping-empty-icon">
+            🛒
+          </span>
+
+          <strong>
+            買い物メモは空です
+          </strong>
+
+          <p>
+            上の欄から1品ずつ追加できます
+          </p>
+
+        </div>
+      `;
+
+      return;
+    }
+
+    function itemHtml_(
+      item
+    ) {
+      return `
+        <div
+          class="
+            shopping-item
+            ${
+              item.completed
+                ? "is-completed"
+                : ""
+            }
+          "
+        >
+
+          <button
+            type="button"
+            class="shopping-check"
+            data-shopping-toggle="${shoppingEscape_(
+              item.id
+            )}"
+            data-shopping-completed="${
+              item.completed
+                ? "true"
+                : "false"
+            }"
+            aria-label="購入状態を変更"
+          >
+            <span class="material-symbols-rounded">
+              check
+            </span>
+          </button>
+
+          <div class="shopping-item-text">
+            ${shoppingEscape_(
+              item.text
+            )}
+          </div>
+
+          <button
+            type="button"
+            class="shopping-delete"
+            data-shopping-delete="${shoppingEscape_(
+              item.id
+            )}"
+            aria-label="削除"
+          >
+            <span class="material-symbols-rounded">
+              close
+            </span>
+          </button>
+
+        </div>
+      `;
+    }
+
+    let html =
+      activeItems
+        .map(
+          itemHtml_
+        )
+        .join("");
+
+    if (
+      completedItems.length > 0
+    ) {
+      html += `
+        <div class="shopping-completed-title">
+          購入済み
+        </div>
+      `;
+
+      html +=
+        completedItems
+          .map(
+            itemHtml_
+          )
+          .join("");
+
+      html += `
+        <div class="shopping-memo-actions">
+
+          <button
+            type="button"
+            id="shoppingClearCompletedButton"
+          >
+            購入済みをまとめて削除
+          </button>
+
+        </div>
+      `;
+    }
+
+    list.innerHTML =
+      html;
+
+    list
+      .querySelectorAll(
+        "[data-shopping-toggle]"
+      )
+      .forEach(
+        function(button) {
+          button.addEventListener(
+            "click",
+            function() {
+              toggleShoppingMemoItem_(
+                button.dataset
+                  .shoppingToggle,
+                button.dataset
+                  .shoppingCompleted !==
+                  "true"
+              );
+            }
+          );
+        }
+      );
+
+    list
+      .querySelectorAll(
+        "[data-shopping-delete]"
+      )
+      .forEach(
+        function(button) {
+          button.addEventListener(
+            "click",
+            function() {
+              deleteShoppingMemoItem_(
+                button.dataset
+                  .shoppingDelete
+              );
+            }
+          );
+        }
+      );
+
+    const clearButton =
+      document.getElementById(
+        "shoppingClearCompletedButton"
+      );
+
+    if (clearButton) {
+      clearButton.addEventListener(
+        "click",
+        clearCompletedShoppingMemo_
+      );
+    }
+  }
+
+  function updateShoppingMemoLabels_() {
+    const navButton =
+      document.querySelector(
+        '.nav-button[data-page="settings"]'
+      );
+
+    if (navButton) {
+      const icon =
+        navButton.querySelector(
+          ".material-symbols-rounded"
+        );
+
+      const label =
+        navButton.querySelector(
+          ".nav-label"
+        );
+
+      if (icon) {
+        icon.textContent =
+          "edit_note";
+      }
+
+      if (label) {
+        label.textContent =
+          "メモ";
+      }
+    }
+
+    if (
+      typeof currentPage !==
+        "undefined" &&
+      currentPage ===
+        "settings"
+    ) {
+      const kicker =
+        document.getElementById(
+          "pageKicker"
+        );
+
+      const title =
+        document.getElementById(
+          "pageTitle"
+        );
+
+      const month =
+        document.getElementById(
+          "currentMonth"
+        );
+
+      if (kicker) {
+        kicker.textContent =
+          "📝 SHOPPING MEMO";
+      }
+
+      if (title) {
+        title.textContent =
+          "メモ";
+      }
+
+      if (month) {
+        month.textContent =
+          "ふたりの買い物リスト";
+      }
+    }
+  }
+
+  const updatePageHeaderBeforeMemo_ =
+    updatePageHeader;
+
+  updatePageHeader =
+    function () {
+      updatePageHeaderBeforeMemo_();
+      updateShoppingMemoLabels_();
+    };
+
+  const switchPageBeforeMemo_ =
+    switchPage;
+
+  switchPage =
+    async function(page) {
+      await switchPageBeforeMemo_(
+        page
+      );
+
+      updateShoppingMemoLabels_();
+
+      if (
+        page === "settings"
+      ) {
+        if (!shoppingMemoBuilt_) {
+          buildShoppingMemoPage_();
+        }
+
+        await loadShoppingMemo_();
+
+        const input =
+          document.getElementById(
+            "shoppingMemoInput"
+          );
+
+        if (input) {
+          input.focus();
+        }
+      }
+    };
+
+  buildShoppingMemoPage_();
+  updateShoppingMemoLabels_();
+})();
