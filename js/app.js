@@ -15863,3 +15863,136 @@ loadDashboard =
     }
   );
 })();
+// =========================================================
+// カテゴリ予算の鉛筆をカテゴリ名の右側へ移動
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.categoryBudgetButtonPositionAdded_) {
+    return;
+  }
+
+  window.categoryBudgetButtonPositionAdded_ =
+    true;
+
+
+  function moveCategoryBudgetButtons_() {
+    document
+      .querySelectorAll(
+        "#categoryList .category-item"
+      )
+      .forEach(
+        function(row) {
+          const name =
+            row.querySelector(
+              ".category-name"
+            );
+
+          const button =
+            row.querySelector(
+              ".category-budget-edit"
+            );
+
+          if (
+            !name ||
+            !button
+          ) {
+            return;
+          }
+
+          // カテゴリ名の直後へ鉛筆を移動
+          name.insertAdjacentElement(
+            "afterend",
+            button
+          );
+        }
+      );
+  }
+
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.textContent = `
+    #categoryList .category-top {
+      display: flex !important;
+      align-items: center !important;
+      width: 100% !important;
+    }
+
+    #categoryList .category-name {
+      flex: 0 1 auto !important;
+      min-width: 0 !important;
+      margin-right: 0 !important;
+    }
+
+    #categoryList .category-budget-edit {
+      flex: 0 0 25px !important;
+      margin-right: 10px !important;
+      margin-left: 6px !important;
+    }
+
+    #categoryList .category-amount {
+      margin-right: 7px !important;
+      margin-left: auto !important;
+      white-space: nowrap !important;
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+
+
+  setTimeout(
+    moveCategoryBudgetButtons_,
+    200
+  );
+
+  setTimeout(
+    moveCategoryBudgetButtons_,
+    1000
+  );
+
+
+  const observer =
+    new MutationObserver(
+      function() {
+        setTimeout(
+          moveCategoryBudgetButtons_,
+          50
+        );
+      }
+    );
+
+  const categoryList =
+    document.getElementById(
+      "categoryList"
+    );
+
+  if (categoryList) {
+    observer.observe(
+      categoryList,
+      {
+        childList: true,
+        subtree: true
+      }
+    );
+  }
+
+
+  window.addEventListener(
+    "hashchange",
+    function() {
+      setTimeout(
+        moveCategoryBudgetButtons_,
+        200
+      );
+    }
+  );
+})();
