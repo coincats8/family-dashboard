@@ -14069,3 +14069,463 @@ loadDashboard =
     3000
   );
 })();
+// =========================================================
+// AI助言の読み込み修正＋鈴を更新ボタンへ変更
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.aiAdviceRefreshRepairAdded_) {
+    return;
+  }
+
+  window.aiAdviceRefreshRepairAdded_ =
+    true;
+
+
+  function adviceNumber_(value) {
+    const number =
+      Number(
+        String(value ?? 0)
+          .replace(/,/g, "")
+          .replace(/[¥￥円]/g, "")
+      );
+
+    return Number.isFinite(number)
+      ? number
+      : 0;
+  }
+
+
+  function adviceYen_(value) {
+    return (
+      "¥" +
+      Math.round(
+        adviceNumber_(value)
+      ).toLocaleString("ja-JP")
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // 家計データを正しい場所から取得
+  // -------------------------------------------------------
+
+  function getAdviceDashboard_() {
+    if (
+      typeof dashboardData !==
+        "undefined" &&
+      dashboardData
+    ) {
+      // 前回のコードでも取得できるように同期
+      window.dashboardData =
+        dashboardData;
+
+      return dashboardData;
+    }
+
+    return null;
+  }
+
+
+  // -------------------------------------------------------
+  // 短い現状・買い物アドバイスを作成
+  // -------------------------------------------------------
+
+  function createWorkingAdvice_() {
+    const data =
+      getAdviceDashboard_();
+
+    if (!data) {
+      return "更新ボタンで家計を取得してください";
+    }
+
+    const living =
+      data.living || {};
+
+    const budget =
+      adviceNumber_(
+        living.budget ??
+        data.budget ??
+        250000
+      );
+
+    const expense =
+      adviceNumber_(
+        living.expense ??
+        data.expense ??
+        0
+      );
+
+    const remaining =
+      adviceNumber_(
+        living.remaining ??
+        data.balance ??
+        (
+          budget -
+          expense
+        )
+      );
+
+    const rate =
+      budget > 0
+        ? Math.round(
+            expense /
+            budget *
+            100
+          )
+        : 0;
+
+    const categories =
+      Array.isArray(
+        data.categories
+      )
+        ? data.categories
+        : [];
+
+    const topCategory =
+      categories
+        .filter(
+          function(category) {
+            const name =
+              String(
+                category.name || ""
+              );
+
+            return (
+              name.indexOf("家賃") === -1 &&
+              name.indexOf("賃料") === -1 &&
+              adviceNumber_(
+                category.amount
+              ) > 0
+            );
+          }
+        )
+        .sort(
+          function(a, b) {
+            return (
+              adviceNumber_(
+                b.amount
+              ) -
+              adviceNumber_(
+                a.amount
+              )
+            );
+          }
+        )[0];
+
+    if (remaining < 0) {
+      return (
+        "予算を" +
+        adviceYen_(
+          Math.abs(remaining)
+        ) +
+        "超過。買い物を控えて"
+      );
+    }
+
+    if (rate >= 90) {
+      return (
+        "残り" +
+        adviceYen_(remaining) +
+        "。必要品だけ購入"
+      );
+    }
+
+    if (rate >= 75) {
+      return (
+        "残り" +
+        adviceYen_(remaining) +
+        "。まとめ買いは慎重に"
+      );
+    }
+
+    if (topCategory) {
+      const categoryName =
+        String(
+          topCategory.name || "支出"
+        )
+          .replace(
+            /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu,
+            ""
+          )
+          .trim();
+
+      return (
+        categoryName +
+        "が多め。残り" +
+        adviceYen_(remaining)
+      );
+    }
+
+    if (expense === 0) {
+      return "今月の支出はまだありません";
+    }
+
+    return (
+      "使用率" +
+      rate +
+      "％。残り" +
+      adviceYen_(remaining)
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // AI欄を更新
+  // -------------------------------------------------------
+
+  function updateWorkingAdvice_() {
+    const advice =
+      document.getElementById(
+        "homeAiSummaryAdvice"
+      );
+
+    if (!advice) {
+      return;
+    }
+
+    const text =
+      createWorkingAdvice_();
+
+    if (
+      advice.textContent !== text
+    ) {
+      advice.textContent =
+        text;
+    }
+  }
+
+
+  // -------------------------------------------------------
+  // 鈴を更新ボタンへ変更
+  // -------------------------------------------------------
+
+  function changeBellToRefresh_() {
+    const button =
+      document.getElementById(
+        "notificationButton"
+      );
+
+    if (!button) {
+      return;
+    }
+
+    button.setAttribute(
+      "aria-label",
+      "最新データに更新"
+    );
+
+    button.setAttribute(
+      "title",
+      "最新データに更新"
+    );
+
+    button.classList.add(
+      "family-refresh-button"
+    );
+
+    let icon =
+      button.querySelector(
+        ".material-symbols-rounded"
+      );
+
+    if (!icon) {
+      icon =
+        document.createElement(
+          "span"
+        );
+
+      icon.className =
+        "material-symbols-rounded";
+
+      button.innerHTML = "";
+
+      button.appendChild(icon);
+    }
+
+    icon.textContent =
+      "refresh";
+
+    if (
+      button.dataset.refreshRepairAdded ===
+      "true"
+    ) {
+      return;
+    }
+
+    button.dataset.refreshRepairAdded =
+      "true";
+
+    // 元の鈴ボタン処理より先に実行
+    button.addEventListener(
+      "click",
+      async function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        if (
+          button.classList.contains(
+            "is-refreshing"
+          )
+        ) {
+          return;
+        }
+
+        button.classList.add(
+          "is-refreshing"
+        );
+
+        icon.textContent =
+          "progress_activity";
+
+        const advice =
+          document.getElementById(
+            "homeAiSummaryAdvice"
+          );
+
+        if (advice) {
+          advice.textContent =
+            "最新データを確認中";
+        }
+
+        try {
+          if (
+            typeof loadDashboard ===
+            "function"
+          ) {
+            await loadDashboard();
+          }
+
+          getAdviceDashboard_();
+          updateWorkingAdvice_();
+
+          if (
+            typeof showToast ===
+            "function"
+          ) {
+            showToast(
+              "最新データに更新しました"
+            );
+          }
+        }
+        catch (error) {
+          console.error(
+            "家計更新エラー:",
+            error
+          );
+
+          if (advice) {
+            advice.textContent =
+              "更新できませんでした";
+          }
+
+          if (
+            typeof showToast ===
+            "function"
+          ) {
+            showToast(
+              "更新できませんでした"
+            );
+          }
+        }
+        finally {
+          button.classList.remove(
+            "is-refreshing"
+          );
+
+          icon.textContent =
+            "refresh";
+        }
+      },
+      true
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // 画面へ反映
+  // -------------------------------------------------------
+
+  function applyAdviceRefreshRepair_() {
+    getAdviceDashboard_();
+    changeBellToRefresh_();
+    updateWorkingAdvice_();
+  }
+
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.textContent = `
+    .family-refresh-button {
+      cursor: pointer !important;
+    }
+
+    .family-refresh-button
+    .material-symbols-rounded {
+      transition:
+        transform 0.25s ease !important;
+    }
+
+    .family-refresh-button.is-refreshing
+    .material-symbols-rounded {
+      animation:
+        family-refresh-spin
+        0.8s linear infinite !important;
+    }
+
+    @keyframes family-refresh-spin {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+
+
+  setTimeout(
+    applyAdviceRefreshRepair_,
+    100
+  );
+
+  setTimeout(
+    applyAdviceRefreshRepair_,
+    700
+  );
+
+  setTimeout(
+    applyAdviceRefreshRepair_,
+    1800
+  );
+
+
+  // データ取得後もAI助言を更新
+  setInterval(
+    applyAdviceRefreshRepair_,
+    1000
+  );
+
+
+  window.addEventListener(
+    "hashchange",
+    function() {
+      setTimeout(
+        applyAdviceRefreshRepair_,
+        100
+      );
+    }
+  );
+})();
