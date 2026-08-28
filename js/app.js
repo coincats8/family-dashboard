@@ -11077,3 +11077,518 @@ loadDashboard =
     style
   );
 })();
+// =========================================================
+// レポート上部をホームと同じカードデザインに変更
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (
+    window.reportHomeCardDesignAdded_
+  ) {
+    return;
+  }
+
+  window.reportHomeCardDesignAdded_ =
+    true;
+
+  function addReportHomeStyles_() {
+    if (
+      document.getElementById(
+        "reportHomeCardStyles"
+      )
+    ) {
+      return;
+    }
+
+    const style =
+      document.createElement(
+        "style"
+      );
+
+    style.id =
+      "reportHomeCardStyles";
+
+    style.textContent = `
+      #page-report .report-home-budget-card {
+        position: relative;
+        overflow: hidden;
+        box-sizing: border-box;
+        width: 100%;
+        margin: 16px 0 18px;
+        padding: 25px 24px 22px;
+        border: 1px solid #edf1ee;
+        border-radius: 27px;
+        background:
+          linear-gradient(
+            135deg,
+            #ffffff 0%,
+            #fbfffc 65%,
+            #f3fff6 100%
+          ) !important;
+        color: #171a18 !important;
+        box-shadow:
+          0 16px 34px
+          rgba(39, 74, 51, 0.08);
+      }
+
+      #page-report
+      .report-home-budget-card::after {
+        content: "";
+        position: absolute;
+        top: -58px;
+        right: -54px;
+        width: 148px;
+        height: 148px;
+        border-radius: 50%;
+        background:
+          rgba(74, 211, 112, 0.10);
+        pointer-events: none;
+      }
+
+      #page-report .report-home-budget-top {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 15px;
+      }
+
+      #page-report .report-home-budget-label {
+        display: block;
+        margin-bottom: 7px;
+        color: #6f7772;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      #page-report #reportExpense {
+        display: block;
+        color: #171a18 !important;
+        font-size: clamp(38px, 11vw, 50px);
+        font-weight: 900;
+        line-height: 1;
+        letter-spacing: -2px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #page-report #reportRate {
+        position: relative;
+        z-index: 2;
+        min-width: 58px;
+        padding: 9px 13px;
+        border-radius: 999px;
+        background: #dcf8e4;
+        color: #20a74c;
+        font-size: 14px;
+        font-weight: 800;
+        text-align: center;
+      }
+
+      #page-report .report-home-progress {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        height: 11px;
+        margin: 27px 0 19px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e8ebe9;
+      }
+
+      #page-report .report-home-progress-bar {
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background:
+          linear-gradient(
+            90deg,
+            #26bd55,
+            #58d47b
+          );
+        transition: width 0.35s ease;
+      }
+
+      #page-report .report-home-budget-bottom {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns:
+          1fr 1fr;
+        gap: 16px;
+      }
+
+      #page-report .report-home-budget-item {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      #page-report .report-home-budget-item:last-child {
+        text-align: right;
+      }
+
+      #page-report .report-home-budget-item span {
+        color: #929994;
+        font-size: 11px;
+      }
+
+      #page-report .report-home-budget-item strong {
+        color: #171a18;
+        font-size: 16px;
+        font-weight: 850;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #page-report .report-home-saving-card {
+        box-sizing: border-box;
+        display: grid;
+        grid-template-columns:
+          58px
+          minmax(0, 1fr)
+          auto;
+        gap: 14px;
+        align-items: center;
+        width: 100%;
+        margin: 0 0 18px;
+        padding: 22px;
+        border: 1px solid #edf1ee;
+        border-radius: 27px;
+        background:
+          linear-gradient(
+            135deg,
+            #ffffff 0%,
+            #f5fff7 100%
+          );
+        box-shadow:
+          0 16px 34px
+          rgba(39, 74, 51, 0.08);
+      }
+
+      #page-report .report-home-saving-icon {
+        display: grid;
+        place-items: center;
+        width: 58px;
+        height: 58px;
+        border-radius: 20px;
+        background: #dff8e6;
+        color: #20be50;
+      }
+
+      #page-report
+      .report-home-saving-icon
+      .material-symbols-rounded {
+        font-size: 29px;
+      }
+
+      #page-report .report-home-saving-content {
+        min-width: 0;
+      }
+
+      #page-report .report-home-saving-content span {
+        display: block;
+        margin-bottom: 3px;
+        color: #737b76;
+        font-size: 11px;
+      }
+
+      #page-report #reportSaving {
+        display: block;
+        color: #171a18;
+        font-size: 29px;
+        font-weight: 900;
+        line-height: 1.1;
+        letter-spacing: -1px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #page-report .report-home-saving-content p {
+        margin: 8px 0 0;
+        color: #9ba19d;
+        font-size: 10px;
+      }
+
+      #page-report .report-saving-edit {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        border: 0;
+        border-radius: 12px;
+        background: #e8f8ec;
+        cursor: pointer;
+        font-size: 15px;
+      }
+
+      #page-report .report-grid-home-style {
+        display: block !important;
+        margin: 0 !important;
+      }
+
+      @media (max-width: 390px) {
+        #page-report .report-home-budget-card {
+          padding: 22px 20px 20px;
+        }
+
+        #page-report .report-home-saving-card {
+          grid-template-columns:
+            52px
+            minmax(0, 1fr)
+            32px;
+          gap: 11px;
+          padding: 19px;
+        }
+
+        #page-report .report-home-saving-icon {
+          width: 52px;
+          height: 52px;
+        }
+
+        #page-report #reportSaving {
+          font-size: 25px;
+        }
+      }
+    `;
+
+    document.head.appendChild(
+      style
+    );
+  }
+
+  function buildReportHomeCards_() {
+    addReportHomeStyles_();
+
+    const page =
+      document.getElementById(
+        "page-report"
+      );
+
+    if (!page) {
+      return;
+    }
+
+    const hero =
+      page.querySelector(
+        ".report-hero"
+      );
+
+    const grid =
+      page.querySelector(
+        ".report-grid"
+      );
+
+    if (
+      !hero ||
+      !grid
+    ) {
+      return;
+    }
+
+    if (
+      hero.dataset.homeDesign !==
+      "true"
+    ) {
+      hero.dataset.homeDesign =
+        "true";
+
+      hero.className =
+        "report-hero report-home-budget-card";
+
+      hero.innerHTML = `
+        <div class="report-home-budget-top">
+
+          <div>
+            <span class="report-home-budget-label">
+              今月の生活費
+            </span>
+
+            <strong id="reportExpense">
+              ¥0
+            </strong>
+          </div>
+
+          <strong id="reportRate">
+            0%
+          </strong>
+
+        </div>
+
+        <div class="report-home-progress">
+
+          <div
+            class="report-home-progress-bar"
+            id="reportHomeProgressBar"
+          ></div>
+
+        </div>
+
+        <div class="report-home-budget-bottom">
+
+          <div class="report-home-budget-item">
+            <span>予算</span>
+
+            <strong id="reportBudget">
+              ¥250,000
+            </strong>
+          </div>
+
+          <div class="report-home-budget-item">
+            <span>残り</span>
+
+            <strong id="reportRemaining">
+              ¥250,000
+            </strong>
+          </div>
+
+        </div>
+
+        <small
+          id="reportHeroCaption"
+          hidden
+        ></small>
+      `;
+    }
+
+    if (
+      grid.dataset.homeDesign !==
+      "true"
+    ) {
+      grid.dataset.homeDesign =
+        "true";
+
+      grid.className =
+        "report-grid report-grid-home-style";
+
+      grid.innerHTML = `
+        <section class="report-home-saving-card">
+
+          <div class="report-home-saving-icon">
+            <span class="material-symbols-rounded">
+              savings
+            </span>
+          </div>
+
+          <div class="report-home-saving-content">
+
+            <span>
+              現在の貯蓄
+            </span>
+
+            <strong id="reportSaving">
+              ¥0
+            </strong>
+
+            <p>
+              終了した月の残金を自動で貯蓄
+            </p>
+
+          </div>
+
+          <button
+            type="button"
+            class="report-saving-edit"
+            id="reportSavingsEditButton"
+            title="現在の貯蓄を修正"
+          >
+            ✏️
+          </button>
+
+        </section>
+      `;
+
+      const editButton =
+        document.getElementById(
+          "reportSavingsEditButton"
+        );
+
+      if (editButton) {
+        editButton.addEventListener(
+          "click",
+          function () {
+            const homeEditButton =
+              document.getElementById(
+                "currentSavingsEditButton"
+              );
+
+            if (homeEditButton) {
+              homeEditButton.click();
+            }
+          }
+        );
+      }
+    }
+  }
+
+  function updateReportProgress_() {
+    const rateElement =
+      document.getElementById(
+        "reportRate"
+      );
+
+    const progressBar =
+      document.getElementById(
+        "reportHomeProgressBar"
+      );
+
+    if (
+      !rateElement ||
+      !progressBar
+    ) {
+      return;
+    }
+
+    const rate =
+      Number(
+        String(
+          rateElement.textContent ||
+          "0"
+        ).replace(
+          /[^\d.-]/g,
+          ""
+        )
+      ) || 0;
+
+    progressBar.style.width =
+      Math.min(
+        100,
+        Math.max(
+          0,
+          rate
+        )
+      ) +
+      "%";
+  }
+
+  const renderReportBeforeHomeDesign_ =
+    renderReport;
+
+  renderReport =
+    function () {
+      buildReportHomeCards_();
+
+      renderReportBeforeHomeDesign_();
+
+      updateReportProgress_();
+    };
+
+  buildReportHomeCards_();
+
+  setTimeout(
+    function () {
+      buildReportHomeCards_();
+
+      if (
+        typeof dashboardData !==
+          "undefined" &&
+        dashboardData
+      ) {
+        renderReport();
+      }
+    },
+    500
+  );
+})();
