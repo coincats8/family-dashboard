@@ -13425,3 +13425,647 @@ loadDashboard =
     }
   );
 })();
+// =========================================================
+// ホーム画面スリム化・復旧版
+//
+// ・消えた貯蓄金額を復元
+// ・現在の貯蓄を1行表示
+// ・AI助言を生活費カードの直前へ確実に表示
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.homeSlimRepairAdded_) {
+    return;
+  }
+
+  window.homeSlimRepairAdded_ = true;
+
+
+  function repairYen_(value) {
+    const number =
+      Number(
+        String(value ?? 0)
+          .replace(/,/g, "")
+          .replace(/[¥￥円]/g, "")
+      );
+
+    return (
+      "¥" +
+      (
+        Number.isFinite(number)
+          ? Math.round(number)
+          : 0
+      ).toLocaleString("ja-JP")
+    );
+  }
+
+
+  function repairNumber_(value) {
+    const number =
+      Number(
+        String(value ?? 0)
+          .replace(/,/g, "")
+          .replace(/[¥￥円]/g, "")
+      );
+
+    return Number.isFinite(number)
+      ? number
+      : 0;
+  }
+
+
+  // -------------------------------------------------------
+  // 短く分かりやすいAI助言
+  // -------------------------------------------------------
+
+  function makeRepairAdvice_() {
+    if (!window.dashboardData) {
+      return "家計データを確認中";
+    }
+
+    const living =
+      dashboardData.living || {};
+
+    const budget =
+      repairNumber_(
+        living.budget ??
+        dashboardData.budget ??
+        250000
+      );
+
+    const expense =
+      repairNumber_(
+        living.expense ??
+        dashboardData.expense ??
+        0
+      );
+
+    const remaining =
+      repairNumber_(
+        living.remaining ??
+        dashboardData.balance ??
+        (
+          budget -
+          expense
+        )
+      );
+
+    const rate =
+      budget > 0
+        ? Math.round(
+            expense /
+            budget *
+            100
+          )
+        : 0;
+
+    const categories =
+      Array.isArray(
+        dashboardData.categories
+      )
+        ? dashboardData.categories
+        : [];
+
+    const top =
+      categories
+        .filter(
+          function(category) {
+            const name =
+              String(
+                category.name || ""
+              );
+
+            return (
+              name.indexOf("家賃") === -1 &&
+              name.indexOf("賃料") === -1 &&
+              repairNumber_(
+                category.amount
+              ) > 0
+            );
+          }
+        )
+        .sort(
+          function(a, b) {
+            return (
+              repairNumber_(
+                b.amount
+              ) -
+              repairNumber_(
+                a.amount
+              )
+            );
+          }
+        )[0];
+
+    if (remaining < 0) {
+      return (
+        "予算を" +
+        repairYen_(
+          Math.abs(remaining)
+        ) +
+        "超過。買い物を控えて"
+      );
+    }
+
+    if (rate >= 90) {
+      return (
+        "残り" +
+        repairYen_(remaining) +
+        "。必要品だけ購入"
+      );
+    }
+
+    if (rate >= 75) {
+      return (
+        "残り" +
+        repairYen_(remaining) +
+        "。まとめ買いは慎重に"
+      );
+    }
+
+    if (top) {
+      const name =
+        String(
+          top.name || "支出"
+        )
+          .replace(
+            /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu,
+            ""
+          )
+          .trim();
+
+      return (
+        name +
+        "が多め。残り" +
+        repairYen_(remaining)
+      );
+    }
+
+    return (
+      "使用率" +
+      rate +
+      "％。残り" +
+      repairYen_(remaining)
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // 消えた貯蓄金額を復元して1行化
+  // -------------------------------------------------------
+
+  function repairSavingCard_() {
+    const amount =
+      document.getElementById(
+        "savingActual"
+      );
+
+    if (!amount) {
+      return;
+    }
+
+    const card =
+      amount.closest(
+        ".home-slim-saving-card"
+      );
+
+    if (!card) {
+      return;
+    }
+
+    // 前回誤って非表示にした親要素を復元
+    let parent =
+      amount.parentElement;
+
+    while (
+      parent &&
+      parent !== card
+    ) {
+      parent.style.removeProperty(
+        "display"
+      );
+
+      parent =
+        parent.parentElement;
+    }
+
+    card.style.removeProperty(
+      "display"
+    );
+
+    // すでに復旧済みなら金額だけ更新
+    const existingRow =
+      card.querySelector(
+        ".home-repaired-saving-row"
+      );
+
+    if (existingRow) {
+      const displayedAmount =
+        existingRow.querySelector(
+          "#savingActual"
+        );
+
+      if (
+        displayedAmount &&
+        window.dashboardData
+      ) {
+        const saving =
+          dashboardData.saving || {};
+
+        displayedAmount.textContent =
+          repairYen_(
+            saving.current ??
+            saving.actual ??
+            0
+          );
+      }
+
+      return;
+    }
+
+    const editButton =
+      card.querySelector(
+        "button"
+      );
+
+    // 元の内容を画面上だけ非表示
+    Array.from(
+      card.children
+    ).forEach(
+      function(child) {
+        child.style.setProperty(
+          "display",
+          "none",
+          "important"
+        );
+      }
+    );
+
+    const row =
+      document.createElement(
+        "div"
+      );
+
+    row.className =
+      "home-repaired-saving-row";
+
+    const icon =
+      document.createElement(
+        "div"
+      );
+
+    icon.className =
+      "home-repaired-saving-icon";
+
+    icon.textContent =
+      "🐷";
+
+    const label =
+      document.createElement(
+        "span"
+      );
+
+    label.className =
+      "home-repaired-saving-label";
+
+    label.textContent =
+      "現在の貯蓄";
+
+    const right =
+      document.createElement(
+        "div"
+      );
+
+    right.className =
+      "home-repaired-saving-right";
+
+    // 元の金額要素を移動するため、
+    // データ更新や編集機能をそのまま維持
+    amount.style.removeProperty(
+      "display"
+    );
+
+    amount.className +=
+      " home-repaired-saving-amount";
+
+    right.appendChild(
+      amount
+    );
+
+    if (editButton) {
+      editButton.style.removeProperty(
+        "display"
+      );
+
+      editButton.classList.add(
+        "home-repaired-saving-edit"
+      );
+
+      right.appendChild(
+        editButton
+      );
+    }
+
+    row.appendChild(icon);
+    row.appendChild(label);
+    row.appendChild(right);
+
+    card.appendChild(row);
+  }
+
+
+  // -------------------------------------------------------
+  // AI助言を生活費カードの直前に新設
+  // -------------------------------------------------------
+
+  function repairAiRow_() {
+    const homePanel =
+      document.querySelector(
+        '[data-page-panel="home"]'
+      );
+
+    const totalMoney =
+      document.getElementById(
+        "totalMoney"
+      );
+
+    if (
+      !homePanel ||
+      !totalMoney
+    ) {
+      return;
+    }
+
+    let budgetCard =
+      totalMoney.closest(
+        "[class*='card'], article, section"
+      );
+
+    if (!budgetCard) {
+      budgetCard =
+        totalMoney.parentElement;
+    }
+
+    if (
+      !budgetCard ||
+      !budgetCard.parentElement
+    ) {
+      return;
+    }
+
+    let aiRow =
+      document.getElementById(
+        "homeAiSummaryRow"
+      );
+
+    if (!aiRow) {
+      aiRow =
+        document.createElement(
+          "div"
+        );
+
+      aiRow.id =
+        "homeAiSummaryRow";
+
+      aiRow.innerHTML =
+        '<div class="home-ai-summary-icon">✨</div>' +
+        '<strong>AI 今月の家計</strong>' +
+        '<span id="homeAiSummaryAdvice"></span>';
+
+      budgetCard.parentElement.insertBefore(
+        aiRow,
+        budgetCard
+      );
+    }
+
+    // 元の「HOME 今月の家計」見出しを非表示
+    let previous =
+      aiRow.previousElementSibling;
+
+    if (
+      previous &&
+      previous !== budgetCard
+    ) {
+      const text =
+        String(
+          previous.textContent || ""
+        )
+          .replace(/\s+/g, "");
+
+      if (
+        text.indexOf("HOME") !== -1 ||
+        text.indexOf("今月の家計") !== -1 ||
+        text.indexOf("今月の家庭") !== -1
+      ) {
+        previous.style.setProperty(
+          "display",
+          "none",
+          "important"
+        );
+      }
+    }
+
+    const advice =
+      document.getElementById(
+        "homeAiSummaryAdvice"
+      );
+
+    if (advice) {
+      const newText =
+        makeRepairAdvice_();
+
+      if (
+        advice.textContent !==
+        newText
+      ) {
+        advice.textContent =
+          newText;
+      }
+    }
+  }
+
+
+  function applyHomeRepair_() {
+    repairSavingCard_();
+    repairAiRow_();
+  }
+
+
+  // -------------------------------------------------------
+  // 復旧版デザイン
+  // -------------------------------------------------------
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.textContent = `
+    #homeAiSummaryRow {
+      display: flex !important;
+      align-items: center !important;
+      gap: 9px !important;
+      width: 100% !important;
+      min-height: 58px !important;
+      margin: 0 0 14px !important;
+      padding: 9px 14px !important;
+      box-sizing: border-box !important;
+      border: 1px solid rgba(42, 203, 105, 0.14) !important;
+      border-radius: 18px !important;
+      background:
+        linear-gradient(
+          135deg,
+          #ffffff,
+          #effff4
+        ) !important;
+      box-shadow:
+        0 8px 22px
+        rgba(25, 70, 45, 0.06) !important;
+    }
+
+    .home-ai-summary-icon {
+      display: grid !important;
+      place-items: center !important;
+      width: 36px !important;
+      height: 36px !important;
+      flex: 0 0 36px !important;
+      border-radius: 12px !important;
+      background: #e2f8e9 !important;
+      font-size: 17px !important;
+    }
+
+    #homeAiSummaryRow strong {
+      flex: 0 0 auto !important;
+      color: #151515 !important;
+      font-size: 13px !important;
+      white-space: nowrap !important;
+    }
+
+    #homeAiSummaryAdvice {
+      min-width: 0 !important;
+      overflow: hidden !important;
+      color: #66706a !important;
+      font-size: 10px !important;
+      line-height: 1.3 !important;
+      text-overflow: ellipsis !important;
+      white-space: nowrap !important;
+    }
+
+    .home-slim-saving-card {
+      display: block !important;
+      min-height: 72px !important;
+      padding: 10px 20px !important;
+    }
+
+    .home-repaired-saving-row {
+      display: flex !important;
+      align-items: center !important;
+      width: 100% !important;
+      min-height: 50px !important;
+      gap: 11px !important;
+    }
+
+    .home-repaired-saving-icon {
+      display: grid !important;
+      place-items: center !important;
+      width: 40px !important;
+      height: 40px !important;
+      flex: 0 0 40px !important;
+      border-radius: 14px !important;
+      background: #ddf8e6 !important;
+      font-size: 20px !important;
+    }
+
+    .home-repaired-saving-label {
+      flex: 1 1 auto !important;
+      color: #555f59 !important;
+      font-size: 12px !important;
+      white-space: nowrap !important;
+    }
+
+    .home-repaired-saving-right {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: flex-end !important;
+      gap: 7px !important;
+      margin-left: auto !important;
+    }
+
+    .home-repaired-saving-amount {
+      display: inline-block !important;
+      margin: 0 !important;
+      color: #151515 !important;
+      font-size: 24px !important;
+      font-weight: 800 !important;
+      line-height: 1 !important;
+      white-space: nowrap !important;
+    }
+
+    .home-repaired-saving-edit {
+      display: grid !important;
+      place-items: center !important;
+      margin: 0 !important;
+      flex: 0 0 auto !important;
+    }
+
+    @media (max-width: 430px) {
+      #homeAiSummaryRow {
+        gap: 7px !important;
+        padding-left: 11px !important;
+        padding-right: 11px !important;
+      }
+
+      #homeAiSummaryRow strong {
+        font-size: 12px !important;
+      }
+
+      #homeAiSummaryAdvice {
+        font-size: 9px !important;
+      }
+
+      .home-repaired-saving-amount {
+        font-size: 21px !important;
+      }
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+
+
+  setTimeout(
+    applyHomeRepair_,
+    200
+  );
+
+  setTimeout(
+    applyHomeRepair_,
+    1000
+  );
+
+  setTimeout(
+    applyHomeRepair_,
+    2500
+  );
+
+
+  window.addEventListener(
+    "hashchange",
+    function() {
+      setTimeout(
+        applyHomeRepair_,
+        200
+      );
+    }
+  );
+
+
+  // 家計データが更新された後も金額と助言を更新
+  setInterval(
+    applyHomeRepair_,
+    3000
+  );
+})();
