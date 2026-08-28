@@ -12811,3 +12811,617 @@ loadDashboard =
     refreshShoppingMemoIfOpen_
   );
 })();
+// =========================================================
+// ホーム画面をスリム化
+//
+// ・今日の予定を丸ごと非表示
+// ・現在の貯蓄を1行表示
+// ・HOME 今月の家計を「AI 今月の家計」へ変更
+// ・AIの現状と買い物アドバイスを短く表示
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.homeSlimAiAdded_) {
+    return;
+  }
+
+  window.homeSlimAiAdded_ = true;
+
+
+  // -------------------------------------------------------
+  // 金額変換
+  // -------------------------------------------------------
+
+  function homeSlimNumber_(value) {
+    const number =
+      Number(
+        String(value ?? 0)
+          .replace(/,/g, "")
+          .replace(/[¥￥円]/g, "")
+      );
+
+    return Number.isFinite(number)
+      ? number
+      : 0;
+  }
+
+
+  // -------------------------------------------------------
+  // 金額表示
+  // -------------------------------------------------------
+
+  function homeSlimYen_(value) {
+    return (
+      "¥" +
+      Math.round(
+        homeSlimNumber_(value)
+      ).toLocaleString("ja-JP")
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // 短いAIアドバイスを作成
+  // -------------------------------------------------------
+
+  function createHomeSlimAdvice_() {
+    if (!window.dashboardData) {
+      return "家計データを確認しています";
+    }
+
+    const living =
+      dashboardData.living || {};
+
+    const budget =
+      homeSlimNumber_(
+        living.budget ??
+        dashboardData.budget ??
+        250000
+      );
+
+    const expense =
+      homeSlimNumber_(
+        living.expense ??
+        dashboardData.expense ??
+        0
+      );
+
+    const remaining =
+      homeSlimNumber_(
+        living.remaining ??
+        dashboardData.balance ??
+        (
+          budget -
+          expense
+        )
+      );
+
+    const rate =
+      budget > 0
+        ? Math.round(
+            expense /
+            budget *
+            100
+          )
+        : 0;
+
+    const categories =
+      Array.isArray(
+        dashboardData.categories
+      )
+        ? dashboardData.categories
+        : [];
+
+    const topCategory =
+      categories
+        .filter(
+          function(category) {
+            const name =
+              String(
+                category.name || ""
+              );
+
+            return (
+              name.indexOf("家賃") === -1 &&
+              name.indexOf("賃料") === -1 &&
+              homeSlimNumber_(
+                category.amount
+              ) > 0
+            );
+          }
+        )
+        .sort(
+          function(a, b) {
+            return (
+              homeSlimNumber_(
+                b.amount
+              ) -
+              homeSlimNumber_(
+                a.amount
+              )
+            );
+          }
+        )[0];
+
+    if (remaining < 0) {
+      return (
+        "予算を" +
+        homeSlimYen_(
+          Math.abs(remaining)
+        ) +
+        "超過。買い物を控えめに"
+      );
+    }
+
+    if (rate >= 90) {
+      return (
+        "残り" +
+        homeSlimYen_(remaining) +
+        "。必要な物を優先"
+      );
+    }
+
+    if (rate >= 75) {
+      return (
+        "残り" +
+        homeSlimYen_(remaining) +
+        "。まとめ買いは慎重に"
+      );
+    }
+
+    if (topCategory) {
+      return (
+        String(
+          topCategory.name || "支出"
+        )
+          .replace(
+            /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu,
+            ""
+          )
+          .trim() +
+        "が多め。残り" +
+        homeSlimYen_(remaining)
+      );
+    }
+
+    if (expense > 0) {
+      return (
+        "使用率" +
+        rate +
+        "％。残り" +
+        homeSlimYen_(remaining)
+      );
+    }
+
+    return "今月の支出はまだありません";
+  }
+
+
+  // -------------------------------------------------------
+  // 指定した要素を含むカードを取得
+  // -------------------------------------------------------
+
+  function findHomeCard_(element) {
+    if (!element) {
+      return null;
+    }
+
+    const homePanel =
+      document.querySelector(
+        '[data-page-panel="home"]'
+      );
+
+    let current =
+      element;
+
+    while (
+      current &&
+      current.parentElement &&
+      current.parentElement !==
+        homePanel
+    ) {
+      const parent =
+        current.parentElement;
+
+      const className =
+        String(
+          parent.className || ""
+        ).toLowerCase();
+
+      if (
+        parent.tagName === "ARTICLE" ||
+        parent.tagName === "SECTION" ||
+        className.indexOf("card") !== -1
+      ) {
+        return parent;
+      }
+
+      current =
+        parent;
+    }
+
+    return current &&
+      current !== homePanel
+        ? current
+        : null;
+  }
+
+
+  // -------------------------------------------------------
+  // 今日の予定を丸ごと非表示
+  // -------------------------------------------------------
+
+  function hideTodaySchedule_() {
+    const scheduleList =
+      document.getElementById(
+        "todayScheduleList"
+      );
+
+    const calendarButton =
+      document.getElementById(
+        "todayCalendarButton"
+      );
+
+    const addButton =
+      document.getElementById(
+        "todayAddScheduleButton"
+      );
+
+    const target =
+      findHomeCard_(
+        scheduleList ||
+        calendarButton ||
+        addButton
+      );
+
+    if (target) {
+      target.style.setProperty(
+        "display",
+        "none",
+        "important"
+      );
+    }
+  }
+
+
+  // -------------------------------------------------------
+  // 現在の貯蓄を1行のカードに変更
+  // -------------------------------------------------------
+
+  function slimSavingCard_() {
+    const amount =
+      document.getElementById(
+        "savingActual"
+      );
+
+    if (!amount) {
+      return;
+    }
+
+    const card =
+      findHomeCard_(amount);
+
+    if (!card) {
+      return;
+    }
+
+    card.classList.add(
+      "home-slim-saving-card"
+    );
+
+    amount.classList.add(
+      "home-slim-saving-amount"
+    );
+
+    const textElements =
+      Array.from(
+        card.querySelectorAll(
+          "p, small, span, div"
+        )
+      );
+
+    textElements.forEach(
+      function(element) {
+        const text =
+          String(
+            element.textContent || ""
+          ).trim();
+
+        if (
+          text.indexOf(
+            "終了した月の残金"
+          ) !== -1
+        ) {
+          element.style.display =
+            "none";
+        }
+      }
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // HOME 今月の家計をAI表示へ変更
+  // -------------------------------------------------------
+
+  function createSlimAiRow_() {
+    const homePanel =
+      document.querySelector(
+        '[data-page-panel="home"]'
+      );
+
+    if (!homePanel) {
+      return;
+    }
+
+    const candidates =
+      Array.from(
+        homePanel.querySelectorAll(
+          "h1, h2, h3, h4, p, span, div"
+        )
+      );
+
+    const title =
+      candidates.find(
+        function(element) {
+          const text =
+            String(
+              element.textContent || ""
+            )
+              .replace(/\s+/g, "");
+
+          return (
+            text === "今月の家計" ||
+            text === "今月の家庭"
+          );
+        }
+      );
+
+    if (!title) {
+      return;
+    }
+
+    let row =
+      title.parentElement;
+
+    if (
+      row &&
+      row.parentElement &&
+      row.parentElement !== homePanel &&
+      row.children.length <= 2
+    ) {
+      row =
+        row.parentElement;
+    }
+
+    if (!row) {
+      return;
+    }
+
+    row.classList.add(
+      "home-slim-ai-row"
+    );
+
+    row.innerHTML =
+      '<div class="home-slim-ai-icon">✨</div>' +
+      '<div class="home-slim-ai-copy">' +
+        '<strong>AI 今月の家計</strong>' +
+        '<span id="homeSlimAiAdvice"></span>' +
+      '</div>';
+
+    const advice =
+      document.getElementById(
+        "homeSlimAiAdvice"
+      );
+
+    if (advice) {
+      advice.textContent =
+        createHomeSlimAdvice_();
+    }
+  }
+
+
+  // -------------------------------------------------------
+  // 以前の大きいAIカードを非表示
+  // -------------------------------------------------------
+
+  function hideOldAiCard_() {
+    const oldAdvice =
+      document.getElementById(
+        "aiAdvice"
+      );
+
+    const oldCard =
+      findHomeCard_(oldAdvice);
+
+    if (oldCard) {
+      oldCard.style.setProperty(
+        "display",
+        "none",
+        "important"
+      );
+    }
+  }
+
+
+  // -------------------------------------------------------
+  // 画面へ反映
+  // -------------------------------------------------------
+
+  function applyHomeSlimLayout_() {
+    hideTodaySchedule_();
+    slimSavingCard_();
+    createSlimAiRow_();
+    hideOldAiCard_();
+
+    const advice =
+      document.getElementById(
+        "homeSlimAiAdvice"
+      );
+
+    if (advice) {
+      advice.textContent =
+        createHomeSlimAdvice_();
+    }
+  }
+
+
+  // -------------------------------------------------------
+  // 専用デザイン
+  // -------------------------------------------------------
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.textContent = `
+    .home-slim-ai-row {
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+      min-height: 64px !important;
+      margin: 12px 0 16px !important;
+      padding: 10px 14px !important;
+      box-sizing: border-box !important;
+      border: 1px solid rgba(46, 204, 113, 0.14) !important;
+      border-radius: 20px !important;
+      background:
+        linear-gradient(
+          135deg,
+          #ffffff 0%,
+          #f1fff5 100%
+        ) !important;
+      box-shadow:
+        0 10px 25px
+        rgba(30, 80, 50, 0.07) !important;
+    }
+
+    .home-slim-ai-icon {
+      display: grid !important;
+      place-items: center !important;
+      width: 38px !important;
+      height: 38px !important;
+      flex: 0 0 38px !important;
+      border-radius: 13px !important;
+      background: #e5f9eb !important;
+      font-size: 18px !important;
+    }
+
+    .home-slim-ai-copy {
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+      min-width: 0 !important;
+      width: 100% !important;
+    }
+
+    .home-slim-ai-copy strong {
+      flex: 0 0 auto !important;
+      color: #171717 !important;
+      font-size: 14px !important;
+      white-space: nowrap !important;
+    }
+
+    #homeSlimAiAdvice {
+      min-width: 0 !important;
+      overflow: hidden !important;
+      color: #66706a !important;
+      font-size: 11px !important;
+      line-height: 1.35 !important;
+      text-overflow: ellipsis !important;
+      white-space: nowrap !important;
+    }
+
+    .home-slim-saving-card {
+      min-height: 70px !important;
+      margin-top: 12px !important;
+      padding: 12px 20px !important;
+      box-sizing: border-box !important;
+    }
+
+    .home-slim-saving-card > * {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+
+    .home-slim-saving-card,
+    .home-slim-saving-card > div {
+      align-items: center !important;
+    }
+
+    .home-slim-saving-amount {
+      margin: 0 !important;
+      line-height: 1 !important;
+      white-space: nowrap !important;
+    }
+
+    @media (max-width: 430px) {
+      .home-slim-ai-copy {
+        gap: 7px !important;
+      }
+
+      .home-slim-ai-copy strong {
+        font-size: 13px !important;
+      }
+
+      #homeSlimAiAdvice {
+        font-size: 10px !important;
+      }
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+
+
+  // 初回表示
+  setTimeout(
+    applyHomeSlimLayout_,
+    300
+  );
+
+  setTimeout(
+    applyHomeSlimLayout_,
+    1200
+  );
+
+
+  // データ更新後にも表示を整える
+  const observer =
+    new MutationObserver(
+      function() {
+        clearTimeout(
+          window.homeSlimLayoutTimer_
+        );
+
+        window.homeSlimLayoutTimer_ =
+          setTimeout(
+            applyHomeSlimLayout_,
+            100
+          );
+      }
+    );
+
+  observer.observe(
+    document.body,
+    {
+      childList: true,
+      subtree: true
+    }
+  );
+
+
+  window.addEventListener(
+    "hashchange",
+    function() {
+      setTimeout(
+        applyHomeSlimLayout_,
+        100
+      );
+    }
+  );
+})();
