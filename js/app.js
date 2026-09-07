@@ -18639,3 +18639,155 @@ if (
 
   correctHomeMoneyTotals_();
 })();
+// =========================================================
+// ホームに「その他」カテゴリを追加
+// 日別の購入金額とホームの生活費を一致させる
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.homeOtherCategoryAdded_) {
+    return;
+  }
+
+  window.homeOtherCategoryAdded_ = true;
+
+
+  function categoryText_(value) {
+    return String(value || "")
+      .normalize("NFKC")
+      .replace(
+        /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu,
+        ""
+      )
+      .replace(/\s+/g, "")
+      .trim();
+  }
+
+
+  function addOtherCategoryToHome_() {
+    if (!dashboardData) {
+      return;
+    }
+
+    if (
+      !Array.isArray(
+        dashboardData.categories
+      )
+    ) {
+      dashboardData.categories = [];
+    }
+
+    const purchaseItems =
+      Array.isArray(
+        dashboardData.recent
+      )
+        ? dashboardData.recent
+        : [];
+
+    /*
+     * 大カテゴリが空欄で、分類が「その他」の商品も対象
+     */
+    const otherAmount =
+      purchaseItems.reduce(
+        function (total, item) {
+          const category =
+            categoryText_(
+              item.category
+            );
+
+          const classification =
+            categoryText_(
+              item.classification ||
+              item.subCategory ||
+              item.subcategory ||
+              item.detailCategory ||
+              item.normalizedName
+            );
+
+          const isOther =
+            category === "その他" ||
+            (
+              !category &&
+              (
+                classification === "その他" ||
+                classification === "未分類"
+              )
+            );
+
+          if (!isOther) {
+            return total;
+          }
+
+          const amount =
+            typeof purchaseItemAmount_ ===
+              "function"
+              ? purchaseItemAmount_(
+                  item.amount
+                )
+              : Number(
+                  String(item.amount || 0)
+                    .replace(
+                      /[￥¥,\s円]/g,
+                      ""
+                    )
+                );
+
+          return (
+            total +
+            (
+              Number.isFinite(amount)
+                ? amount
+                : 0
+            )
+          );
+        },
+        0
+      );
+
+
+    let otherCategory =
+      dashboardData.categories.find(
+        function (category) {
+          return (
+            categoryText_(
+              category.name ||
+              category.category
+            ) === "その他"
+          );
+        }
+      );
+
+
+    if (!otherCategory) {
+      otherCategory = {
+        name: "🧾 その他",
+        category: "その他",
+        amount: otherAmount,
+        budget: 0
+      };
+
+      dashboardData.categories.push(
+        otherCategory
+      );
+    } else {
+      otherCategory.amount =
+        otherAmount;
+    }
+  }
+
+
+  const renderHomeBeforeOtherCategory_ =
+    renderHome;
+
+  renderHome = function () {
+    addOtherCategoryToHome_();
+    renderHomeBeforeOtherCategory_();
+  };
+
+
+  if (dashboardData) {
+    renderHome();
+  }
+})();
