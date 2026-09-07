@@ -17696,3 +17696,121 @@ loadDashboard =
     initializeDailyPageFix_();
   }
 })();
+
+/* =========================================================
+   日別画面から家賃・光熱費を除外
+========================================================= */
+
+isPurchaseManagementItem_ = function (item) {
+  if (!item) {
+    return false;
+  }
+
+  const date =
+    typeof parseDateValue === "function"
+      ? parseDateValue(item.date)
+      : new Date(item.date);
+
+  const shop = String(
+    item.shop ||
+    item.store ||
+    item.storeName ||
+    ""
+  ).trim();
+
+  const productName = String(
+    item.productName ||
+    item.name ||
+    item.itemName ||
+    ""
+  ).trim();
+
+  const category = String(
+    item.category || ""
+  ).trim();
+
+  const classification = String(
+    item.classification ||
+    item.subCategory ||
+    item.subcategory ||
+    item.detailCategory ||
+    ""
+  ).trim();
+
+  const checkText = [
+    shop,
+    productName,
+    category,
+    classification
+  ]
+    .join(" ")
+    .normalize("NFKC")
+    .toLowerCase();
+
+
+  /* 日別画面に出さない固定費 */
+
+  const excludedWords = [
+    "家賃",
+    "賃料",
+    "住宅費",
+    "電気料金",
+    "電気代",
+    "ガス料金",
+    "ガス代",
+    "水道料金",
+    "水道代",
+    "上下水道",
+    "光熱費"
+  ];
+
+  const isFixedCost =
+    excludedWords.some(function (word) {
+      return checkText.includes(
+        word.toLowerCase()
+      );
+    });
+
+  if (isFixedCost) {
+    return false;
+  }
+
+
+  /* 日付・店名・商品名がある支出だけ表示 */
+
+  const amountValue =
+    item.amount ??
+    item.totalAmount ??
+    item.total ??
+    item.price ??
+    item.unitPrice ??
+    0;
+
+  const amount =
+    typeof purchaseItemAmount_ === "function"
+      ? purchaseItemAmount_(amountValue)
+      : Number(
+          String(amountValue)
+            .replace(/[￥¥,\s円]/g, "")
+        );
+
+  return Boolean(
+    date &&
+    !Number.isNaN(date.getTime()) &&
+    shop &&
+    productName &&
+    Number.isFinite(amount) &&
+    amount > 0
+  );
+};
+
+
+/* 現在表示中ならすぐ再集計 */
+
+if (
+  typeof currentPage !== "undefined" &&
+  currentPage === "receipt" &&
+  typeof refreshReceiptPage === "function"
+) {
+  refreshReceiptPage();
+}
