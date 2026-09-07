@@ -18176,3 +18176,260 @@ if (
     refreshCategoryMonth_();
   }
 })();
+
+// =========================================================
+// 買い物メモの×ボタン左側に追加日を表示
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  const shoppingMemoDates_ =
+    new Map();
+
+  const originalFetchForMemoDate_ =
+    window.fetch.bind(window);
+
+
+  function rememberShoppingMemoDates_(
+    result
+  ) {
+    if (
+      !result ||
+      !Array.isArray(result.items)
+    ) {
+      return;
+    }
+
+    result.items.forEach(function (item) {
+      shoppingMemoDates_.set(
+        String(item.id),
+        item.createdAt || ""
+      );
+    });
+
+    setTimeout(
+      applyShoppingMemoDates_,
+      0
+    );
+  }
+
+
+  window.fetch =
+    async function () {
+      const response =
+        await originalFetchForMemoDate_(
+          ...arguments
+        );
+
+      const url =
+        String(arguments[0] || "");
+
+      if (
+        url.includes(
+          "ShoppingMemo"
+        )
+      ) {
+        response
+          .clone()
+          .json()
+          .then(
+            rememberShoppingMemoDates_
+          )
+          .catch(function () {});
+      }
+
+      return response;
+    };
+
+
+  function formatShoppingMemoDate_(
+    value
+  ) {
+    if (!value) {
+      return "日付なし";
+    }
+
+    const date =
+      new Date(value);
+
+    if (
+      Number.isNaN(date.getTime())
+    ) {
+      return "日付なし";
+    }
+
+    return (
+      date.getMonth() + 1 +
+      "/" +
+      date.getDate()
+    );
+  }
+
+
+  function fullShoppingMemoDate_(
+    value
+  ) {
+    if (!value) {
+      return "追加日は記録されていません";
+    }
+
+    const date =
+      new Date(value);
+
+    if (
+      Number.isNaN(date.getTime())
+    ) {
+      return "追加日は記録されていません";
+    }
+
+    return (
+      date.getFullYear() +
+      "年" +
+      (
+        date.getMonth() + 1
+      ) +
+      "月" +
+      date.getDate() +
+      "日追加"
+    );
+  }
+
+
+  function applyShoppingMemoDates_() {
+    document
+      .querySelectorAll(
+        "#shoppingMemoList .shopping-item"
+      )
+      .forEach(function (row) {
+        const deleteButton =
+          row.querySelector(
+            "[data-shopping-delete]"
+          );
+
+        if (!deleteButton) {
+          return;
+        }
+
+        const id =
+          String(
+            deleteButton.dataset
+              .shoppingDelete ||
+            ""
+          );
+
+        let dateLabel =
+          row.querySelector(
+            ".shopping-added-date"
+          );
+
+        if (!dateLabel) {
+          dateLabel =
+            document.createElement(
+              "span"
+            );
+
+          dateLabel.className =
+            "shopping-added-date";
+
+          row.insertBefore(
+            dateLabel,
+            deleteButton
+          );
+        }
+
+        const createdAt =
+          shoppingMemoDates_.get(id) ||
+          "";
+
+        dateLabel.textContent =
+          formatShoppingMemoDate_(
+            createdAt
+          );
+
+        dateLabel.title =
+          fullShoppingMemoDate_(
+            createdAt
+          );
+      });
+  }
+
+
+  const style =
+    document.createElement("style");
+
+  style.textContent = `
+    #page-settings .shopping-item {
+      grid-template-columns:
+        35px
+        minmax(0, 1fr)
+        auto
+        34px;
+    }
+
+    #page-settings .shopping-added-date {
+      min-width: 34px;
+      color: #929a95;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: right;
+      white-space: nowrap;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+
+  const observer =
+    new MutationObserver(
+      applyShoppingMemoDates_
+    );
+
+  function startShoppingMemoDate_() {
+    const list =
+      document.getElementById(
+        "shoppingMemoList"
+      );
+
+    if (!list) {
+      setTimeout(
+        startShoppingMemoDate_,
+        500
+      );
+
+      return;
+    }
+
+    observer.observe(
+      list,
+      {
+        childList: true,
+        subtree: true
+      }
+    );
+
+    applyShoppingMemoDates_();
+
+    /*
+     * 日付付きの最新データを再取得
+     */
+    document
+      .getElementById(
+        "shoppingRefreshButton"
+      )
+      ?.click();
+  }
+
+
+  if (
+    document.readyState === "loading"
+  ) {
+    document.addEventListener(
+      "DOMContentLoaded",
+      startShoppingMemoDate_
+    );
+  } else {
+    startShoppingMemoDate_();
+  }
+})();
