@@ -17814,3 +17814,365 @@ if (
 ) {
   refreshReceiptPage();
 }
+/* =========================================================
+   カテゴリ画面を月別表示にする
+========================================================= */
+
+(function () {
+  "use strict";
+
+  let categoryMonthDate_ = new Date();
+
+  const originalFetchJsonForCategoryMonth_ =
+    fetchJson;
+
+
+  /* -------------------------------------------------------
+     カテゴリ画面で取得する購入明細を選択月だけに絞る
+  ------------------------------------------------------- */
+
+  fetchJson = async function (url, options) {
+    const targetYear =
+      categoryMonthDate_.getFullYear();
+
+    const targetMonth =
+      categoryMonthDate_.getMonth() + 1;
+
+    const result =
+      await originalFetchJsonForCategoryMonth_(
+        url,
+        options
+      );
+
+    const isPurchaseItemsRequest =
+      String(url).includes(
+        "mode=purchaseItems"
+      );
+
+    if (
+      !isPurchaseItemsRequest ||
+      typeof currentPage === "undefined" ||
+      currentPage !== "report"
+    ) {
+      return result;
+    }
+
+
+    function filterSelectedMonth_(items) {
+      if (!Array.isArray(items)) {
+        return [];
+      }
+
+      return items.filter(function (item) {
+        const date =
+          typeof parseDateValue === "function"
+            ? parseDateValue(item.date)
+            : new Date(item.date);
+
+        if (
+          !date ||
+          Number.isNaN(date.getTime())
+        ) {
+          return false;
+        }
+
+        return (
+          date.getFullYear() === targetYear &&
+          date.getMonth() + 1 === targetMonth
+        );
+      });
+    }
+
+
+    if (Array.isArray(result)) {
+      return filterSelectedMonth_(result);
+    }
+
+    if (
+      result &&
+      Array.isArray(result.items)
+    ) {
+      return Object.assign(
+        {},
+        result,
+        {
+          items:
+            filterSelectedMonth_(
+              result.items
+            )
+        }
+      );
+    }
+
+    if (
+      result &&
+      Array.isArray(result.data)
+    ) {
+      return Object.assign(
+        {},
+        result,
+        {
+          data:
+            filterSelectedMonth_(
+              result.data
+            )
+        }
+      );
+    }
+
+    return result;
+  };
+
+
+  /* -------------------------------------------------------
+     月選択部分を作る
+  ------------------------------------------------------- */
+
+  function ensureCategoryMonthSelector_() {
+    if (
+      document.getElementById(
+        "categoryMonthSelector"
+      )
+    ) {
+      return;
+    }
+
+    const list =
+      document.getElementById(
+        "reportCategoryList"
+      );
+
+    if (!list) {
+      return;
+    }
+
+    const card =
+      list.closest(
+        ".card, .section-card, section"
+      );
+
+    if (!card || !card.parentNode) {
+      return;
+    }
+
+    const selector =
+      document.createElement("div");
+
+    selector.id =
+      "categoryMonthSelector";
+
+    selector.className =
+      "category-month-selector";
+
+    selector.innerHTML = `
+      <button
+        type="button"
+        id="categoryPreviousMonth"
+        class="category-month-button"
+        aria-label="前の月">
+        ‹
+      </button>
+
+      <div class="category-month-center">
+        <small>表示月</small>
+        <strong id="categoryMonthLabel"></strong>
+      </div>
+
+      <button
+        type="button"
+        id="categoryNextMonth"
+        class="category-month-button"
+        aria-label="次の月">
+        ›
+      </button>
+    `;
+
+    card.parentNode.insertBefore(
+      selector,
+      card
+    );
+
+
+    document
+      .getElementById(
+        "categoryPreviousMonth"
+      )
+      .addEventListener(
+        "click",
+        function () {
+          categoryMonthDate_.setMonth(
+            categoryMonthDate_.getMonth() - 1
+          );
+
+          refreshCategoryMonth_();
+        }
+      );
+
+
+    document
+      .getElementById(
+        "categoryNextMonth"
+      )
+      .addEventListener(
+        "click",
+        function () {
+          categoryMonthDate_.setMonth(
+            categoryMonthDate_.getMonth() + 1
+          );
+
+          refreshCategoryMonth_();
+        }
+      );
+  }
+
+
+  /* -------------------------------------------------------
+     選択した月でカテゴリを更新
+  ------------------------------------------------------- */
+
+  function refreshCategoryMonth_() {
+    ensureCategoryMonthSelector_();
+
+    const year =
+      categoryMonthDate_.getFullYear();
+
+    const month =
+      categoryMonthDate_.getMonth() + 1;
+
+    const label =
+      document.getElementById(
+        "categoryMonthLabel"
+      );
+
+    if (label) {
+      label.textContent =
+        year + "年" + month + "月";
+    }
+
+    const headerMonth =
+      document.getElementById(
+        "currentMonth"
+      );
+
+    if (
+      headerMonth &&
+      typeof currentPage !== "undefined" &&
+      currentPage === "report"
+    ) {
+      headerMonth.textContent =
+        year + "年" + month + "月";
+    }
+
+    if (
+      typeof renderReport === "function"
+    ) {
+      renderReport();
+    }
+  }
+
+
+  /* -------------------------------------------------------
+     デザイン
+  ------------------------------------------------------- */
+
+  const style =
+    document.createElement("style");
+
+  style.textContent = `
+    .category-month-selector {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-sizing: border-box;
+      width: 100%;
+      margin: 0 0 16px;
+      padding: 10px 12px;
+      background: #ffffff;
+      border-radius: 22px;
+      box-shadow: 0 12px 30px rgba(35, 55, 45, 0.08);
+    }
+
+    .category-month-button {
+      width: 46px;
+      height: 46px;
+      border: 0;
+      border-radius: 15px;
+      background: #f6f7f7;
+      color: #111111;
+      font-size: 32px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .category-month-button:active {
+      transform: scale(0.96);
+      background: #e9f8ed;
+    }
+
+    .category-month-center {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .category-month-center small {
+      margin-bottom: 2px;
+      color: #929a96;
+      font-size: 10px;
+    }
+
+    .category-month-center strong {
+      color: #111111;
+      font-size: 17px;
+      font-weight: 800;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+
+  /* -------------------------------------------------------
+     カテゴリ画面を開いたときに月選択を表示
+  ------------------------------------------------------- */
+
+  const previousCategorySwitchPage_ =
+    switchPage;
+
+  switchPage = async function (page) {
+    const result =
+      await previousCategorySwitchPage_(page);
+
+    if (page === "report") {
+      ensureCategoryMonthSelector_();
+
+      const label =
+        document.getElementById(
+          "categoryMonthLabel"
+        );
+
+      if (label) {
+        label.textContent =
+          categoryMonthDate_.getFullYear() +
+          "年" +
+          (
+            categoryMonthDate_.getMonth() + 1
+          ) +
+          "月";
+      }
+    }
+
+    return result;
+  };
+
+
+  if (
+    typeof currentPage !== "undefined" &&
+    currentPage === "report"
+  ) {
+    ensureCategoryMonthSelector_();
+    refreshCategoryMonth_();
+  }
+})();
