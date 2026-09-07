@@ -15996,3 +15996,593 @@ loadDashboard =
     }
   );
 })();
+// =========================================================
+// 購入明細：手動追加ボタン
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.manualPurchaseUiAdded_) {
+    return;
+  }
+
+  window.manualPurchaseUiAdded_ =
+    true;
+
+
+  function manualToday_() {
+    const date =
+      new Date();
+
+    return (
+      date.getFullYear() +
+      "-" +
+      String(
+        date.getMonth() + 1
+      ).padStart(2, "0") +
+      "-" +
+      String(
+        date.getDate()
+      ).padStart(2, "0")
+    );
+  }
+
+
+  function ensureManualPurchaseUi_() {
+    if (
+      document.getElementById(
+        "manualPurchaseAddButton"
+      )
+    ) {
+      return;
+    }
+
+    const button =
+      document.createElement(
+        "button"
+      );
+
+    button.id =
+      "manualPurchaseAddButton";
+
+    button.type =
+      "button";
+
+    button.innerHTML =
+      '<span class="material-symbols-rounded">add</span>' +
+      "<span>手動追加</span>";
+
+    document.body.appendChild(
+      button
+    );
+
+
+    const backdrop =
+      document.createElement(
+        "div"
+      );
+
+    backdrop.id =
+      "manualPurchaseBackdrop";
+
+    backdrop.innerHTML = `
+      <div
+        class="manual-purchase-sheet"
+        role="dialog"
+        aria-modal="true">
+
+        <div class="manual-purchase-handle"></div>
+
+        <div class="manual-purchase-heading">
+          <div>
+            <strong>支出を手動追加</strong>
+            <small>
+              レシート登録に失敗した場合に使用します
+            </small>
+          </div>
+
+          <button
+            type="button"
+            id="manualPurchaseCloseButton"
+            aria-label="閉じる">
+            ×
+          </button>
+        </div>
+
+        <label class="manual-purchase-field">
+          <span>購入場所</span>
+          <input
+            id="manualPurchaseShop"
+            type="text"
+            placeholder="例：アマゾン">
+        </label>
+
+        <label class="manual-purchase-field">
+          <span>商品名</span>
+          <input
+            id="manualPurchaseName"
+            type="text"
+            placeholder="例：ガム">
+        </label>
+
+        <label class="manual-purchase-field">
+          <span>金額</span>
+          <div class="manual-purchase-money">
+            <span>¥</span>
+            <input
+              id="manualPurchaseAmount"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              placeholder="100">
+          </div>
+        </label>
+
+        <label class="manual-purchase-field">
+          <span>購入日</span>
+          <input
+            id="manualPurchaseDate"
+            type="date">
+        </label>
+
+        <button
+          type="button"
+          id="manualPurchaseSaveButton">
+          保存する
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(
+      backdrop
+    );
+
+
+    function closeManualPurchase_() {
+      backdrop.classList.remove(
+        "is-open"
+      );
+
+      document.body.classList.remove(
+        "manual-purchase-lock"
+      );
+    }
+
+
+    button.addEventListener(
+      "click",
+      function() {
+        document.getElementById(
+          "manualPurchaseDate"
+        ).value =
+          manualToday_();
+
+        backdrop.classList.add(
+          "is-open"
+        );
+
+        document.body.classList.add(
+          "manual-purchase-lock"
+        );
+
+        setTimeout(
+          function() {
+            document.getElementById(
+              "manualPurchaseShop"
+            )?.focus();
+          },
+          150
+        );
+      }
+    );
+
+
+    document.getElementById(
+      "manualPurchaseCloseButton"
+    ).addEventListener(
+      "click",
+      closeManualPurchase_
+    );
+
+
+    backdrop.addEventListener(
+      "click",
+      function(event) {
+        if (
+          event.target === backdrop
+        ) {
+          closeManualPurchase_();
+        }
+      }
+    );
+
+
+    document.getElementById(
+      "manualPurchaseSaveButton"
+    ).addEventListener(
+      "click",
+      async function() {
+        const saveButton =
+          this;
+
+        const shop =
+          document.getElementById(
+            "manualPurchaseShop"
+          ).value.trim();
+
+        const productName =
+          document.getElementById(
+            "manualPurchaseName"
+          ).value.trim();
+
+        const amount =
+          Number(
+            document.getElementById(
+              "manualPurchaseAmount"
+            ).value
+          );
+
+        const date =
+          document.getElementById(
+            "manualPurchaseDate"
+          ).value;
+
+        if (!shop) {
+          showToast(
+            "購入場所を入力してください"
+          );
+
+          return;
+        }
+
+        if (!productName) {
+          showToast(
+            "商品名を入力してください"
+          );
+
+          return;
+        }
+
+        if (
+          !Number.isFinite(amount) ||
+          amount <= 0
+        ) {
+          showToast(
+            "正しい金額を入力してください"
+          );
+
+          return;
+        }
+
+        saveButton.disabled =
+          true;
+
+        saveButton.textContent =
+          "保存しています…";
+
+        try {
+          const result =
+            await fetchJson(
+              API_BASE +
+              "?action=addManualPurchase" +
+              "&shop=" +
+              encodeURIComponent(shop) +
+              "&productName=" +
+              encodeURIComponent(
+                productName
+              ) +
+              "&amount=" +
+              encodeURIComponent(amount) +
+              "&date=" +
+              encodeURIComponent(date) +
+              "&_=" +
+              Date.now()
+            );
+
+          if (
+            !result ||
+            result.success !== true
+          ) {
+            throw new Error(
+              result?.error ||
+              "保存できませんでした"
+            );
+          }
+
+          closeManualPurchase_();
+
+          document.getElementById(
+            "manualPurchaseShop"
+          ).value = "";
+
+          document.getElementById(
+            "manualPurchaseName"
+          ).value = "";
+
+          document.getElementById(
+            "manualPurchaseAmount"
+          ).value = "";
+
+          showToast(
+            shop +
+            "「" +
+            productName +
+            "」" +
+            "を¥" +
+            amount.toLocaleString(
+              "ja-JP"
+            ) +
+            "で追加しました"
+          );
+
+          if (
+            typeof loadDashboard ===
+            "function"
+          ) {
+            await loadDashboard();
+          }
+
+          if (
+            typeof refreshReceiptPage ===
+            "function"
+          ) {
+            await refreshReceiptPage();
+          }
+        }
+        catch (error) {
+          console.error(
+            "手動追加エラー:",
+            error
+          );
+
+          showToast(
+            "保存できませんでした：" +
+            String(
+              error.message ||
+              error
+            )
+          );
+        }
+        finally {
+          saveButton.disabled =
+            false;
+
+          saveButton.textContent =
+            "保存する";
+        }
+      }
+    );
+  }
+
+
+  function updateManualButtonVisibility_() {
+    const button =
+      document.getElementById(
+        "manualPurchaseAddButton"
+      );
+
+    if (!button) {
+      return;
+    }
+
+    const page =
+      String(
+        location.hash || ""
+      )
+        .replace("#", "");
+
+    button.style.display =
+      page === "receipt"
+        ? "flex"
+        : "none";
+  }
+
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.textContent = `
+    #manualPurchaseAddButton {
+      position: fixed;
+      right: max(
+        18px,
+        calc((100vw - 430px) / 2 + 18px)
+      );
+      bottom: calc(
+        82px +
+        env(safe-area-inset-bottom)
+      );
+      z-index: 9990;
+      display: none;
+      align-items: center;
+      gap: 4px;
+      height: 44px;
+      padding: 0 15px;
+      border: 0;
+      border-radius: 15px;
+      background: #31c965;
+      color: #ffffff;
+      box-shadow:
+        0 8px 22px
+        rgba(25, 160, 75, 0.28);
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    #manualPurchaseAddButton
+    .material-symbols-rounded {
+      font-size: 19px;
+    }
+
+    #manualPurchaseBackdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 10020;
+      display: none;
+      background:
+        rgba(18, 24, 20, 0.42);
+    }
+
+    #manualPurchaseBackdrop.is-open {
+      display: block;
+    }
+
+    .manual-purchase-sheet {
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      box-sizing: border-box;
+      width: min(100%, 460px);
+      padding:
+        9px
+        17px
+        calc(
+          20px +
+          env(safe-area-inset-bottom)
+        );
+      transform: translateX(-50%);
+      border-radius:
+        24px
+        24px
+        0
+        0;
+      background: #ffffff;
+      box-shadow:
+        0 -12px 40px
+        rgba(0, 0, 0, 0.16);
+    }
+
+    .manual-purchase-handle {
+      width: 38px;
+      height: 4px;
+      margin: 0 auto 12px;
+      border-radius: 10px;
+      background: #d8ddd9;
+    }
+
+    .manual-purchase-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 15px;
+    }
+
+    .manual-purchase-heading strong {
+      display: block;
+      color: #171a18;
+      font-size: 18px;
+    }
+
+    .manual-purchase-heading small {
+      display: block;
+      margin-top: 3px;
+      color: #8a928d;
+      font-size: 10px;
+    }
+
+    #manualPurchaseCloseButton {
+      width: 32px;
+      height: 32px;
+      border: 0;
+      border-radius: 10px;
+      background: #f0f3f1;
+      color: #68716b;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .manual-purchase-field {
+      display: block;
+      margin-bottom: 11px;
+    }
+
+    .manual-purchase-field > span {
+      display: block;
+      margin-bottom: 4px;
+      color: #69726c;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .manual-purchase-field input {
+      box-sizing: border-box;
+      width: 100%;
+      height: 43px;
+      padding: 0 12px;
+      border: 1px solid #dfe5e1;
+      border-radius: 12px;
+      outline: none;
+      background: #fafcfb;
+      color: #171a18;
+      font-size: 14px;
+    }
+
+    .manual-purchase-field input:focus {
+      border-color: #38c96a;
+      background: #ffffff;
+    }
+
+    .manual-purchase-money {
+      display: flex;
+      align-items: center;
+      height: 43px;
+      padding-left: 12px;
+      border: 1px solid #dfe5e1;
+      border-radius: 12px;
+      background: #fafcfb;
+    }
+
+    .manual-purchase-money span {
+      font-weight: 800;
+    }
+
+    .manual-purchase-money input {
+      height: 40px;
+      border: 0;
+      background: transparent;
+    }
+
+    #manualPurchaseSaveButton {
+      width: 100%;
+      height: 47px;
+      margin-top: 4px;
+      border: 0;
+      border-radius: 13px;
+      background: #31c965;
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    #manualPurchaseSaveButton:disabled {
+      opacity: 0.6;
+    }
+
+    body.manual-purchase-lock {
+      overflow: hidden;
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+
+  ensureManualPurchaseUi_();
+  updateManualButtonVisibility_();
+
+  window.addEventListener(
+    "hashchange",
+    updateManualButtonVisibility_
+  );
+
+  setTimeout(
+    updateManualButtonVisibility_,
+    500
+  );
+})();
