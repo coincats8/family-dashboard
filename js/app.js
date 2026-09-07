@@ -16586,3 +16586,695 @@ loadDashboard =
     500
   );
 })();
+// =========================================================
+// 購入明細を「同じ日付・同じ店」でまとめる
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.purchaseShopGroupingAdded_) {
+    return;
+  }
+
+  window.purchaseShopGroupingAdded_ =
+    true;
+
+  const renderReceiptListBeforeShopGrouping_ =
+    renderReceiptList;
+
+
+  function shopGroupNumber_(value) {
+    const number =
+      Number(
+        String(value ?? 0)
+          .replace(/,/g, "")
+          .replace(/[¥￥円]/g, "")
+      );
+
+    return Number.isFinite(number)
+      ? number
+      : 0;
+  }
+
+
+  function shopGroupAmount_(item) {
+    if (
+      typeof purchaseItemAmount_ ===
+      "function"
+    ) {
+      return purchaseItemAmount_(
+        item.amount
+      );
+    }
+
+    const amount =
+      shopGroupNumber_(
+        item.amount
+      );
+
+    if (amount > 0) {
+      return amount;
+    }
+
+    return (
+      shopGroupNumber_(
+        item.unitPrice
+      ) *
+      Math.max(
+        1,
+        shopGroupNumber_(
+          item.quantity
+        )
+      )
+    );
+  }
+
+
+  function shopGroupDate_(value) {
+    let date = null;
+
+    if (
+      typeof parseDateValue ===
+      "function"
+    ) {
+      date =
+        parseDateValue(
+          value
+        );
+    }
+    else {
+      date =
+        new Date(value);
+    }
+
+    if (
+      !date ||
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return {
+        key:
+          String(value || ""),
+        label:
+          String(value || ""),
+        time:
+          0
+      };
+    }
+
+    const year =
+      date.getFullYear();
+
+    const month =
+      date.getMonth() + 1;
+
+    const day =
+      date.getDate();
+
+    return {
+      key:
+        year +
+        "-" +
+        String(month).padStart(
+          2,
+          "0"
+        ) +
+        "-" +
+        String(day).padStart(
+          2,
+          "0"
+        ),
+
+      label:
+        month +
+        "/" +
+        day,
+
+      time:
+        new Date(
+          year,
+          month - 1,
+          day
+        ).getTime()
+    };
+  }
+
+
+  function shopGroupShopKey_(value) {
+    return String(
+      value || "店名不明"
+    )
+      .normalize("NFKC")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+  }
+
+
+  function shopGroupYen_(value) {
+    return (
+      "¥" +
+      Math.round(
+        shopGroupNumber_(value)
+      ).toLocaleString(
+        "ja-JP"
+      )
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // 同じ日付・同じ店名をまとめる
+  // -------------------------------------------------------
+
+  function createShopGroups_(
+    receipts
+  ) {
+    const map =
+      new Map();
+
+    receipts.forEach(
+      function(item) {
+        const date =
+          shopGroupDate_(
+            item.date
+          );
+
+        const shop =
+          String(
+            item.shop ||
+            "店名不明"
+          ).trim();
+
+        const key =
+          date.key +
+          "::" +
+          shopGroupShopKey_(
+            shop
+          );
+
+        if (!map.has(key)) {
+          map.set(
+            key,
+            {
+              key:
+                key,
+
+              date:
+                date,
+
+              shop:
+                shop,
+
+              items:
+                [],
+
+              total:
+                0,
+
+              quantity:
+                0
+            }
+          );
+        }
+
+        const group =
+          map.get(key);
+
+        group.items.push(
+          item
+        );
+
+        group.total +=
+          shopGroupAmount_(
+            item
+          );
+
+        group.quantity +=
+          Math.max(
+            1,
+            shopGroupNumber_(
+              item.quantity
+            )
+          );
+      }
+    );
+
+    return Array.from(
+      map.values()
+    ).sort(
+      function(a, b) {
+        if (
+          a.date.time !==
+          b.date.time
+        ) {
+          return (
+            b.date.time -
+            a.date.time
+          );
+        }
+
+        return a.shop.localeCompare(
+          b.shop,
+          "ja"
+        );
+      }
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // まとめた購入一覧を表示
+  // -------------------------------------------------------
+
+  function renderGroupedPurchases_(
+    container,
+    receipts
+  ) {
+    const source =
+      Array.isArray(receipts)
+        ? receipts
+        : [];
+
+    if (!source.length) {
+      renderReceiptListBeforeShopGrouping_(
+        container,
+        source
+      );
+
+      return;
+    }
+
+    const groups =
+      createShopGroups_(
+        source
+      );
+
+    const countTarget =
+      document.getElementById(
+        "receiptCount"
+      );
+
+    if (countTarget) {
+      countTarget.textContent =
+        groups.length +
+        "件";
+    }
+
+    container.innerHTML = `
+      <div class="purchase-shop-groups">
+
+        <div class="purchase-shop-group-head">
+          <span>日付・店名</span>
+          <span>合計金額</span>
+        </div>
+
+        ${
+          groups
+            .map(
+              function(group, index) {
+                return `
+                  <section
+                    class="purchase-shop-group"
+                    data-shop-group="${index}">
+
+                    <button
+                      type="button"
+                      class="purchase-shop-summary"
+                      data-shop-group-button="${index}"
+                      aria-expanded="false">
+
+                      <span class="purchase-shop-date">
+                        ${escapeHTML(group.date.label)}
+                      </span>
+
+                      <span class="purchase-shop-information">
+
+                        <strong
+                          class="purchase-shop-name"
+                          title="${escapeHTML(group.shop)}">
+                          ${escapeHTML(group.shop)}
+                        </strong>
+
+                        <small>
+                          ${
+                            group.items.length
+                          }商品
+                          ・数量
+                          ${
+                            group.quantity
+                          }点
+                        </small>
+
+                      </span>
+
+                      <strong class="purchase-shop-total">
+                        ${escapeHTML(
+                          shopGroupYen_(
+                            group.total
+                          )
+                        )}
+                      </strong>
+
+                      <span
+                        class="material-symbols-rounded
+                        purchase-shop-arrow">
+                        expand_more
+                      </span>
+
+                    </button>
+
+                    <div
+                      class="purchase-shop-details"
+                      data-shop-group-details="${index}">
+                    </div>
+
+                  </section>
+                `;
+              }
+            )
+            .join("")
+        }
+
+      </div>
+    `;
+
+
+    container
+      .querySelectorAll(
+        "[data-shop-group-button]"
+      )
+      .forEach(
+        function(button) {
+          button.addEventListener(
+            "click",
+            function() {
+              const index =
+                Number(
+                  button.dataset
+                    .shopGroupButton
+                );
+
+              const section =
+                button.closest(
+                  ".purchase-shop-group"
+                );
+
+              const details =
+                section.querySelector(
+                  "[data-shop-group-details]"
+                );
+
+              const isOpen =
+                section.classList.contains(
+                  "is-open"
+                );
+
+              container
+                .querySelectorAll(
+                  ".purchase-shop-group"
+                )
+                .forEach(
+                  function(otherSection) {
+                    otherSection
+                      .classList
+                      .remove(
+                        "is-open"
+                      );
+
+                    const otherButton =
+                      otherSection.querySelector(
+                        ".purchase-shop-summary"
+                      );
+
+                    if (otherButton) {
+                      otherButton.setAttribute(
+                        "aria-expanded",
+                        "false"
+                      );
+                    }
+                  }
+                );
+
+              if (isOpen) {
+                return;
+              }
+
+              section.classList.add(
+                "is-open"
+              );
+
+              button.setAttribute(
+                "aria-expanded",
+                "true"
+              );
+
+              if (
+                details.dataset.rendered !==
+                "true"
+              ) {
+                // 現在の商品明細と鉛筆編集をそのまま表示
+                renderReceiptListBeforeShopGrouping_(
+                  details,
+                  groups[index].items
+                );
+
+                details.dataset.rendered =
+                  "true";
+              }
+
+              setTimeout(
+                function() {
+                  section.scrollIntoView({
+                    behavior:
+                      "smooth",
+
+                    block:
+                      "nearest"
+                  });
+                },
+                100
+              );
+            }
+          );
+        }
+      );
+  }
+
+
+  // -------------------------------------------------------
+  // 購入明細画面だけグループ表示
+  // ホームの最近の支出は今までどおり
+  // -------------------------------------------------------
+
+  renderReceiptList =
+    function(
+      container,
+      receipts,
+      limit
+    ) {
+      if (
+        container &&
+        container.id ===
+          "receiptFullList"
+      ) {
+        renderGroupedPurchases_(
+          container,
+          Array.isArray(receipts)
+            ? receipts
+            : []
+        );
+
+        return;
+      }
+
+      renderReceiptListBeforeShopGrouping_(
+        container,
+        receipts,
+        limit
+      );
+    };
+
+
+  // -------------------------------------------------------
+  // デザイン
+  // -------------------------------------------------------
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.textContent = `
+    .purchase-shop-groups {
+      overflow: hidden;
+      border: 1px solid #e7ece8;
+      border-radius: 17px;
+      background: #ffffff;
+    }
+
+    .purchase-shop-group-head {
+      display: grid;
+      grid-template-columns:
+        minmax(0, 1fr)
+        auto;
+      align-items: center;
+      padding: 10px 13px;
+      border-bottom: 1px solid #e9eeeb;
+      color: #8a918c;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .purchase-shop-group-head
+    span:last-child {
+      padding-right: 27px;
+      text-align: right;
+    }
+
+    .purchase-shop-group {
+      border-bottom: 1px solid #e9eeeb;
+    }
+
+    .purchase-shop-group:last-child {
+      border-bottom: 0;
+    }
+
+    .purchase-shop-summary {
+      display: grid;
+      grid-template-columns:
+        38px
+        minmax(0, 1fr)
+        auto
+        19px;
+      gap: 8px;
+      align-items: center;
+      width: 100%;
+      min-height: 65px;
+      padding: 10px 11px;
+      border: 0;
+      background: #ffffff;
+      color: #171a18;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .purchase-shop-summary:active {
+      background: #f4faf6;
+    }
+
+    .purchase-shop-date {
+      color: #68716b;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .purchase-shop-information {
+      min-width: 0;
+    }
+
+    .purchase-shop-name {
+      display: block;
+      overflow: hidden;
+      color: #1c211e;
+      font-size: 13px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .purchase-shop-information small {
+      display: block;
+      margin-top: 3px;
+      color: #919893;
+      font-size: 9px;
+      white-space: nowrap;
+    }
+
+    .purchase-shop-total {
+      color: #178e40;
+      font-size: 13px;
+      font-weight: 800;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .purchase-shop-arrow {
+      color: #87908a;
+      font-size: 18px;
+      transition:
+        transform 0.2s ease;
+    }
+
+    .purchase-shop-group.is-open
+    .purchase-shop-arrow {
+      transform: rotate(180deg);
+    }
+
+    .purchase-shop-details {
+      display: none;
+      padding: 0 11px 8px;
+      border-top: 1px solid #eef2ef;
+      background: #fbfdfb;
+    }
+
+    .purchase-shop-group.is-open
+    .purchase-shop-details {
+      display: block;
+    }
+
+    .purchase-shop-details
+    .purchase-compact-list {
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .purchase-shop-details
+    .purchase-compact-head {
+      padding-top: 9px;
+      background: transparent;
+    }
+
+    @media (max-width: 390px) {
+      .purchase-shop-summary {
+        grid-template-columns:
+          34px
+          minmax(0, 1fr)
+          auto
+          17px;
+        gap: 6px;
+        padding-left: 8px;
+        padding-right: 8px;
+      }
+
+      .purchase-shop-total {
+        font-size: 12px;
+      }
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+
+
+  // 現在購入明細画面を開いている場合は再描画
+  if (
+    String(
+      location.hash || ""
+    ) === "#receipt" &&
+    typeof refreshReceiptPage ===
+      "function"
+  ) {
+    setTimeout(
+      function() {
+        refreshReceiptPage();
+      },
+      300
+    );
+  }
+})();
