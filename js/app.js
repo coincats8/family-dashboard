@@ -18515,3 +18515,127 @@ if (
 
   swapHomeBalance_();
 })();
+// =========================================================
+// ホームの生活費・残金をカテゴリ合計から正しく計算
+// =========================================================
+
+(function () {
+  "use strict";
+
+  function correctHomeMoneyTotals_() {
+    if (!dashboardData) {
+      return;
+    }
+
+    const living =
+      dashboardData.living || {};
+
+    const budget =
+      Number(
+        living.budget ??
+        dashboardData.budget ??
+        SETTINGS.monthlyBudget
+      ) || 0;
+
+    const categories =
+      Array.isArray(
+        dashboardData.categories
+      )
+        ? dashboardData.categories
+        : [];
+
+    /*
+     * カテゴリ別金額の合計を今月の生活費にする
+     */
+    const expense =
+      categories.reduce(
+        function (total, category) {
+          return (
+            total +
+            (
+              Number(
+                category.amount
+              ) || 0
+            )
+          );
+        },
+        0
+      );
+
+    const remaining =
+      budget - expense;
+
+
+    /* 大きな表示：今月の残金 */
+
+    const mainMoney =
+      document.getElementById(
+        "totalMoney"
+      );
+
+    if (mainMoney) {
+      mainMoney.textContent =
+        yen(remaining);
+
+      mainMoney.classList.toggle(
+        "is-danger",
+        remaining < 0
+      );
+
+      const label =
+        mainMoney
+          .closest(".summary-header")
+          ?.querySelector(".card-title");
+
+      if (label) {
+        label.textContent =
+          "今月の残金";
+      }
+    }
+
+
+    /* 右下：今月の生活費 */
+
+    const expenseMoney =
+      document.getElementById(
+        "balanceMoney"
+      );
+
+    if (expenseMoney) {
+      expenseMoney.textContent =
+        yen(expense);
+
+      expenseMoney.classList.remove(
+        "is-danger"
+      );
+
+      const label =
+        expenseMoney
+          .closest(".budget-item")
+          ?.querySelector(
+            ".budget-label"
+          );
+
+      if (label) {
+        label.textContent =
+          "今月の生活費";
+      }
+    }
+  }
+
+
+  const renderHomeBeforeCorrectTotals_ =
+    renderHome;
+
+  renderHome = function () {
+    renderHomeBeforeCorrectTotals_();
+    correctHomeMoneyTotals_();
+
+    setTimeout(
+      correctHomeMoneyTotals_,
+      100
+    );
+  };
+
+  correctHomeMoneyTotals_();
+})();
