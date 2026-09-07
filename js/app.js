@@ -17522,3 +17522,177 @@ loadDashboard =
     }
   );
 })();
+
+/* =========================================================
+   日別画面の表示漏れ修正 ＋ 下部メニュー名変更
+   app.js の一番最後に追加
+========================================================= */
+
+(function () {
+  "use strict";
+
+  /* -------------------------------------------------------
+     購入履歴の表示条件を修正
+     レシートIDやカテゴリが空でも、必要項目があれば表示する
+  ------------------------------------------------------- */
+
+  isPurchaseManagementItem_ = function (item) {
+    if (!item) {
+      return false;
+    }
+
+    const date =
+      typeof parseDateValue === "function"
+        ? parseDateValue(item.date)
+        : new Date(item.date);
+
+    const shop = String(
+      item.shop ||
+      item.store ||
+      item.storeName ||
+      ""
+    ).trim();
+
+    const productName = String(
+      item.productName ||
+      item.name ||
+      item.itemName ||
+      ""
+    ).trim();
+
+    const amountValue =
+      item.amount ??
+      item.totalAmount ??
+      item.total ??
+      item.price ??
+      item.unitPrice ??
+      0;
+
+    const amount =
+      typeof purchaseItemAmount_ === "function"
+        ? purchaseItemAmount_(amountValue)
+        : Number(
+            String(amountValue)
+              .replace(/[￥¥,\s円]/g, "")
+          );
+
+    return Boolean(
+      date &&
+      !Number.isNaN(date.getTime()) &&
+      shop &&
+      productName &&
+      Number.isFinite(amount) &&
+      amount >= 0
+    );
+  };
+
+
+  /* -------------------------------------------------------
+     下部メニューを変更
+  ------------------------------------------------------- */
+
+  const dailyNavLabels_ = {
+    home: {
+      label: "ホーム",
+      icon: "home"
+    },
+    receipt: {
+      label: "日別",
+      icon: "calendar_view_day"
+    },
+    report: {
+      label: "カテゴリ",
+      icon: "category"
+    },
+    calendar: {
+      label: "カレンダー",
+      icon: "calendar_month"
+    },
+    settings: {
+      label: "メモ",
+      icon: "edit_note"
+    }
+  };
+
+
+  function applyDailyNavLabels_() {
+    document
+      .querySelectorAll(".nav-button[data-page]")
+      .forEach(function (button) {
+        const config =
+          dailyNavLabels_[button.dataset.page];
+
+        if (!config) {
+          return;
+        }
+
+        const label =
+          button.querySelector(".nav-label");
+
+        const icon =
+          button.querySelector(
+            ".material-symbols-rounded"
+          );
+
+        if (
+          label &&
+          label.textContent.trim() !== config.label
+        ) {
+          label.textContent = config.label;
+        }
+
+        if (
+          icon &&
+          icon.textContent.trim() !== config.icon
+        ) {
+          icon.textContent = config.icon;
+        }
+
+        button.setAttribute(
+          "aria-label",
+          config.label
+        );
+      });
+  }
+
+
+  /* -------------------------------------------------------
+     ページ切り替え後もメニュー名を維持
+  ------------------------------------------------------- */
+
+  if (typeof switchPage === "function") {
+    const previousSwitchPage_ = switchPage;
+
+    switchPage = async function (page) {
+      const result =
+        await previousSwitchPage_(page);
+
+      applyDailyNavLabels_();
+
+      return result;
+    };
+  }
+
+
+  function initializeDailyPageFix_() {
+    applyDailyNavLabels_();
+
+    if (
+      typeof currentPage !== "undefined" &&
+      currentPage === "receipt" &&
+      typeof refreshReceiptPage === "function"
+    ) {
+      refreshReceiptPage();
+    }
+  }
+
+
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      initializeDailyPageFix_
+    );
+  } else {
+    initializeDailyPageFix_();
+  }
+})();
