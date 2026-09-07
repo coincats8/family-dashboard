@@ -17278,3 +17278,247 @@ loadDashboard =
     );
   }
 })();
+// =========================================================
+// 英語・カタカナの店名を統一
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.shopNameNormalizeAdded_) {
+    return;
+  }
+
+  window.shopNameNormalizeAdded_ =
+    true;
+
+
+  function normalizeDisplayedShopName_(
+    value
+  ) {
+    let shop =
+      String(
+        value || "店名不明"
+      )
+        .normalize("NFKC")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const rules = [
+      {
+        pattern:
+          /^(maruetsu|マルエツ)\s*/i,
+        name:
+          "マルエツ"
+      },
+      {
+        pattern:
+          /^(matsukiyolab|マツキヨlab|マツキヨラボ)\s*/i,
+        name:
+          "マツキヨLAB"
+      },
+      {
+        pattern:
+          /^(matsukiyo|マツキヨ)\s*/i,
+        name:
+          "マツキヨ"
+      },
+      {
+        pattern:
+          /^(matsumotokiyoshi|マツモトキヨシ)\s*/i,
+        name:
+          "マツモトキヨシ"
+      },
+      {
+        pattern:
+          /^(amazon|アマゾン)\s*/i,
+        name:
+          "アマゾン"
+      },
+      {
+        pattern:
+          /^(aeon|イオン)\s*/i,
+        name:
+          "イオン"
+      },
+      {
+        pattern:
+          /^(seiyu|西友)\s*/i,
+        name:
+          "西友"
+      },
+      {
+        pattern:
+          /^(familymart|family mart|ファミリーマート|ファミマ)\s*/i,
+        name:
+          "ファミリーマート"
+      },
+      {
+        pattern:
+          /^(lawson|ローソン)\s*/i,
+        name:
+          "ローソン"
+      },
+      {
+        pattern:
+          /^(seven.?eleven|7.?eleven|セブンイレブン|セブン-イレブン)\s*/i,
+        name:
+          "セブンイレブン"
+      },
+      {
+        pattern:
+          /^(welcia|welcia|ウエルシア|ウェルシア)\s*/i,
+        name:
+          "ウエルシア"
+      },
+      {
+        pattern:
+          /^(itoyokado|イトーヨーカドー|イトーヨーカ堂)\s*/i,
+        name:
+          "イトーヨーカドー"
+      }
+    ];
+
+    for (
+      let index = 0;
+      index < rules.length;
+      index++
+    ) {
+      const rule =
+        rules[index];
+
+      if (
+        rule.pattern.test(shop)
+      ) {
+        const branch =
+          shop
+            .replace(
+              rule.pattern,
+              ""
+            )
+            .trim();
+
+        return branch
+          ? rule.name +
+              " " +
+              branch
+          : rule.name;
+      }
+    }
+
+    return shop;
+  }
+
+
+  // -------------------------------------------------------
+  // 購入明細へ渡す前に店名を統一
+  // -------------------------------------------------------
+
+  const renderReceiptListBeforeShopNormalize_ =
+    renderReceiptList;
+
+  renderReceiptList =
+    function(
+      container,
+      receipts,
+      limit
+    ) {
+      const normalizedReceipts =
+        Array.isArray(receipts)
+          ? receipts.map(
+              function(item) {
+                return {
+                  ...item,
+
+                  shop:
+                    normalizeDisplayedShopName_(
+                      item.shop
+                    )
+                };
+              }
+            )
+          : receipts;
+
+      return renderReceiptListBeforeShopNormalize_(
+        container,
+        normalizedReceipts,
+        limit
+      );
+    };
+
+
+  // -------------------------------------------------------
+  // 読み込み済みデータの店名も統一
+  // -------------------------------------------------------
+
+  function normalizeLoadedShopNames_() {
+    if (
+      typeof receiptData !==
+        "undefined" &&
+      Array.isArray(receiptData)
+    ) {
+      receiptData.forEach(
+        function(item) {
+          item.shop =
+            normalizeDisplayedShopName_(
+              item.shop
+            );
+        }
+      );
+    }
+
+    if (
+      typeof dashboardData !==
+        "undefined" &&
+      dashboardData &&
+      Array.isArray(
+        dashboardData.recent
+      )
+    ) {
+      dashboardData.recent.forEach(
+        function(item) {
+          item.shop =
+            normalizeDisplayedShopName_(
+              item.shop
+            );
+        }
+      );
+    }
+  }
+
+
+  // -------------------------------------------------------
+  // 購入明細を統一後の店名で再表示
+  // -------------------------------------------------------
+
+  setTimeout(
+    async function() {
+      normalizeLoadedShopNames_();
+
+      if (
+        String(
+          location.hash || ""
+        ) === "#receipt" &&
+        typeof refreshReceiptPage ===
+          "function"
+      ) {
+        await refreshReceiptPage();
+
+        normalizeLoadedShopNames_();
+      }
+    },
+    400
+  );
+
+
+  window.addEventListener(
+    "hashchange",
+    function() {
+      setTimeout(
+        normalizeLoadedShopNames_,
+        200
+      );
+    }
+  );
+})();
