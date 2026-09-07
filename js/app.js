@@ -18397,3 +18397,121 @@ if (
 
   document.head.appendChild(style);
 })();
+// =========================================================
+// ホーム：生活費と残金の表示位置を入れ替える
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.homeBalanceSwapAdded_) {
+    return;
+  }
+
+  window.homeBalanceSwapAdded_ = true;
+
+  function swapHomeBalance_() {
+    if (
+      !dashboardData ||
+      typeof currentPage === "undefined"
+    ) {
+      return;
+    }
+
+    const living =
+      dashboardData.living || {};
+
+    const budget =
+      Number(
+        living.budget ??
+        dashboardData.budget ??
+        SETTINGS.monthlyBudget
+      ) || 0;
+
+    const expense =
+      Number(
+        living.expense ??
+        dashboardData.expense ??
+        0
+      ) || 0;
+
+    const remaining =
+      Number(
+        living.remaining ??
+        dashboardData.balance ??
+        (
+          budget - expense
+        )
+      );
+
+
+    const mainMoney =
+      document.getElementById(
+        "totalMoney"
+      );
+
+    const bottomRightMoney =
+      document.getElementById(
+        "balanceMoney"
+      );
+
+
+    /* 大きな金額を今月の残金に変更 */
+
+    if (mainMoney) {
+      mainMoney.textContent =
+        yen(remaining);
+
+      mainMoney.classList.toggle(
+        "is-danger",
+        remaining < 0
+      );
+
+      const mainLabel =
+        mainMoney
+          .closest(".summary-header")
+          ?.querySelector(".card-title");
+
+      if (mainLabel) {
+        mainLabel.textContent =
+          "今月の残金";
+      }
+    }
+
+
+    /* 右下を今月の生活費に変更 */
+
+    if (bottomRightMoney) {
+      bottomRightMoney.textContent =
+        yen(expense);
+
+      bottomRightMoney.classList.remove(
+        "is-danger"
+      );
+
+      const bottomLabel =
+        bottomRightMoney
+          .closest(".budget-item")
+          ?.querySelector(
+            ".budget-label"
+          );
+
+      if (bottomLabel) {
+        bottomLabel.textContent =
+          "今月の生活費";
+      }
+    }
+  }
+
+
+  const renderHomeBeforeBalanceSwap_ =
+    renderHome;
+
+  renderHome = function () {
+    renderHomeBeforeBalanceSwap_();
+    swapHomeBalance_();
+  };
+
+
+  swapHomeBalance_();
+})();
