@@ -18176,3 +18176,224 @@ if (
     refreshCategoryMonth_();
   }
 })();
+
+// =========================================================
+// 買い物メモの×ボタン左側に追加日を表示
+// 安全修正版：app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.safeShoppingMemoDateAdded_) {
+    return;
+  }
+
+  window.safeShoppingMemoDateAdded_ = true;
+
+  const memoCreatedDates_ =
+    new Map();
+
+  const fetchBeforeMemoDate_ =
+    window.fetch.bind(window);
+
+
+  function formatMemoCreatedDate_(
+    value
+  ) {
+    const date =
+      new Date(value);
+
+    if (
+      !value ||
+      Number.isNaN(date.getTime())
+    ) {
+      return "";
+    }
+
+    /*
+     * 日本時間で表示
+     */
+    return new Intl.DateTimeFormat(
+      "ja-JP",
+      {
+        timeZone: "Asia/Tokyo",
+        month: "numeric",
+        day: "numeric"
+      }
+    ).format(date);
+  }
+
+
+  function displayMemoCreatedDates_() {
+    document
+      .querySelectorAll(
+        "#shoppingMemoList .shopping-item"
+      )
+      .forEach(function (row) {
+        const deleteButton =
+          row.querySelector(
+            "[data-shopping-delete]"
+          );
+
+        if (!deleteButton) {
+          return;
+        }
+
+        const id =
+          String(
+            deleteButton.dataset
+              .shoppingDelete ||
+            ""
+          );
+
+        const createdAt =
+          memoCreatedDates_.get(id);
+
+        const formattedDate =
+          formatMemoCreatedDate_(
+            createdAt
+          );
+
+        if (!formattedDate) {
+          return;
+        }
+
+        let dateElement =
+          row.querySelector(
+            ".shopping-added-date"
+          );
+
+        if (!dateElement) {
+          dateElement =
+            document.createElement(
+              "span"
+            );
+
+          dateElement.className =
+            "shopping-added-date";
+
+          row.insertBefore(
+            dateElement,
+            deleteButton
+          );
+        }
+
+        const displayText =
+          formattedDate + "追加";
+
+        /*
+         * 表示内容が違う場合だけ更新
+         */
+        if (
+          dateElement.textContent !==
+          displayText
+        ) {
+          dateElement.textContent =
+            displayText;
+        }
+      });
+  }
+
+
+  function saveMemoCreatedDates_(
+    result
+  ) {
+    if (
+      !result ||
+      !Array.isArray(result.items)
+    ) {
+      return;
+    }
+
+    result.items.forEach(
+      function (item) {
+        if (
+          item &&
+          item.id &&
+          item.createdAt
+        ) {
+          memoCreatedDates_.set(
+            String(item.id),
+            item.createdAt
+          );
+        }
+      }
+    );
+
+    /*
+     * メモ一覧が描画された後に日付を追加
+     */
+    setTimeout(
+      displayMemoCreatedDates_,
+      50
+    );
+
+    setTimeout(
+      displayMemoCreatedDates_,
+      300
+    );
+  }
+
+
+  window.fetch =
+    async function () {
+      const response =
+        await fetchBeforeMemoDate_(
+          ...arguments
+        );
+
+      const requestUrl =
+        String(arguments[0] || "");
+
+      if (
+        requestUrl.includes(
+          "ShoppingMemo"
+        )
+      ) {
+        response
+          .clone()
+          .json()
+          .then(
+            saveMemoCreatedDates_
+          )
+          .catch(
+            function () {
+              /*
+               * 日付取得失敗でも
+               * メモ本体の動作は止めない
+               */
+            }
+          );
+      }
+
+      return response;
+    };
+
+
+  const style =
+    document.createElement("style");
+
+  style.id =
+    "safeShoppingMemoDateStyle";
+
+  style.textContent = `
+    #page-settings .shopping-item {
+      grid-template-columns:
+        35px
+        minmax(0, 1fr)
+        auto
+        34px;
+    }
+
+    #page-settings .shopping-added-date {
+      color: #929a95;
+      font-size: 10px;
+      font-weight: 600;
+      text-align: right;
+      white-space: nowrap;
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
