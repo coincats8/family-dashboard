@@ -18791,3 +18791,422 @@ if (
     renderHome();
   }
 })();
+// =========================================================
+// 日別の編集画面をカテゴリ編集画面と統一
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.unifiedPurchaseEditorAdded_) {
+    return;
+  }
+
+  window.unifiedPurchaseEditorAdded_ = true;
+
+  let unifiedEditingItem_ = null;
+
+
+  function unifiedText_(value) {
+    return String(value || "").trim();
+  }
+
+
+  function unifiedCategoryKey_(value) {
+    return unifiedText_(value)
+      .normalize("NFKC")
+      .replace(
+        /[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu,
+        ""
+      )
+      .replace(/\s+/g, "");
+  }
+
+
+  function unifiedDate_(value) {
+    const date =
+      typeof parseDateValue === "function"
+        ? parseDateValue(value)
+        : new Date(value);
+
+    if (
+      !date ||
+      Number.isNaN(date.getTime())
+    ) {
+      return "";
+    }
+
+    return [
+      date.getFullYear(),
+      String(
+        date.getMonth() + 1
+      ).padStart(2, "0"),
+      String(
+        date.getDate()
+      ).padStart(2, "0")
+    ].join("-");
+  }
+
+
+  function findEditingItem_() {
+    const name =
+      unifiedText_(
+        document.getElementById(
+          "purchaseEditName"
+        )?.value
+      );
+
+    const shop =
+      unifiedText_(
+        document.getElementById(
+          "purchaseEditShop"
+        )?.value
+      );
+
+    const candidates =
+      Array.isArray(receiptData)
+        ? receiptData
+        : [];
+
+    return candidates.find(function (item) {
+      const itemName =
+        unifiedText_(
+          item.productName ||
+          item.name ||
+          item.itemName
+        );
+
+      const itemShop =
+        unifiedText_(item.shop);
+
+      return (
+        itemName === name &&
+        itemShop === shop
+      );
+    }) || null;
+  }
+
+
+  function collectCategories_(
+    currentCategory
+  ) {
+    const categories = new Map();
+
+    function add_(value) {
+      const text =
+        unifiedText_(value);
+
+      if (!text) {
+        return;
+      }
+
+      const key =
+        unifiedCategoryKey_(text);
+
+      if (!categories.has(key)) {
+        categories.set(key, text);
+      }
+    }
+
+    add_(currentCategory);
+
+    if (
+      dashboardData &&
+      Array.isArray(
+        dashboardData.categories
+      )
+    ) {
+      dashboardData.categories.forEach(
+        function (category) {
+          add_(
+            category.name ||
+            category.category
+          );
+        }
+      );
+    }
+
+    [
+      "🏠 家賃",
+      "🍎 食費",
+      "🍽 外食",
+      "🧻 日用品",
+      "👕 洋服",
+      "💧 水道",
+      "💡 電気",
+      "🔥 ガス",
+      "🏥 医療",
+      "🎁 予備費",
+      "👶 子ども用品",
+      "🧾 その他"
+    ].forEach(add_);
+
+    return [...categories.values()];
+  }
+
+
+  function addFieldsToPurchaseEditor_() {
+    const sheet =
+      document.getElementById(
+        "purchaseEditSheet"
+      );
+
+    if (!sheet) {
+      return;
+    }
+
+    const title =
+      document.getElementById(
+        "purchaseEditTitle"
+      );
+
+    if (title) {
+      title.textContent =
+        "購入履歴を編集";
+    }
+
+
+    /* 購入日を追加 */
+
+    if (
+      !document.getElementById(
+        "purchaseEditDate"
+      )
+    ) {
+      const shopField =
+        document.getElementById(
+          "purchaseEditShop"
+        )?.closest(
+          ".purchase-edit-field"
+        );
+
+      shopField?.insertAdjacentHTML(
+        "afterend",
+        `
+          <div class="purchase-edit-field">
+            <label for="purchaseEditDate">
+              購入日
+            </label>
+
+            <input
+              id="purchaseEditDate"
+              type="date">
+          </div>
+        `
+      );
+    }
+
+
+    /* 大カテゴリを追加 */
+
+    if (
+      !document.getElementById(
+        "purchaseEditCategory"
+      )
+    ) {
+      const classField =
+        document.getElementById(
+          "purchaseEditClass"
+        )?.closest(
+          ".purchase-edit-field"
+        );
+
+      classField?.insertAdjacentHTML(
+        "afterend",
+        `
+          <div class="purchase-edit-field">
+            <label for="purchaseEditCategory">
+              大カテゴリ
+            </label>
+
+            <select id="purchaseEditCategory">
+            </select>
+          </div>
+        `
+      );
+    }
+
+
+    unifiedEditingItem_ =
+      findEditingItem_();
+
+    if (!unifiedEditingItem_) {
+      return;
+    }
+
+    const dateInput =
+      document.getElementById(
+        "purchaseEditDate"
+      );
+
+    if (dateInput) {
+      dateInput.value =
+        unifiedDate_(
+          unifiedEditingItem_.date
+        );
+    }
+
+    const categorySelect =
+      document.getElementById(
+        "purchaseEditCategory"
+      );
+
+    if (categorySelect) {
+      const currentCategory =
+        unifiedText_(
+          unifiedEditingItem_.category ||
+          "🧾 その他"
+        );
+
+      categorySelect.innerHTML = "";
+
+      collectCategories_(
+        currentCategory
+      ).forEach(function (category) {
+        categorySelect.add(
+          new Option(
+            category,
+            category
+          )
+        );
+      });
+
+      const currentKey =
+        unifiedCategoryKey_(
+          currentCategory
+        );
+
+      const matchingOption =
+        [...categorySelect.options]
+          .find(function (option) {
+            return (
+              unifiedCategoryKey_(
+                option.value
+              ) === currentKey
+            );
+          });
+
+      if (matchingOption) {
+        categorySelect.value =
+          matchingOption.value;
+      }
+    }
+  }
+
+
+  /*
+   * 日別の鉛筆を押した直後に項目を追加
+   */
+
+  document.addEventListener(
+    "click",
+    function (event) {
+      if (
+        event.target.closest(
+          ".purchase-compact-edit"
+        )
+      ) {
+        setTimeout(
+          addFieldsToPurchaseEditor_,
+          0
+        );
+      }
+    }
+  );
+
+
+  /*
+   * 日別から保存するとき、購入日と大カテゴリも送信
+   */
+
+  const fetchBeforeUnifiedEditor_ =
+    window.fetch.bind(window);
+
+  window.fetch =
+    async function (input, options) {
+      let fixedOptions = options;
+
+      if (
+        options &&
+        options.method === "POST" &&
+        options.body &&
+        document
+          .getElementById(
+            "purchaseEditSheet"
+          )
+          ?.classList.contains(
+            "is-open"
+          )
+      ) {
+        try {
+          const body =
+            JSON.parse(options.body);
+
+          if (
+            body.action ===
+            "updatePurchaseItem"
+          ) {
+            body.date =
+              document.getElementById(
+                "purchaseEditDate"
+              )?.value || body.date;
+
+            body.category =
+              document.getElementById(
+                "purchaseEditCategory"
+              )?.value || body.category;
+
+            fixedOptions =
+              Object.assign(
+                {},
+                options,
+                {
+                  body:
+                    JSON.stringify(body)
+                }
+              );
+          }
+        }
+        catch (error) {
+          console.warn(
+            "編集内容の追加処理：",
+            error
+          );
+        }
+      }
+
+      return fetchBeforeUnifiedEditor_(
+        input,
+        fixedOptions
+      );
+    };
+
+
+  const style =
+    document.createElement("style");
+
+  style.textContent = `
+    #purchaseEditCategory {
+      box-sizing: border-box;
+      width: 100%;
+      height: 40px;
+      padding: 0 11px;
+      border: 1px solid #dfe5e1;
+      border-radius: 11px;
+      outline: none;
+      background: #ffffff;
+      color: #252a27;
+      font-size: 13px;
+    }
+
+    #purchaseEditCategory:focus {
+      border-color: #2dc45b;
+      box-shadow:
+        0 0 0 3px
+        rgba(45, 196, 91, 0.1);
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
