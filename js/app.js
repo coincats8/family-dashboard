@@ -19210,3 +19210,73 @@ if (
 
   document.head.appendChild(style);
 })();
+// =========================================================
+// 大カテゴリに「菓子」を追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  function addSnackCategory_() {
+    [
+      "purchaseEditCategory",
+      "rpEditCategory"
+    ].forEach(function (id) {
+      const select =
+        document.getElementById(id);
+
+      if (!select) {
+        return;
+      }
+
+      const exists =
+        [...select.options].some(
+          function (option) {
+            return (
+              String(option.value)
+                .includes("菓子")
+            );
+          }
+        );
+
+      if (!exists) {
+        select.add(
+          new Option(
+            "🍪 菓子",
+            "🍪 菓子"
+          )
+        );
+      }
+    });
+  }
+
+  document.addEventListener(
+    "focusin",
+    function (event) {
+      if (
+        event.target?.id ===
+          "purchaseEditCategory" ||
+        event.target?.id ===
+          "rpEditCategory"
+      ) {
+        addSnackCategory_();
+      }
+    }
+  );
+
+  document.addEventListener(
+    "click",
+    function (event) {
+      if (
+        event.target.closest(
+          ".purchase-compact-edit, .report-history-edit"
+        )
+      ) {
+        setTimeout(
+          addSnackCategory_,
+          50
+        );
+      }
+    }
+  );
+})();
