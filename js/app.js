@@ -1,4 +1,4 @@
-// =========================================================
+\// =========================================================
 // Family Dashboard
 // app.js
 // v4.0
@@ -19279,4 +19279,225 @@ if (
       }
     }
   );
+})();
+
+// =========================================================
+// ホームに「今月の買い物額」を表示
+// 日別の「この月の購入額」と同じ明細・同じ条件で集計
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.homeMonthlyPurchaseAdded_) {
+    return;
+  }
+
+  window.homeMonthlyPurchaseAdded_ = true;
+
+  function homePurchaseAmount_(item) {
+    const value =
+      item?.amount ??
+      item?.totalAmount ??
+      item?.total ??
+      item?.price ??
+      item?.unitPrice ??
+      0;
+
+    if (
+      typeof purchaseItemAmount_ ===
+      "function"
+    ) {
+      return purchaseItemAmount_(value);
+    }
+
+    const amount = Number(
+      String(value)
+        .replace(/[￥¥,\s円]/g, "")
+    );
+
+    return Number.isFinite(amount)
+      ? amount
+      : 0;
+  }
+
+  function currentMonthPurchaseTotal_() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+
+    const items =
+      dashboardData &&
+      Array.isArray(dashboardData.recent)
+        ? dashboardData.recent
+        : [];
+
+    return items.reduce(
+      function (total, item) {
+        const date =
+          typeof parseDateValue ===
+          "function"
+            ? parseDateValue(item.date)
+            : new Date(item.date);
+
+        const validDate =
+          date &&
+          !Number.isNaN(date.getTime()) &&
+          date.getFullYear() === year &&
+          date.getMonth() === month;
+
+        const isPurchase =
+          typeof isPurchaseManagementItem_ ===
+          "function"
+            ? isPurchaseManagementItem_(item)
+            : true;
+
+        if (!validDate || !isPurchase) {
+          return total;
+        }
+
+        return total + homePurchaseAmount_(item);
+      },
+      0
+    );
+  }
+
+  function renderHomeMonthlyPurchase_() {
+    const totalMoney =
+      document.getElementById("totalMoney");
+
+    if (!totalMoney) {
+      return;
+    }
+
+    const budgetCard =
+      totalMoney.closest(
+        "[class*='card'], article, section"
+      ) || totalMoney.parentElement;
+
+    if (
+      !budgetCard ||
+      !budgetCard.parentElement
+    ) {
+      return;
+    }
+
+    let card =
+      document.getElementById(
+        "homeMonthlyPurchaseCard"
+      );
+
+    if (!card) {
+      card = document.createElement("button");
+      card.type = "button";
+      card.id = "homeMonthlyPurchaseCard";
+      card.className =
+        "home-monthly-purchase-card";
+      card.innerHTML = `
+        <span class="home-monthly-purchase-icon">🛒</span>
+        <span class="home-monthly-purchase-copy">
+          <small>日別と同じ集計</small>
+          <strong>今月の買い物額</strong>
+        </span>
+        <strong id="homeMonthlyPurchaseAmount">¥0</strong>
+        <span class="material-symbols-rounded">chevron_right</span>
+      `;
+
+      card.addEventListener(
+        "click",
+        function () {
+          location.hash = "#receipt";
+        }
+      );
+
+      budgetCard.insertAdjacentElement(
+        "afterend",
+        card
+      );
+    }
+
+    const amount =
+      document.getElementById(
+        "homeMonthlyPurchaseAmount"
+      );
+
+    if (amount) {
+      amount.textContent =
+        typeof yen === "function"
+          ? yen(currentMonthPurchaseTotal_())
+          : "¥" +
+            currentMonthPurchaseTotal_()
+              .toLocaleString("ja-JP");
+    }
+  }
+
+  const style = document.createElement("style");
+
+  style.textContent = `
+    .home-monthly-purchase-card {
+      box-sizing: border-box;
+      display: grid;
+      grid-template-columns: 42px 1fr auto 22px;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      margin: 16px 0;
+      padding: 16px 18px;
+      border: 0;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 10px 30px rgba(34, 70, 49, 0.08);
+      color: #202421;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .home-monthly-purchase-icon {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: #e8f9ed;
+      font-size: 20px;
+    }
+
+    .home-monthly-purchase-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .home-monthly-purchase-copy small {
+      color: #8a938d;
+      font-size: 10px;
+    }
+
+    .home-monthly-purchase-copy strong {
+      font-size: 14px;
+    }
+
+    #homeMonthlyPurchaseAmount {
+      white-space: nowrap;
+      font-size: 20px;
+    }
+
+    .home-monthly-purchase-card >
+    .material-symbols-rounded {
+      color: #25bf58;
+      font-size: 22px;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+  const renderHomeBeforeMonthlyPurchase_ =
+    renderHome;
+
+  renderHome = function () {
+    renderHomeBeforeMonthlyPurchase_();
+    renderHomeMonthlyPurchase_();
+  };
+
+  renderHomeMonthlyPurchase_();
 })();
