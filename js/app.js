@@ -19501,3 +19501,389 @@ if (
 
   renderHomeMonthlyPurchase_();
 })();
+
+// =========================================================
+// 日別：レシート丸ごと削除
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.receiptDeleteAdded_) {
+    return;
+  }
+
+  window.receiptDeleteAdded_ = true;
+
+  let deleteMode_ = false;
+
+  // -----------------------------------------
+  // receiptId取得
+  // -----------------------------------------
+  function getReceiptId_(group) {
+    if (
+      !group ||
+      !Array.isArray(group.items)
+    ) {
+      return "";
+    }
+
+    const item =
+      group.items.find(function(item) {
+        return String(
+          item.receiptId || ""
+        ).trim();
+      });
+
+    return item
+      ? String(item.receiptId).trim()
+      : "";
+  }
+
+
+  // -----------------------------------------
+  // 削除API
+  // -----------------------------------------
+  async function deleteReceipt_(group) {
+    const receiptId =
+      getReceiptId_(group);
+
+    if (!receiptId) {
+      showToast(
+        "このレシートにはIDがないため削除できません"
+      );
+      return;
+    }
+
+    const shop =
+      String(
+        group.shop || "店舗"
+      );
+
+    const amount =
+      typeof shopGroupYen_ === "function"
+        ? shopGroupYen_(group.total)
+        : "¥" +
+          Number(
+            group.total || 0
+          ).toLocaleString("ja-JP");
+
+    const confirmed =
+      window.confirm(
+        shop +
+        " " +
+        amount +
+        "\n\n" +
+        "このレシートを丸ごと削除しますか？\n" +
+        "購入明細もすべて削除されます。\n\n" +
+        "※この操作は元に戻せません"
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      showToast(
+        "レシートを削除しています…"
+      );
+
+      const result =
+        await fetchJson(
+          API_BASE +
+          "?action=deleteReceiptCompletely" +
+          "&receiptId=" +
+          encodeURIComponent(receiptId) +
+          "&_=" +
+          Date.now()
+        );
+
+      if (
+        !result ||
+        result.success !== true
+      ) {
+        throw new Error(
+          result?.error ||
+          "削除できませんでした"
+        );
+      }
+
+      showToast(
+        "レシートを削除しました"
+      );
+
+      if (
+        typeof refreshReceiptPage ===
+        "function"
+      ) {
+        await refreshReceiptPage();
+      }
+
+      if (
+        typeof loadDashboard ===
+        "function"
+      ) {
+        await loadDashboard();
+      }
+
+    } catch (error) {
+      console.error(
+        "レシート削除エラー:",
+        error
+      );
+
+      showToast(
+        "削除できませんでした：" +
+        String(
+          error.message || error
+        )
+      );
+    }
+  }
+
+
+  // -----------------------------------------
+  // 「購入明細一覧」の横に削除ボタン
+  // -----------------------------------------
+  function addDeleteModeButton_() {
+    const list =
+      document.getElementById(
+        "receiptFullList"
+      );
+
+    if (!list) {
+      return;
+    }
+
+    const card =
+      list.closest(".card");
+
+    if (!card) {
+      return;
+    }
+
+    const header =
+      card.querySelector(
+        ".section-header"
+      );
+
+    if (
+      !header ||
+      document.getElementById(
+        "receiptDeleteModeButton"
+      )
+    ) {
+      return;
+    }
+
+    const button =
+      document.createElement(
+        "button"
+      );
+
+    button.id =
+      "receiptDeleteModeButton";
+
+    button.type =
+      "button";
+
+    button.className =
+      "receipt-delete-mode-button";
+
+    button.textContent =
+      "削除";
+
+    button.addEventListener(
+      "click",
+      function() {
+        deleteMode_ =
+          !deleteMode_;
+
+        button.textContent =
+          deleteMode_
+            ? "完了"
+            : "削除";
+
+        document.body
+          .classList.toggle(
+            "receipt-delete-mode",
+            deleteMode_
+          );
+      }
+    );
+
+    header.appendChild(
+      button
+    );
+  }
+
+
+  // -----------------------------------------
+  // 各レシートへゴミ箱を追加
+  // -----------------------------------------
+  function addReceiptDeleteButtons_() {
+    if (!deleteMode_) {
+      return;
+    }
+
+    const groups =
+      typeof createShopGroups_ ===
+      "function"
+        ? createShopGroups_(
+            receiptData || []
+          )
+        : [];
+
+    document
+      .querySelectorAll(
+        "#receiptFullList .purchase-shop-group"
+      )
+      .forEach(
+        function(section, index) {
+          if (
+            section.querySelector(
+              ".receipt-delete-button"
+            )
+          ) {
+            return;
+          }
+
+          const group =
+            groups[index];
+
+          if (!group) {
+            return;
+          }
+
+          const button =
+            document.createElement(
+              "button"
+            );
+
+          button.type =
+            "button";
+
+          button.className =
+            "receipt-delete-button";
+
+          button.innerHTML =
+            '<span class="material-symbols-rounded">delete</span>';
+
+          button.setAttribute(
+            "aria-label",
+            "このレシートを削除"
+          );
+
+          button.addEventListener(
+            "click",
+            function(event) {
+              event.preventDefault();
+              event.stopPropagation();
+
+              deleteReceipt_(group);
+            }
+          );
+
+          section.appendChild(
+            button
+          );
+        }
+      );
+  }
+
+
+  // -----------------------------------------
+  // 画面監視
+  // -----------------------------------------
+  const observer =
+    new MutationObserver(
+      function() {
+        addDeleteModeButton_();
+
+        if (deleteMode_) {
+          addReceiptDeleteButtons_();
+        }
+      }
+    );
+
+  observer.observe(
+    document.body,
+    {
+      childList: true,
+      subtree: true
+    }
+  );
+
+
+  // -----------------------------------------
+  // CSS
+  // -----------------------------------------
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.textContent = `
+    .receipt-delete-mode-button {
+      margin-left: auto;
+      padding: 7px 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #fff0f0;
+      color: #e53935;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    #receiptFullList
+    .purchase-shop-group {
+      position: relative;
+    }
+
+    .receipt-delete-button {
+      position: absolute;
+      top: 50%;
+      right: 7px;
+      z-index: 20;
+      display: none;
+      place-items: center;
+      width: 35px;
+      height: 35px;
+      padding: 0;
+      transform: translateY(-50%);
+      border: 0;
+      border-radius: 11px;
+      background: #fff0f0;
+      color: #e53935;
+      cursor: pointer;
+    }
+
+    .receipt-delete-mode
+    #receiptFullList
+    .receipt-delete-button {
+      display: grid;
+    }
+
+    .receipt-delete-mode
+    #receiptFullList
+    .purchase-shop-summary {
+      padding-right: 52px;
+    }
+
+    .receipt-delete-button
+    .material-symbols-rounded {
+      font-size: 19px;
+    }
+  `;
+
+  document.head.appendChild(
+    style
+  );
+
+  setTimeout(
+    addDeleteModeButton_,
+    500
+  );
+
+})();
