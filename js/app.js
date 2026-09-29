@@ -15515,6 +15515,98 @@ loadDashboard =
   async function openCategoryBudgetEditor_(
     categoryName
   ) {
+      const requestedName = categoryBudgetName_(categoryName);
+
+  // 水道・光熱費は「電気・ガス・水道」を個別に編集
+  if (
+    requestedName === "水道・光熱費" ||
+    requestedName === "水道光熱費"
+  ) {
+    const utilityNames = ["電気", "ガス", "水道"];
+
+    for (const utilityName of utilityNames) {
+      const utilityCategory = findCategoryData_(utilityName);
+
+      if (!utilityCategory) {
+        continue;
+      }
+
+      const currentBudget =
+        categoryBudgetNumber_(utilityCategory.budget);
+
+      const entered = window.prompt(
+        utilityName +
+          "の月予算を入力してください\n" +
+          "未設定に戻す場合は空欄のままOKを押してください",
+        currentBudget > 0 ? String(currentBudget) : ""
+      );
+
+      // キャンセルしたら以降の編集を終了
+      if (entered === null) {
+        return;
+      }
+
+      const trimmed = String(entered).trim();
+      const unset = trimmed === "";
+      const budget = unset
+        ? 0
+        : Number(trimmed.replace(/,/g, ""));
+
+      if (
+        !unset &&
+        (!Number.isFinite(budget) ||
+          budget < 0 ||
+          budget > 10000000)
+      ) {
+        if (typeof showToast === "function") {
+          showToast("正しい予算金額を入力してください");
+        }
+        return;
+      }
+
+      try {
+        const result = await fetchJson(
+          API_BASE +
+            "?action=saveCategoryBudget" +
+            "&category=" +
+            encodeURIComponent(utilityName) +
+            "&budget=" +
+            encodeURIComponent(unset ? "" : budget) +
+            "&unset=" +
+            (unset ? "1" : "0") +
+            "&_=" +
+            Date.now()
+        );
+
+        if (result && result.ok === false) {
+          throw new Error(
+            result.message || "予算の保存に失敗しました"
+          );
+        }
+      } catch (error) {
+        console.error(error);
+
+        if (typeof showToast === "function") {
+          showToast(
+            utilityName + "の予算を保存できませんでした"
+          );
+        }
+
+        return;
+      }
+    }
+
+    // 3項目保存後に最新データを再取得
+    if (typeof loadDashboard === "function") {
+      await loadDashboard();
+    }
+
+    if (typeof showToast === "function") {
+      showToast("水道・光熱費の予算を更新しました");
+    }
+
+    return;
+  }
     const category =
       findCategoryData_(
         categoryName
@@ -15524,7 +15616,6 @@ loadDashboard =
       categoryBudgetName_(
         categoryName
       );
-
     const currentBudget =
       categoryBudgetNumber_(
         category?.budget
