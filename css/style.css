@@ -4334,3 +4334,398 @@ input:checked + span {
     font-size: 18px;
   }
 }
+/* ==================================================
+   CUTE HOME FINAL OVERRIDE
+   iPhone / Mobile
+   ================================================== */
+
+body:has(#page-home:not([hidden])) header,
+body:has(#page-home:not([hidden])) .bottom-nav,
+body:has(#page-home:not([hidden])) nav.bottom-nav {
+  display: none !important;
+}
+
+#page-home,
+#page-home * {
+  box-sizing: border-box !important;
+}
+
+#page-home {
+  width: 100% !important;
+  min-height: 100dvh !important;
+  margin: 0 !important;
+  padding: max(12px, env(safe-area-inset-top)) 14px
+    max(14px, env(safe-area-inset-bottom)) !important;
+
+  background:
+    radial-gradient(circle at 100% 0%, #ffe2ec 0 95px, transparent 96px),
+    linear-gradient(180deg, #fff5f9 0%, #fffafd 100%) !important;
+
+  overflow-x: hidden !important;
+}
+
+#page-home .cute-home {
+  width: 100% !important;
+  max-width: 430px !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 9px !important;
+}
+
+#page-home .cute-home-tools {
+  width: 100% !important;
+  height: 36px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+}
+
+#page-home .cute-refresh {
+  display: grid !important;
+  place-items: center !important;
+
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  border: 0 !important;
+  border-radius: 50% !important;
+
+  background: #fff !important;
+  color: #e36f96 !important;
+
+  font-size: 21px !important;
+  line-height: 1 !important;
+}
+
+/* メインカード */
+
+#page-home .cute-main-card {
+  display: block !important;
+
+  width: 100% !important;
+  min-height: 0 !important;
+
+  margin: 0 !important;
+  padding: 15px 16px 14px !important;
+
+  border: 1px solid #f5d7e1 !important;
+  border-radius: 24px !important;
+
+  background:
+    radial-gradient(circle at 100% 0%, #ffe2ec 0 66px, transparent 67px),
+    #fff !important;
+
+  box-shadow: 0 6px 20px rgba(216, 113, 148, .09) !important;
+}
+
+#page-home .cute-main-heading {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+
+  margin: 0 0 3px !important;
+  padding: 0 !important;
+
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+
+#page-home .cute-balance {
+  display: block !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  font-size: 38px !important;
+  font-weight: 800 !important;
+  line-height: 1.12 !important;
+  letter-spacing: -1px !important;
+
+  color: #42383c !important;
+}
+
+#page-home .cute-progress {
+  display: block !important;
+
+  width: 100% !important;
+  height: 7px !important;
+
+  margin: 11px 0 10px !important;
+  padding: 0 !important;
+
+  border-radius: 999px !important;
+  background: #f8e5ec !important;
+  overflow: hidden !important;
+}
+
+#page-home .cute-progress-bar {
+  display: block !important;
+  height: 100% !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  border-radius: 999px !important;
+  background: linear-gradient(90deg, #f49ab6, #ed729a) !important;
+}
+
+#page-home .cute-budget-row {
+  width: 100% !important;
+
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 10px !important;
+}
+
+#page-home .cute-budget-row > div {
+  display: block !important;
+  width: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+#page-home .cute-budget-row span {
+  display: block !important;
+
+  margin: 0 0 2px !important;
+
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+  color: #a78e97 !important;
+}
+
+#page-home .cute-budget-row strong {
+  display: inline !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+  color: #493e42 !important;
+}
+
+#page-home .cute-budget-right {
+  text-align: right !important;
+}
+
+#page-home .cute-budget-value {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
+
+/* 下のカード全部 */
+
+#page-home .cute-link-card {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 58px !important;
+
+  margin: 0 !important;
+  padding: 8px 12px !important;
+
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 9px !important;
+
+  border: 1px solid #f5dce4 !important;
+  border-radius: 19px !important;
+
+  background: #fff !important;
+
+  color: #453b3f !important;
+  text-align: left !important;
+
+  box-shadow: 0 4px 13px rgba(213, 112, 147, .07) !important;
+}
+
+#page-home button.cute-link-card {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+}
+
+#page-home .cute-icon {
+  display: grid !important;
+  place-items: center !important;
+
+  flex: 0 0 38px !important;
+
+  width: 38px !important;
+  height: 38px !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  border-radius: 14px !important;
+
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+
+#page-home .cute-link-copy {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+
+  width: auto !important;
+  min-width: 0 !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+#page-home .cute-link-copy small {
+  display: block !important;
+
+  margin: 0 0 1px !important;
+  padding: 0 !important;
+
+  font-size: 8px !important;
+  line-height: 1.1 !important;
+  color: #ad959e !important;
+}
+
+#page-home .cute-link-copy strong {
+  display: block !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  font-size: 13px !important;
+  line-height: 1.2 !important;
+  color: #463c40 !important;
+}
+
+#page-home .cute-link-copy > span {
+  display: block !important;
+
+  width: 100% !important;
+  max-width: 210px !important;
+
+  margin: 2px 0 0 !important;
+
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+
+  font-size: 10px !important;
+  line-height: 1.15 !important;
+  color: #99848c !important;
+}
+
+#page-home .cute-link-value {
+  display: block !important;
+
+  flex: 0 0 auto !important;
+
+  margin: 0 0 0 auto !important;
+  padding: 0 !important;
+
+  font-size: 15px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+
+  color: #463c40 !important;
+}
+
+#page-home .cute-arrow {
+  display: block !important;
+
+  flex: 0 0 auto !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  font-size: 21px !important;
+  line-height: 1 !important;
+  color: #e4779b !important;
+}
+
+/* 貯蓄 */
+
+#page-home .cute-savings-card {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+#page-home .cute-card-jump {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 9px !important;
+
+  min-width: 0 !important;
+  min-height: 58px !important;
+
+  margin: 0 !important;
+  padding: 8px 4px 8px 12px !important;
+
+  border: 0 !important;
+  background: transparent !important;
+
+  text-align: left !important;
+}
+
+#page-home .cute-mini-edit {
+  display: grid !important;
+  place-items: center !important;
+
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+
+  border: 0 !important;
+  border-radius: 50% !important;
+
+  background: #ffe5ed !important;
+  color: #df7297 !important;
+
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+
+#page-home .cute-saving-edit {
+  margin-right: 10px !important;
+}
+
+/* 古いホーム部品をホーム上では出さない */
+
+#page-home .today-schedule-card,
+#page-home .ai-card,
+#page-home #aiAdvice {
+  display: none !important;
+}
+
+/* iPhone */
+
+@media (max-width: 600px) {
+  #page-home {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  #page-home .cute-home {
+    max-width: none !important;
+  }
+}
