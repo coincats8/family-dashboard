@@ -4723,4 +4723,26 @@ input:checked + span {
     max-width: none !important;
   }
 }
+/* ==========================================
+   HOME 上部だけ削除して上へ詰める
+   ========================================== */
 
+/* ホーム表示中だけ、旧ヘッダーを消す */
+body:has(#page-home:not([hidden])) > header,
+body:has(#page-home:not([hidden])) .app-header {
+  display: none !important;
+}
+
+/* ホーム本体を上へ */
+body:has(#page-home:not([hidden])) main {
+  padding-top: 0 !important;
+}
+
+#page-home {
+  padding-top: 8px !important;
+}
+
+/* 下タブはそのまま表示 */
+body:has(#page-home:not([hidden])) .bottom-nav {
+  display: flex !important;
+}
