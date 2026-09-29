@@ -4729,3 +4729,69 @@ body:has(#page-home:not([hidden])) nav.bottom-nav {
     max-width: none !important;
   }
 }
+
+/* ==========================================
+   HOME FULL SCREEN FIX
+   ========================================== */
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+}
+
+body:has(#page-home:not([hidden])) {
+  width: 100% !important;
+  min-height: 100dvh !important;
+  margin: 0 !important;
+
+  background:
+    linear-gradient(
+      180deg,
+      #fff5f9 0%,
+      #fffafd 100%
+    ) !important;
+}
+
+#page-home {
+  position: relative !important;
+
+  width: 100% !important;
+  max-width: none !important;
+
+  min-height: 100dvh !important;
+
+  margin: 0 !important;
+
+  padding:
+    max(10px, env(safe-area-inset-top))
+    14px
+    max(14px, env(safe-area-inset-bottom))
+    !important;
+
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      #ffe1ec 0 95px,
+      transparent 96px
+    ),
+    linear-gradient(
+      180deg,
+      #fff5f9 0%,
+      #fffafd 100%
+    ) !important;
+}
+
+#page-home .cute-home {
+  width: 100% !important;
+  max-width: 430px !important;
+
+  min-height: calc(
+    100dvh -
+    env(safe-area-inset-top) -
+    env(safe-area-inset-bottom) -
+    24px
+  ) !important;
+
+  margin: 0 auto !important;
+}
