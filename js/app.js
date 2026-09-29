@@ -20970,9 +20970,12 @@ if (
           return `
             <div class="compact-category-group">
 
-              <div class="compact-category-group-title">
-                ${group.title}
-              </div>
+             <div
+  class="compact-category-group-title"
+  data-group-title="${compactEscape_(group.title)}"
+>
+  ${compactEscape_(group.title)}
+</div>
 
               ${
                 items
@@ -21206,6 +21209,57 @@ if (
 
 
   style.textContent = `
+
+  style.textContent = `
+
+/* =========================================
+   カテゴリ グループ見出し
+========================================= */
+
+#categoryList .compact-category-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+  padding: 8px 4px 4px;
+  margin: 0;
+}
+
+/* 住まい・固定費：青 */
+#categoryList
+.compact-category-group-title[data-group-title="住まい・固定費"] {
+  color: #4f7cac;
+}
+
+/* 日常生活：緑 */
+#categoryList
+.compact-category-group-title[data-group-title="日常生活"] {
+  color: #36a269;
+}
+
+/* 家族・子ども：オレンジ */
+#categoryList
+.compact-category-group-title[data-group-title="家族・子ども"] {
+  color: #d88932;
+}
+
+/* その他：グレー */
+#categoryList
+.compact-category-group-title[data-group-title="その他"] {
+  color: #8a9390;
+}
+
+/* グループ間の点線 */
+#categoryList .compact-category-group + .compact-category-group {
+  border-top: 1px dashed #dce3df;
+  margin-top: 5px;
+  padding-top: 3px;
+}
+
+
+/* =========================================
+   ホーム：スマホ用コンパクトカテゴリ
+========================================= */
 
     /* ==============================================
        ホーム：スマホ用コンパクトカテゴリ
