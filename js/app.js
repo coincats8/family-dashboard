@@ -21442,3 +21442,452 @@ if (
   );
 
 })();
+// =========================================================
+// HOME：カテゴリをグループ分け
+// ・グループ内は支出額の大きい順
+// ・スマホ向けに薄い区切り
+// ・最近の支出をホームから完全非表示
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.homeCategoryGroupingAdded_) {
+    return;
+  }
+
+  window.homeCategoryGroupingAdded_ = true;
+
+
+  function cleanCategoryName_(value) {
+    return String(value || "")
+      .replace(/^[^\p{L}\p{N}]+/u, "")
+      .replace(/\s+/g, "")
+      .trim();
+  }
+
+
+  function getGroupName_(name) {
+
+    const key =
+      cleanCategoryName_(name);
+
+
+    // 住まい・固定費
+    if (
+      key.includes("家賃") ||
+      key.includes("水道・光熱費") ||
+      key.includes("水道光熱費")
+    ) {
+      return "住まい・固定費";
+    }
+
+
+    // 日常生活
+    if (
+      key.includes("食費") ||
+      key.includes("外食") ||
+      key.includes("日用品") ||
+      key.includes("医療")
+    ) {
+      return "日常生活";
+    }
+
+
+    // 家族・子ども
+    if (
+      key.includes("子ども用品") ||
+      key.includes("子供用品") ||
+      key.includes("子育て") ||
+      key.includes("予備費")
+    ) {
+      return "家族・子ども";
+    }
+
+
+    // それ以外
+    return "その他";
+  }
+
+
+  function amountFromRow_(row) {
+
+    const amount =
+      row.querySelector(
+        ".compact-category-amount"
+      );
+
+    if (!amount) {
+      return 0;
+    }
+
+    return (
+      Number(
+        String(
+          amount.textContent || ""
+        )
+          .replace(/[^\d.-]/g, "")
+      ) || 0
+    );
+  }
+
+
+  function groupCompactCategories_() {
+
+    const container =
+      document.getElementById(
+        "categoryList"
+      );
+
+    if (!container) {
+      return;
+    }
+
+
+    const rows =
+      Array.from(
+        container.querySelectorAll(
+          ".compact-category-item"
+        )
+      );
+
+
+    if (!rows.length) {
+      return;
+    }
+
+
+    const groups = {
+      "住まい・固定費": [],
+      "日常生活": [],
+      "家族・子ども": [],
+      "その他": []
+    };
+
+
+    rows.forEach(
+      function (row) {
+
+        const nameElement =
+          row.querySelector(
+            ".compact-category-name"
+          );
+
+        const name =
+          nameElement
+            ? nameElement.textContent
+            : "";
+
+        const groupName =
+          getGroupName_(name);
+
+        groups[groupName].push(
+          row
+        );
+      }
+    );
+
+
+    // 各グループ内を支出額の高い順
+    Object.keys(groups)
+      .forEach(
+        function (groupName) {
+
+          groups[groupName].sort(
+            function (a, b) {
+              return (
+                amountFromRow_(b) -
+                amountFromRow_(a)
+              );
+            }
+          );
+        }
+      );
+
+
+    container.innerHTML = "";
+
+
+    const order = [
+      "住まい・固定費",
+      "日常生活",
+      "家族・子ども",
+      "その他"
+    ];
+
+
+    order.forEach(
+      function (
+        groupName,
+        groupIndex
+      ) {
+
+        const items =
+          groups[groupName];
+
+        if (!items.length) {
+          return;
+        }
+
+
+        const section =
+          document.createElement(
+            "div"
+          );
+
+        section.className =
+          "compact-category-group";
+
+
+        const title =
+          document.createElement(
+            "div"
+          );
+
+        title.className =
+          "compact-category-group-title";
+
+        title.textContent =
+          groupName;
+
+
+        section.appendChild(
+          title
+        );
+
+
+        items.forEach(
+          function (row) {
+            section.appendChild(
+              row
+            );
+          }
+        );
+
+
+        container.appendChild(
+          section
+        );
+
+
+        if (
+          groupIndex <
+          order.length - 1
+        ) {
+
+          const divider =
+            document.createElement(
+              "div"
+            );
+
+          divider.className =
+            "compact-category-group-divider";
+
+          container.appendChild(
+            divider
+          );
+        }
+      }
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // 最近の支出をホームから完全に隠す
+  // -------------------------------------------------------
+
+  function removeHomeRecent_() {
+
+    const recentList =
+      document.getElementById(
+        "recentList"
+      );
+
+    if (recentList) {
+
+      const card =
+        recentList.closest(
+          ".card"
+        );
+
+      if (card) {
+        card.style.display =
+          "none";
+      }
+    }
+
+
+    // 後からJSで作られるケースにも対応
+    document
+      .querySelectorAll(
+        ".card"
+      )
+      .forEach(
+        function (card) {
+
+          const title =
+            String(
+              card.textContent ||
+              ""
+            );
+
+          if (
+            title.includes(
+              "最近の支出"
+            )
+          ) {
+            card.style.display =
+              "none";
+          }
+        }
+      );
+  }
+
+
+  // -------------------------------------------------------
+  // CSS
+  // -------------------------------------------------------
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+  style.id =
+    "homeCategoryGroupingStyle";
+
+  style.textContent = `
+
+    #categoryList
+    .compact-category-group-title {
+      padding:
+        11px 2px 5px;
+
+      color:
+        #89918c;
+
+      font-size:
+        10px;
+
+      font-weight:
+        800;
+
+      letter-spacing:
+        .04em;
+    }
+
+
+    #categoryList
+    .compact-category-group:first-child
+    .compact-category-group-title {
+      padding-top:
+        2px;
+    }
+
+
+    #categoryList
+    .compact-category-group-divider {
+      height:
+        1px;
+
+      margin:
+        6px 0 3px;
+
+      border-top:
+        1px dashed
+        #d8dfda;
+    }
+
+
+    #categoryList
+    .compact-category-group
+    .compact-category-item:first-of-type {
+      border-top:
+        0 !important;
+    }
+
+
+    #categoryList
+    .compact-category-group
+    .compact-category-item:last-child {
+      border-bottom:
+        0 !important;
+    }
+
+
+    @media (
+      max-width: 600px
+    ) {
+
+      #categoryList
+      .compact-category-group-title {
+        padding:
+          8px 2px 4px;
+      }
+
+
+      #categoryList
+      .compact-category-group-divider {
+        margin:
+          4px 0 1px;
+      }
+
+    }
+
+  `;
+
+
+  document.head.appendChild(
+    style
+  );
+
+
+  // -------------------------------------------------------
+  // コンパクトカテゴリ描画後にグループ化
+  // -------------------------------------------------------
+
+  const originalRenderCompact_ =
+    renderCompactHomeCategories_;
+
+
+  renderCompactHomeCategories_ =
+    function () {
+
+      originalRenderCompact_();
+
+      groupCompactCategories_();
+
+      removeHomeRecent_();
+    };
+
+
+  // renderHome完了後にも念のため適用
+  const renderHomeBeforeGrouping_ =
+    renderHome;
+
+
+  renderHome =
+    function () {
+
+      renderHomeBeforeGrouping_();
+
+      setTimeout(
+        function () {
+          groupCompactCategories_();
+          removeHomeRecent_();
+        },
+        0
+      );
+    };
+
+
+  // 初期表示
+  setTimeout(
+    function () {
+      groupCompactCategories_();
+      removeHomeRecent_();
+    },
+    200
+  );
+
+})();
