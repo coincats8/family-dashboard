@@ -1441,19 +1441,11 @@ function renderHome() {
       : []
   );
 
+// 「最近の支出」の処理はここから無くなる
 
-  renderReceiptList(
-    el("recentList"),
-    Array.isArray(
-      dashboardData.recent
-    )
-      ? dashboardData.recent
-      : [],
-    5
-  );
+renderAdvice();
 
-
-  renderAdvice();
+}
 
 }
 
