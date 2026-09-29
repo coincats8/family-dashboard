@@ -4742,7 +4742,3 @@ body:has(#page-home:not([hidden])) main {
   padding-top: 8px !important;
 }
 
-/* 下タブはそのまま表示 */
-body:has(#page-home:not([hidden])) .bottom-nav {
-  display: flex !important;
-}
