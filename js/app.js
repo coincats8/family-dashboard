@@ -15751,6 +15751,7 @@ loadDashboard =
     }
   }
 
+window.openCategoryBudgetEditor_ = openCategoryBudgetEditor_;  
 
   function addCategoryBudgetButtons_() {
     const container =
