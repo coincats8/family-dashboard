@@ -21207,9 +21207,6 @@ if (
   style.id =
     "compactHomeCategoryStyle";
 
-
-  style.textContent = `
-
   style.textContent = `
 
 /* =========================================
