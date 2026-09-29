@@ -16750,99 +16750,132 @@ loadDashboard =
   // -------------------------------------------------------
 
   function createShopGroups_(
-    receipts
-  ) {
-    const map =
-      new Map();
+  receipts
+) {
+  const map =
+    new Map();
 
-    receipts.forEach(
-      function(item) {
-        const date =
-          shopGroupDate_(
-            item.date
-          );
+  receipts.forEach(
+    function(item, itemIndex) {
 
-        const shop =
-          String(
-            item.shop ||
-            "店名不明"
-          ).trim();
+      const date =
+        shopGroupDate_(
+          item.date
+        );
 
-        const key =
-          date.key +
-          "::" +
-          shopGroupShopKey_(
-            shop
-          );
+      const shop =
+        String(
+          item.shop ||
+          "店名不明"
+        ).trim();
 
-        if (!map.has(key)) {
-          map.set(
-            key,
-            {
-              key:
-                key,
+      const receiptId =
+        String(
+          item.receiptId || ""
+        ).trim();
 
-              date:
-                date,
 
-              shop:
-                shop,
+      // receiptIdがある場合は
+      // 必ずレシート1枚単位でまとめる
+      //
+      // 古いデータなどreceiptIdがない場合だけ
+      // 日付＋店名でまとめる
+      const key =
+        receiptId
+          ? "receipt::" +
+            receiptId
+          : "legacy::" +
+            date.key +
+            "::" +
+            shopGroupShopKey_(
+              shop
+            );
 
-              items:
-                [],
 
-              total:
-                0,
+      if (!map.has(key)) {
 
-              quantity:
-                0
-            }
-          );
-        }
+        map.set(
+          key,
+          {
+            key:
+              key,
 
-        const group =
-          map.get(key);
+            receiptId:
+              receiptId,
 
-        group.items.push(
+            date:
+              date,
+
+            shop:
+              shop,
+
+            items:
+              [],
+
+            total:
+              0,
+
+            quantity:
+              0,
+
+            firstIndex:
+              itemIndex
+          }
+        );
+      }
+
+
+      const group =
+        map.get(key);
+
+
+      group.items.push(
+        item
+      );
+
+
+      group.total +=
+        shopGroupAmount_(
           item
         );
 
-        group.total +=
-          shopGroupAmount_(
-            item
-          );
 
-        group.quantity +=
-          Math.max(
-            1,
-            shopGroupNumber_(
-              item.quantity
-            )
-          );
-      }
-    );
+      group.quantity +=
+        Math.max(
+          1,
+          shopGroupNumber_(
+            item.quantity
+          )
+        );
+    }
+  );
 
-    return Array.from(
-      map.values()
-    ).sort(
-      function(a, b) {
-        if (
-          a.date.time !==
-          b.date.time
-        ) {
-          return (
-            b.date.time -
-            a.date.time
-          );
-        }
 
-        return a.shop.localeCompare(
-          b.shop,
-          "ja"
+  return Array.from(
+    map.values()
+  ).sort(
+    function(a, b) {
+
+      if (
+        a.date.time !==
+        b.date.time
+      ) {
+
+        return (
+          b.date.time -
+          a.date.time
         );
       }
-    );
-  }
+
+
+      // 同じ日なら元データの順番を維持
+      return (
+        a.firstIndex -
+        b.firstIndex
+      );
+    }
+  );
+}
 
 
   // -------------------------------------------------------
