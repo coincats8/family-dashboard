@@ -19360,37 +19360,7 @@ if (
           budget - expense
         )
       );
-
-      const bottomRightMoney =
-      document.getElementById(
-        "balanceMoney"
-      );
-
-     /* 右下を今月の生活費に変更 */
-
-    if (bottomRightMoney) {
-      bottomRightMoney.textContent =
-        yen(expense);
-
-      bottomRightMoney.classList.remove(
-        "is-danger"
-      );
-
-      const bottomLabel =
-        bottomRightMoney
-          .closest(".budget-item")
-          ?.querySelector(
-            ".budget-label"
-          );
-
-      if (bottomLabel) {
-        bottomLabel.textContent =
-          "今月の生活費";
-      }
-    }
-  }
-
-
+   
   const renderHomeBeforeBalanceSwap_ =
     renderHome;
 
@@ -19449,16 +19419,26 @@ if (
         0
       );
 
+const totalMoney =
+  document.getElementById(
+    "totalMoney"
+  );
+
+if (totalMoney) {
+  totalMoney.textContent =
+    yen(expense);
+}
+    
     const remaining =
       budget - expense;
 
 
     /* 大きな表示：今月の残金 */
 
-    const mainMoney =
-      document.getElementById(
-        "totalMoney"
-      );
+   const mainMoney =
+  document.getElementById(
+    "balanceMoney"
+  );
 
     if (mainMoney) {
       mainMoney.textContent =
@@ -19479,39 +19459,8 @@ if (
           "今月の残金";
       }
     }
-
-
-    /* 右下：今月の生活費 */
-
-    const expenseMoney =
-      document.getElementById(
-        "balanceMoney"
-      );
-
-    if (expenseMoney) {
-      expenseMoney.textContent =
-        yen(expense);
-
-      expenseMoney.classList.remove(
-        "is-danger"
-      );
-
-      const label =
-        expenseMoney
-          .closest(".budget-item")
-          ?.querySelector(
-            ".budget-label"
-          );
-
-      if (label) {
-        label.textContent =
-          "今月の生活費";
-      }
-    }
-  }
-
-
-  const renderHomeBeforeCorrectTotals_ =
+  
+ const renderHomeBeforeCorrectTotals_ =
     renderHome;
 
   renderHome = function () {
