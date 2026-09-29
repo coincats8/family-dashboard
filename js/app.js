@@ -16882,56 +16882,207 @@ loadDashboard =
   // まとめた購入一覧を表示
   // -------------------------------------------------------
 
-  function renderGroupedPurchases_(
-    container,
-    receipts
-  ) {
-    const source =
-      Array.isArray(receipts)
-        ? receipts
-        : [];
+ function renderGroupedPurchases_(
+  container,
+  receipts
+) {
+  const source =
+    Array.isArray(receipts)
+      ? receipts
+      : [];
 
-    if (!source.length) {
-      renderReceiptListBeforeShopGrouping_(
-        container,
-        source
-      );
+  if (!source.length) {
+    renderReceiptListBeforeShopGrouping_(
+      container,
+      source
+    );
+    return;
+  }
 
-      return;
-    }
+  const groups =
+    createShopGroups_(source);
 
-    const groups =
-      createShopGroups_(
-        source
-      );
+  const countTarget =
+    document.getElementById(
+      "receiptCount"
+    );
 
-    const countTarget =
-      document.getElementById(
-        "receiptCount"
-      );
+  if (countTarget) {
+    countTarget.textContent =
+      groups.length + "件";
+  }
 
-    if (countTarget) {
-      countTarget.textContent =
-        groups.length +
-        "件";
-    }
+
+  // =====================================================
+  // 削除モード状態
+  // =====================================================
+
+  let deleteMode = false;
+
+  const selectedIds =
+    new Set();
+
+
+  // =====================================================
+  // 通常一覧を描画
+  // =====================================================
+
+  function draw_() {
 
     container.innerHTML = `
+
+      <div class="purchase-delete-header">
+
+        <span class="purchase-delete-title">
+          日付・店名
+        </span>
+
+        <button
+          type="button"
+          class="purchase-delete-mode-button">
+          ${
+            deleteMode
+              ? "完了"
+              : "削除"
+          }
+        </button>
+
+      </div>
+
+
+      ${
+        deleteMode
+          ? `
+            <div class="purchase-delete-tools">
+
+              <label class="purchase-select-all">
+
+                <input
+                  type="checkbox"
+                  class="purchase-select-all-input">
+
+                <span>
+                  すべて選択
+                </span>
+
+              </label>
+
+
+              <button
+                type="button"
+                class="purchase-delete-selected purchase-delete-selected-top"
+                disabled>
+                選択したレシートを削除
+              </button>
+
+            </div>
+          `
+          : ""
+      }
+
+
       <div class="purchase-shop-groups">
 
         <div class="purchase-shop-group-head">
-          <span>日付・店名</span>
-          <span>合計金額</span>
+
+          ${
+            deleteMode
+              ? `<span></span>`
+              : ""
+          }
+
+          <span>
+            日付・店名
+          </span>
+
+          <span>
+            合計金額
+          </span>
+
         </div>
+
 
         ${
           groups
             .map(
               function(group, index) {
+
+                const receiptId =
+                  String(
+                    group.receiptId ||
+                    (
+                      group.items &&
+                      group.items[0] &&
+                      group.items[0].receiptId
+                    ) ||
+                    ""
+                  ).trim();
+
+
+                const selectable =
+                  !!receiptId;
+
+
                 return `
+
                   <section
-                    class="purchase-shop-group"
-                    data-shop-group="${index}">
+                    class="
+                      purchase-shop-group
+                      ${
+                        selectedIds.has(
+                          receiptId
+                        )
+                          ? "is-delete-selected"
+                          : ""
+                      }
+                    "
+                    data-shop-group="${index}"
+                    data-receipt-id="${escapeHTML(
+                      receiptId
+                    )}">
+
+
+                    ${
+                      deleteMode
+                        ? `
+                          <label
+                            class="
+                              purchase-receipt-selector
+                              ${
+                                selectable
+                                  ? ""
+                                  : "is-disabled"
+                              }
+                            ">
+
+                            <input
+                              type="checkbox"
+                              class="purchase-receipt-checkbox"
+                              value="${escapeHTML(
+                                receiptId
+                              )}"
+                              ${
+                                selectedIds.has(
+                                  receiptId
+                                )
+                                  ? "checked"
+                                  : ""
+                              }
+                              ${
+                                selectable
+                                  ? ""
+                                  : "disabled"
+                              }>
+
+                            <span
+                              class="purchase-receipt-circle">
+                            </span>
+
+                          </label>
+                        `
+                        : ""
+                    }
+
 
                     <button
                       type="button"
@@ -16939,45 +17090,77 @@ loadDashboard =
                       data-shop-group-button="${index}"
                       aria-expanded="false">
 
-                      <span class="purchase-shop-date">
-                        ${escapeHTML(group.date.label)}
+                      <span
+                        class="purchase-shop-date">
+
+                        ${escapeHTML(
+                          group.date.label
+                        )}
+
                       </span>
 
-                      <span class="purchase-shop-information">
+
+                      <span
+                        class="purchase-shop-information">
 
                         <strong
                           class="purchase-shop-name"
-                          title="${escapeHTML(group.shop)}">
-                          ${escapeHTML(group.shop)}
+                          title="${escapeHTML(
+                            group.shop
+                          )}">
+
+                          ${escapeHTML(
+                            group.shop
+                          )}
+
                         </strong>
 
+
                         <small>
+
                           ${
                             group.items.length
                           }商品
+
                           ・数量
+
                           ${
                             group.quantity
                           }点
+
                         </small>
 
                       </span>
 
-                      <strong class="purchase-shop-total">
+
+                      <strong
+                        class="purchase-shop-total">
+
                         ${escapeHTML(
                           shopGroupYen_(
                             group.total
                           )
                         )}
+
                       </strong>
 
-                      <span
-                        class="material-symbols-rounded
-                        purchase-shop-arrow">
-                        expand_more
-                      </span>
+
+                      ${
+                        deleteMode
+                          ? ""
+                          : `
+                            <span
+                              class="
+                                material-symbols-rounded
+                                purchase-shop-arrow
+                              ">
+                              expand_more
+                            </span>
+                          `
+                      }
 
                     </button>
+
 
                     <div
                       class="purchase-shop-details"
@@ -16991,110 +17174,730 @@ loadDashboard =
             .join("")
         }
 
+
+        ${
+          deleteMode
+            ? `
+              <div class="purchase-delete-bottom">
+
+                <button
+                  type="button"
+                  class="
+                    purchase-delete-selected
+                    purchase-delete-selected-bottom
+                  "
+                  disabled>
+
+                  選択したレシートを削除
+
+                </button>
+
+              </div>
+            `
+            : ""
+        }
+
       </div>
     `;
 
 
+    bind_();
+  }
+
+
+  // =====================================================
+  // 選択数を更新
+  // =====================================================
+
+  function updateSelection_() {
+
+    const count =
+      selectedIds.size;
+
+
     container
       .querySelectorAll(
-        "[data-shop-group-button]"
+        ".purchase-delete-selected"
       )
       .forEach(
         function(button) {
-          button.addEventListener(
-            "click",
+
+          button.disabled =
+            count === 0;
+
+          button.textContent =
+            count > 0
+              ? "選択したレシートを削除（" +
+                count +
+                "件）"
+              : "選択したレシートを削除";
+        }
+      );
+
+
+    const selectAll =
+      container.querySelector(
+        ".purchase-select-all-input"
+      );
+
+
+    if (selectAll) {
+
+      const selectableGroups =
+        groups.filter(
+          function(group) {
+
+            return !!String(
+              group.receiptId ||
+              (
+                group.items &&
+                group.items[0] &&
+                group.items[0].receiptId
+              ) ||
+              ""
+            ).trim();
+          }
+        );
+
+
+      selectAll.checked =
+        selectableGroups.length > 0 &&
+        selectedIds.size ===
+          selectableGroups.length;
+    }
+  }
+
+
+  // =====================================================
+  // 選択レシート削除
+  // =====================================================
+
+  async function deleteSelected_() {
+
+    const ids =
+      Array.from(
+        selectedIds
+      );
+
+
+    if (!ids.length) {
+
+      showToast(
+        "削除するレシートを選択してください"
+      );
+
+      return;
+    }
+
+
+    const ok =
+      window.confirm(
+        "選択した" +
+        ids.length +
+        "件のレシートを削除しますか？\n\n" +
+        "レシートに含まれる購入明細もすべて削除されます。\n" +
+        "この操作は元に戻せません。"
+      );
+
+
+    if (!ok) {
+      return;
+    }
+
+
+    const buttons =
+      container.querySelectorAll(
+        ".purchase-delete-selected"
+      );
+
+
+    buttons.forEach(
+      function(button) {
+
+        button.disabled =
+          true;
+
+        button.textContent =
+          "削除中…";
+      }
+    );
+
+
+    try {
+
+      for (
+        const receiptId
+        of ids
+      ) {
+
+        const result =
+          await fetchJson(
+
+            API_BASE +
+
+            "?action=deleteReceiptCompletely" +
+
+            "&receiptId=" +
+
+            encodeURIComponent(
+              receiptId
+            )
+
+          );
+
+
+        if (
+          !result ||
+          result.success !== true
+        ) {
+
+          throw new Error(
+            result &&
+            result.error
+              ? result.error
+              : "削除できませんでした"
+          );
+        }
+      }
+
+
+      selectedIds.clear();
+
+
+      showToast(
+        ids.length +
+        "件のレシートを削除しました"
+      );
+
+
+      if (
+        typeof refreshReceiptPage ===
+        "function"
+      ) {
+
+        await refreshReceiptPage();
+      }
+
+
+      if (
+        typeof loadDashboard ===
+        "function"
+      ) {
+
+        loadDashboard();
+      }
+
+    }
+    catch (error) {
+
+      console.error(
+        "Receipt delete error:",
+        error
+      );
+
+
+      showToast(
+        "削除できませんでした：" +
+        String(
+          error.message ||
+          error
+        )
+      );
+
+
+      updateSelection_();
+    }
+  }
+
+
+  // =====================================================
+  // イベント
+  // =====================================================
+
+  function bind_() {
+
+    const modeButton =
+      container.querySelector(
+        ".purchase-delete-mode-button"
+      );
+
+
+    if (modeButton) {
+
+      modeButton.addEventListener(
+        "click",
+        function() {
+
+          deleteMode =
+            !deleteMode;
+
+          selectedIds.clear();
+
+          draw_();
+        }
+      );
+    }
+
+
+    // -----------------------------------------------------
+    // レシート選択
+    // -----------------------------------------------------
+
+    container
+      .querySelectorAll(
+        ".purchase-receipt-checkbox"
+      )
+      .forEach(
+        function(checkbox) {
+
+          checkbox.addEventListener(
+            "change",
             function() {
-              const index =
-                Number(
-                  button.dataset
-                    .shopGroupButton
-                );
 
-              const section =
-                button.closest(
-                  ".purchase-shop-group"
-                );
+              const id =
+                String(
+                  checkbox.value ||
+                  ""
+                ).trim();
 
-              const details =
-                section.querySelector(
-                  "[data-shop-group-details]"
-                );
 
-              const isOpen =
-                section.classList.contains(
-                  "is-open"
-                );
-
-              container
-                .querySelectorAll(
-                  ".purchase-shop-group"
-                )
-                .forEach(
-                  function(otherSection) {
-                    otherSection
-                      .classList
-                      .remove(
-                        "is-open"
-                      );
-
-                    const otherButton =
-                      otherSection.querySelector(
-                        ".purchase-shop-summary"
-                      );
-
-                    if (otherButton) {
-                      otherButton.setAttribute(
-                        "aria-expanded",
-                        "false"
-                      );
-                    }
-                  }
-                );
-
-              if (isOpen) {
+              if (!id) {
                 return;
               }
 
-              section.classList.add(
-                "is-open"
-              );
-
-              button.setAttribute(
-                "aria-expanded",
-                "true"
-              );
 
               if (
-                details.dataset.rendered !==
-                "true"
+                checkbox.checked
               ) {
-                // 現在の商品明細と鉛筆編集をそのまま表示
-                renderReceiptListBeforeShopGrouping_(
-                  details,
-                  groups[index].items
+
+                selectedIds.add(
+                  id
                 );
 
-                details.dataset.rendered =
-                  "true";
+              } else {
+
+                selectedIds.delete(
+                  id
+                );
               }
 
-              setTimeout(
-                function() {
-                  section.scrollIntoView({
-                    behavior:
-                      "smooth",
 
-                    block:
-                      "nearest"
-                  });
-                },
-                100
-              );
+              const section =
+                checkbox.closest(
+                  ".purchase-shop-group"
+                );
+
+
+              if (section) {
+
+                section.classList.toggle(
+                  "is-delete-selected",
+                  checkbox.checked
+                );
+              }
+
+
+              updateSelection_();
             }
           );
         }
       );
+
+
+    // -----------------------------------------------------
+    // 全選択
+    // -----------------------------------------------------
+
+    const selectAll =
+      container.querySelector(
+        ".purchase-select-all-input"
+      );
+
+
+    if (selectAll) {
+
+      selectAll.addEventListener(
+        "change",
+        function() {
+
+          container
+            .querySelectorAll(
+              ".purchase-receipt-checkbox:not(:disabled)"
+            )
+            .forEach(
+              function(checkbox) {
+
+                const id =
+                  String(
+                    checkbox.value ||
+                    ""
+                  ).trim();
+
+
+                checkbox.checked =
+                  selectAll.checked;
+
+
+                if (
+                  selectAll.checked
+                ) {
+
+                  selectedIds.add(
+                    id
+                  );
+
+                } else {
+
+                  selectedIds.delete(
+                    id
+                  );
+                }
+
+
+                const section =
+                  checkbox.closest(
+                    ".purchase-shop-group"
+                  );
+
+
+                if (section) {
+
+                  section.classList.toggle(
+                    "is-delete-selected",
+                    selectAll.checked
+                  );
+                }
+              }
+            );
+
+
+          updateSelection_();
+        }
+      );
+    }
+
+
+    // -----------------------------------------------------
+    // 削除実行
+    // -----------------------------------------------------
+
+    container
+      .querySelectorAll(
+        ".purchase-delete-selected"
+      )
+      .forEach(
+        function(button) {
+
+          button.addEventListener(
+            "click",
+            deleteSelected_
+          );
+        }
+      );
+
+
+    // -----------------------------------------------------
+    // 通常時の商品詳細開閉
+    // -----------------------------------------------------
+
+    if (!deleteMode) {
+
+      container
+        .querySelectorAll(
+          "[data-shop-group-button]"
+        )
+        .forEach(
+          function(button) {
+
+            button.addEventListener(
+              "click",
+              function() {
+
+                const index =
+                  Number(
+                    button.dataset
+                      .shopGroupButton
+                  );
+
+
+                const section =
+                  button.closest(
+                    ".purchase-shop-group"
+                  );
+
+
+                const details =
+                  section.querySelector(
+                    "[data-shop-group-details]"
+                  );
+
+
+                const isOpen =
+                  section.classList.contains(
+                    "is-open"
+                  );
+
+
+                container
+                  .querySelectorAll(
+                    ".purchase-shop-group"
+                  )
+                  .forEach(
+                    function(otherSection) {
+
+                      otherSection
+                        .classList
+                        .remove(
+                          "is-open"
+                        );
+
+
+                      const otherButton =
+                        otherSection.querySelector(
+                          ".purchase-shop-summary"
+                        );
+
+
+                      if (otherButton) {
+
+                        otherButton.setAttribute(
+                          "aria-expanded",
+                          "false"
+                        );
+                      }
+                    }
+                  );
+
+
+                if (isOpen) {
+                  return;
+                }
+
+
+                section.classList.add(
+                  "is-open"
+                );
+
+
+                button.setAttribute(
+                  "aria-expanded",
+                  "true"
+                );
+
+
+                if (
+                  details.dataset.rendered !==
+                  "true"
+                ) {
+
+                  renderReceiptListBeforeShopGrouping_(
+                    details,
+                    groups[index].items
+                  );
+
+
+                  details.dataset.rendered =
+                    "true";
+                }
+
+
+                setTimeout(
+                  function() {
+
+                    section.scrollIntoView({
+                      behavior:
+                        "smooth",
+
+                      block:
+                        "nearest"
+                    });
+
+                  },
+                  100
+                );
+              }
+            );
+          }
+        );
+    }
+
+
+    updateSelection_();
   }
+
+
+  // =====================================================
+  // CSSは1回だけ追加
+  // =====================================================
+
+  if (
+    !document.getElementById(
+      "receiptDeleteSelectionStyle"
+    )
+  ) {
+
+    const style =
+      document.createElement(
+        "style"
+      );
+
+
+    style.id =
+      "receiptDeleteSelectionStyle";
+
+
+    style.textContent = `
+
+      .purchase-delete-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+
+
+      .purchase-delete-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #7d8580;
+      }
+
+
+      .purchase-delete-mode-button {
+        border: 0;
+        border-radius: 10px;
+        padding: 8px 13px;
+        background: #fff0f0;
+        color: #e53935;
+        font-size: 12px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+
+      .purchase-delete-tools {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 10px;
+        padding: 12px;
+        border-radius: 14px;
+        background: #fff7f7;
+      }
+
+
+      .purchase-select-all {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+
+      .purchase-select-all-input {
+        width: 18px;
+        height: 18px;
+      }
+
+
+      .purchase-delete-selected {
+        width: 100%;
+        min-height: 42px;
+        border: 0;
+        border-radius: 12px;
+        background: #e53935;
+        color: white;
+        font-size: 13px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+
+      .purchase-delete-selected:disabled {
+        opacity: .35;
+        cursor: default;
+      }
+
+
+      .purchase-delete-bottom {
+        padding: 12px;
+        border-top: 1px solid #e7ece8;
+        background: #fff7f7;
+      }
+
+
+      .purchase-shop-group {
+        position: relative;
+      }
+
+
+      .purchase-receipt-selector {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        z-index: 20;
+        display: flex;
+        width: 24px;
+        height: 24px;
+        align-items: center;
+        justify-content: center;
+        transform: translateY(-50%);
+        cursor: pointer;
+      }
+
+
+      .purchase-receipt-selector input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+
+      .purchase-receipt-circle {
+        display: block;
+        width: 19px;
+        height: 19px;
+        box-sizing: border-box;
+        border: 2px solid #b7bfba;
+        border-radius: 50%;
+        background: #ffffff;
+      }
+
+
+      .purchase-receipt-selector
+      input:checked +
+      .purchase-receipt-circle {
+        border: 6px solid #e53935;
+      }
+
+
+      .purchase-receipt-selector.is-disabled {
+        opacity: .25;
+      }
+
+
+      .purchase-shop-group.is-delete-selected {
+        background: #fff5f5;
+      }
+
+
+      .purchase-receipt-selector
+      + .purchase-shop-summary {
+        padding-left: 44px;
+      }
+
+    `;
+
+
+    document.head.appendChild(
+      style
+    );
+  }
+
+
+  draw_();
+}
 
 
   // -------------------------------------------------------
