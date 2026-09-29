@@ -119,318 +119,220 @@
        HOME
   ==================================================== -->
 
-  <section
-    class="app-page"
-    id="page-home"
-    data-page-panel="home"
-  >
+<section
+  class="app-page"
+  id="page-home"
+  data-page-panel="home"
+>
+  <div class="cute-home">
 
-
-    <!-- =================================================
-         TODAY SCHEDULE
-    ================================================== -->
-
-    <section
-      class="card today-schedule-card"
-      id="todayScheduleCard"
-    >
-
-      <div class="section-header">
-
-        <div>
-
-          <p class="card-title">
-            TODAY
-          </p>
-
-          <h3>
-            📅 今日の予定
-          </h3>
-
-        </div>
-
-
-        <button
-          class="text-button"
-          id="todayCalendarButton"
-          type="button"
-        >
-          カレンダーを見る
-        </button>
-
-      </div>
-
-
-      <div
-        class="today-schedule-list"
-        id="todayScheduleList"
-      >
-
-        <div class="loading-row">
-
-          <span class="loading-dot"></span>
-
-          <span>
-            今日の予定を確認しています...
-          </span>
-
-        </div>
-
-      </div>
-
-
+    <!-- 更新 -->
+    <div class="cute-home-tools">
       <button
-        class="today-add-schedule"
-        id="todayAddScheduleButton"
         type="button"
+        id="cuteHomeRefresh"
+        class="cute-refresh"
+        aria-label="更新"
       >
-
-        <span class="material-symbols-rounded">
-          add
-        </span>
-
-        今日の予定を追加
-
+        ↻
       </button>
-
-    </section>
-
-
-
-    <!-- =================================================
-         HOME TITLE
-    ================================================== -->
-
-    <div class="page-section-title">
-
-      <span>
-        🏠
-      </span>
-
-      <div>
-
-        <small>
-          HOME
-        </small>
-
-        <strong>
-          今月の家計
-        </strong>
-
-      </div>
-
     </div>
 
-
-
-    <!-- =================================================
-         今月の生活費
-    ================================================== -->
-
-    <section class="card summary-card">
-
-      <div class="summary-header">
-
-        <div>
-
-          <p class="card-title">
-            今月の生活費
-          </p>
-
-          <h2 id="totalMoney">
-            ¥0
-          </h2>
-
-        </div>
-
-
-        <div
-          class="summary-percent"
-          id="budgetPercent"
-        >
-          0%
-        </div>
-
+    <!-- 今月の残金 -->
+    <section
+      class="cute-main-card"
+      id="cuteBalanceCard"
+      role="button"
+      tabindex="0"
+    >
+      <div class="cute-main-heading">
+        <span>♡ 今月の残金</span>
+        <span class="cute-arrow">›</span>
       </div>
 
+      <strong
+        class="cute-balance"
+        id="balanceMoney"
+      >
+        ¥250,000
+      </strong>
 
       <div
-        class="progress"
+        class="cute-progress"
         id="budgetProgress"
         role="progressbar"
         aria-valuemin="0"
         aria-valuemax="100"
         aria-valuenow="0"
       >
-
         <div
-          class="progress-bar"
+          class="cute-progress-bar"
           id="progressBar"
         ></div>
-
       </div>
 
+      <div class="cute-budget-row">
+        <div>
+          <span>予算</span>
 
-      <div class="budget-row">
+          <div class="cute-budget-value">
+            <strong id="budgetMoney">
+              ¥250,000
+            </strong>
 
-        <div class="budget-item">
-
-          <span class="budget-label">
-            予算
-          </span>
-
-          <strong id="budgetMoney">
-            ¥250,000
-          </strong>
-
+            <button
+              type="button"
+              id="cuteBudgetEdit"
+              class="cute-mini-edit"
+              aria-label="予算を修正"
+            >
+              ✎
+            </button>
+          </div>
         </div>
 
+        <div class="cute-budget-right">
+          <span>今月の生活費</span>
 
-        <div class="budget-item budget-item-right">
-
-          <span class="budget-label">
-            残り
-          </span>
-
-          <strong id="balanceMoney">
-            ¥250,000
+          <strong id="totalMoney">
+            ¥0
           </strong>
-
         </div>
-
       </div>
 
+      <!-- 既存JS用 -->
+      <span
+        id="budgetPercent"
+        class="cute-hidden-value"
+      >
+        0%
+      </span>
     </section>
 
+    <!-- 今月の買い物額 -->
+    <button
+      type="button"
+      class="cute-link-card"
+      id="homeMonthlyPurchaseCard"
+    >
+      <span class="cute-icon cute-icon-pink">🛒</span>
 
+      <span class="cute-link-copy">
+        <small>今月</small>
+        <strong>今月の買い物額</strong>
+      </span>
 
-    <!-- =================================================
-         SAVING
-    ================================================== -->
+      <strong
+        class="cute-link-value"
+        id="homeMonthlyPurchaseAmount"
+      >
+        ¥0
+      </strong>
 
-    <section class="saving-summary">
+      <span class="cute-arrow">›</span>
+    </button>
 
-      <div class="saving-summary-icon">
+    <!-- 現在の貯蓄 -->
+    <div class="cute-link-card cute-savings-card">
+      <button
+        type="button"
+        class="cute-card-jump"
+        id="cuteSavingsJump"
+      >
+        <span class="cute-icon cute-icon-yellow">🐷</span>
 
-        <span class="material-symbols-rounded">
-          savings
+        <span class="cute-link-copy">
+          <small>ふたりの</small>
+          <strong>現在の貯蓄</strong>
         </span>
 
-      </div>
-
-
-      <div class="saving-summary-content">
-
-        <span class="saving-summary-label">
-          現在の貯蓄
-        </span>
-
-        <strong id="savingActual">
+        <strong
+          class="cute-link-value"
+          id="savingActual"
+        >
           ¥0
         </strong>
 
-        <p>
-          終了した月の残金を自動で貯蓄
-        </p>
+        <span class="cute-arrow">›</span>
+      </button>
 
-      </div>
-
-    </section>
-
-
-
-    <!-- =================================================
-         CATEGORY
-    ================================================== -->
-
-    <section class="card">
-
-      <div class="section-header">
-
-        <div>
-
-          <p class="card-title">
-            CATEGORY
-          </p>
-
-          <h3>
-            生活費の内訳
-          </h3>
-
-        </div>
-
-
-        <button
-          class="text-button"
-          id="categoryDetailButton"
-          type="button"
-        >
-          レポートへ
-        </button>
-
-      </div>
-
-
-      <div
-        class="category-list"
-        id="categoryList"
+      <button
+        type="button"
+        id="currentSavingsEditButton"
+        class="cute-mini-edit cute-saving-edit"
+        aria-label="現在の貯蓄を修正"
       >
+        ✎
+      </button>
+    </div>
 
-        <div class="loading-row">
-          読み込み中...
-        </div>
+    <!-- 次の予定 -->
+    <button
+      type="button"
+      class="cute-link-card cute-two-line-card"
+      id="cuteNextSchedule"
+    >
+      <span class="cute-icon cute-icon-blue">📅</span>
 
-      </div>
+      <span class="cute-link-copy">
+        <small>カレンダー</small>
+        <strong>次の予定</strong>
+        <span id="cuteNextScheduleText">
+          予定を確認しています…
+        </span>
+      </span>
 
-    </section>
+      <span class="cute-arrow">›</span>
+    </button>
 
+    <!-- 買い物メモ -->
+    <button
+      type="button"
+      class="cute-link-card"
+      id="cuteMemoJump"
+    >
+      <span class="cute-icon cute-icon-lilac">📝</span>
 
+      <span class="cute-link-copy">
+        <small>MEMO</small>
+        <strong>買い物メモ</strong>
+      </span>
 
-    <!-- =================================================
-         AI
-    ================================================== -->
-
-    <section class="card ai-card">
-
-      <div class="ai-header">
-
-        <div class="ai-icon">
-
-          <span class="material-symbols-rounded">
-            auto_awesome
-          </span>
-
-        </div>
-
-
-        <div>
-
-          <p class="card-title">
-            AI
-          </p>
-
-          <h3>
-            今月の家計
-          </h3>
-
-        </div>
-
-      </div>
-
-
-      <p
-        class="ai-text"
-        id="aiAdvice"
+      <strong
+        class="cute-link-value"
+        id="cuteMemoCount"
       >
-        家計データを読み込んでいます...
-      </p>
+        0件
+      </strong>
 
-    </section>
+      <span class="cute-arrow">›</span>
+    </button>
 
+    <!-- チェックリスト -->
+    <button
+      type="button"
+      class="cute-link-card"
+      id="cuteChecklistJump"
+    >
+      <span class="cute-icon cute-icon-mint">✓</span>
 
-  </section>
+      <span class="cute-link-copy">
+        <small>CHECK</small>
+        <strong>チェックリスト</strong>
+      </span>
 
+      <strong
+        class="cute-link-value"
+        id="cuteChecklistCount"
+      >
+        0件
+      </strong>
 
+      <span class="cute-arrow">›</span>
+    </button>
+
+  </div>
+</section>
 
   <!-- ===================================================
        RECEIPT
