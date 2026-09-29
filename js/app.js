@@ -19361,42 +19361,12 @@ if (
         )
       );
 
-
-    const mainMoney =
-      document.getElementById(
-        "totalMoney"
-      );
-
-    const bottomRightMoney =
+      const bottomRightMoney =
       document.getElementById(
         "balanceMoney"
       );
 
-
-    /* 大きな金額を今月の残金に変更 */
-
-    if (mainMoney) {
-      mainMoney.textContent =
-        yen(remaining);
-
-      mainMoney.classList.toggle(
-        "is-danger",
-        remaining < 0
-      );
-
-      const mainLabel =
-        mainMoney
-          .closest(".summary-header")
-          ?.querySelector(".card-title");
-
-      if (mainLabel) {
-        mainLabel.textContent =
-          "今月の残金";
-      }
-    }
-
-
-    /* 右下を今月の生活費に変更 */
+     /* 右下を今月の生活費に変更 */
 
     if (bottomRightMoney) {
       bottomRightMoney.textContent =
