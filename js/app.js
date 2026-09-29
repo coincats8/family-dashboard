@@ -20338,3 +20338,1107 @@ if (
   renderHomeMonthlyPurchase_();
 })();
 
+// =========================================================
+// HOME：スマホ用コンパクトカテゴリ
+// ・1カテゴリ1行
+// ・タップした項目だけ詳細表示
+// ・電気 / ガス / 水道 → 水道・光熱費へ統合
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.compactHomeCategoriesAdded_) {
+    return;
+  }
+
+  window.compactHomeCategoriesAdded_ = true;
+
+  let openedCategoryKey_ = "";
+
+
+  // -------------------------------------------------------
+  // カテゴリ名から絵文字などを除いて比較
+  // -------------------------------------------------------
+
+  function categoryKey_(value) {
+    return String(value || "")
+      .replace(
+        /^[^\p{L}\p{N}]+/u,
+        ""
+      )
+      .replace(/\s+/g, "")
+      .trim();
+  }
+
+
+  // -------------------------------------------------------
+  // 数値取得
+  // -------------------------------------------------------
+
+  function categoryNumber_(
+    category,
+    key
+  ) {
+    return (
+      Number(
+        category &&
+        category[key]
+      ) || 0
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // 電気・ガス・水道を統合
+  // -------------------------------------------------------
+
+  function createCompactCategories_(
+    categories
+  ) {
+
+    const source =
+      Array.isArray(categories)
+        ? categories
+        : [];
+
+    const result = [];
+
+    const utilityItems = [];
+
+    source.forEach(
+      function (category) {
+
+        const key =
+          categoryKey_(
+            category.name
+          );
+
+        if (
+          key === "電気" ||
+          key === "ガス" ||
+          key === "水道"
+        ) {
+          utilityItems.push(
+            category
+          );
+          return;
+        }
+
+        result.push({
+          type: "normal",
+          key: key,
+          name:
+            category.name ||
+            "その他",
+          amount:
+            categoryNumber_(
+              category,
+              "amount"
+            ),
+          budget:
+            categoryNumber_(
+              category,
+              "budget"
+            ),
+          original:
+            category
+        });
+      }
+    );
+
+
+    // 光熱費は1項目として表示
+    if (utilityItems.length) {
+
+      const amount =
+        utilityItems.reduce(
+          function (sum, item) {
+            return (
+              sum +
+              categoryNumber_(
+                item,
+                "amount"
+              )
+            );
+          },
+          0
+        );
+
+      const budget =
+        utilityItems.reduce(
+          function (sum, item) {
+            return (
+              sum +
+              categoryNumber_(
+                item,
+                "budget"
+              )
+            );
+          },
+          0
+        );
+
+      result.push({
+        type: "utility",
+        key: "水道光熱費",
+        name: "💡 水道・光熱費",
+        amount: amount,
+        budget: budget,
+        utilityItems:
+          utilityItems
+      });
+    }
+
+
+    // 金額が大きい順にはせず、
+    // 元カテゴリの並びをできるだけ維持
+    return result;
+  }
+
+
+  // -------------------------------------------------------
+  // 金額表示
+  // -------------------------------------------------------
+
+  function compactYen_(value) {
+
+    const amount =
+      Number(value) || 0;
+
+    return (
+      "¥" +
+      amount.toLocaleString(
+        "ja-JP"
+      )
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // HTML escape
+  // -------------------------------------------------------
+
+  function compactEscape_(value) {
+
+    return String(
+      value ?? ""
+    )
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+
+  // -------------------------------------------------------
+  // 詳細部分
+  // -------------------------------------------------------
+
+  function createDetailHTML_(
+    category
+  ) {
+
+    const budget =
+      Number(
+        category.budget
+      ) || 0;
+
+    const amount =
+      Number(
+        category.amount
+      ) || 0;
+
+    const remaining =
+      budget - amount;
+
+    const rate =
+      budget > 0
+        ? Math.round(
+            (
+              amount /
+              budget
+            ) * 100
+          )
+        : 0;
+
+
+    let utilityHTML = "";
+
+
+    if (
+      category.type ===
+      "utility"
+    ) {
+
+      const utilityMap = {
+        "電気": {
+          icon: "⚡",
+          amount: 0
+        },
+
+        "ガス": {
+          icon: "🔥",
+          amount: 0
+        },
+
+        "水道": {
+          icon: "🚰",
+          amount: 0
+        }
+      };
+
+
+      (
+        category.utilityItems ||
+        []
+      ).forEach(
+        function (item) {
+
+          const key =
+            categoryKey_(
+              item.name
+            );
+
+          if (
+            utilityMap[key]
+          ) {
+            utilityMap[key]
+              .amount =
+                categoryNumber_(
+                  item,
+                  "amount"
+                );
+          }
+        }
+      );
+
+
+      utilityHTML = `
+
+        <div class="compact-utility-breakdown">
+
+          ${
+            [
+              "電気",
+              "ガス",
+              "水道"
+            ]
+              .map(
+                function (name) {
+
+                  const item =
+                    utilityMap[name];
+
+                  return `
+                    <div class="compact-utility-row">
+
+                      <span>
+                        ${item.icon}
+                        ${name}
+                      </span>
+
+                      <strong>
+                        ${compactYen_(
+                          item.amount
+                        )}
+                      </strong>
+
+                    </div>
+                  `;
+                }
+              )
+              .join("")
+          }
+
+        </div>
+      `;
+    }
+
+
+    const budgetHTML =
+      budget > 0
+        ? `
+          <div class="compact-category-budget">
+
+            <div class="compact-budget-numbers">
+
+              <span>
+                予算
+                <strong>
+                  ${compactYen_(
+                    budget
+                  )}
+                </strong>
+              </span>
+
+              <span
+                class="${
+                  remaining < 0
+                    ? "is-danger"
+                    : ""
+                }">
+
+                ${
+                  remaining >= 0
+                    ? "残り "
+                    : "超過 "
+                }
+
+                <strong>
+                  ${compactYen_(
+                    Math.abs(
+                      remaining
+                    )
+                  )}
+                </strong>
+
+              </span>
+
+            </div>
+
+
+            <div class="compact-budget-track">
+
+              <span
+                style="
+                  width:
+                  ${Math.min(
+                    100,
+                    Math.max(
+                      0,
+                      rate
+                    )
+                  )}%;
+                ">
+              </span>
+
+            </div>
+
+          </div>
+        `
+        : `
+          <div class="compact-no-budget">
+            予算未設定
+          </div>
+        `;
+
+
+    return `
+
+      <div class="compact-category-detail">
+
+        ${utilityHTML}
+
+        ${budgetHTML}
+
+        <div class="compact-category-actions">
+
+          ${
+            category.type ===
+            "normal"
+              ? `
+                <button
+                  type="button"
+                  class="compact-budget-edit-button"
+                  data-compact-budget-category="${compactEscape_(
+                    category.name
+                  )}">
+                  予算を修正
+                </button>
+              `
+              : ""
+          }
+
+
+          <button
+            type="button"
+            class="compact-report-button"
+            data-compact-report-category="${compactEscape_(
+              category.name
+            )}">
+            支出の詳細を見る
+          </button>
+
+        </div>
+
+      </div>
+    `;
+  }
+
+
+  // -------------------------------------------------------
+  // ホームカテゴリ描画
+  // -------------------------------------------------------
+
+  function renderCompactHomeCategories_() {
+
+    if (!dashboardData) {
+      return;
+    }
+
+
+    const container =
+      document.getElementById(
+        "categoryList"
+      );
+
+
+    if (!container) {
+      return;
+    }
+
+
+    const categories =
+      createCompactCategories_(
+        dashboardData.categories
+      );
+
+
+    if (!categories.length) {
+
+      container.innerHTML =
+        '<div class="compact-category-empty">カテゴリデータがありません</div>';
+
+      return;
+    }
+
+
+    container.innerHTML =
+      categories
+        .map(
+          function (category) {
+
+            const isOpen =
+              openedCategoryKey_ ===
+              category.key;
+
+
+            return `
+
+              <div
+                class="
+                  compact-category-item
+                  ${
+                    isOpen
+                      ? "is-open"
+                      : ""
+                  }
+                "
+                data-compact-category="${compactEscape_(
+                  category.key
+                )}">
+
+
+                <button
+                  type="button"
+                  class="compact-category-main"
+                  data-compact-category-button="${compactEscape_(
+                    category.key
+                  )}">
+
+                  <span
+                    class="compact-category-name">
+
+                    ${compactEscape_(
+                      category.name
+                    )}
+
+                  </span>
+
+
+                  <span
+                    class="compact-category-right">
+
+                    <strong
+                      class="compact-category-amount">
+
+                      ${compactYen_(
+                        category.amount
+                      )}
+
+                    </strong>
+
+                    <span
+                      class="
+                        material-symbols-rounded
+                        compact-category-arrow
+                      ">
+                      ${
+                        isOpen
+                          ? "expand_less"
+                          : "chevron_right"
+                      }
+                    </span>
+
+                  </span>
+
+                </button>
+
+
+                ${
+                  isOpen
+                    ? createDetailHTML_(
+                        category
+                      )
+                    : ""
+                }
+
+              </div>
+            `;
+          }
+        )
+        .join("");
+
+
+    // -----------------------------------------------------
+    // 開閉
+    // -----------------------------------------------------
+
+    container
+      .querySelectorAll(
+        "[data-compact-category-button]"
+      )
+      .forEach(
+        function (button) {
+
+          button.addEventListener(
+            "click",
+            function (event) {
+
+              event.preventDefault();
+              event.stopPropagation();
+
+
+              const key =
+                button.dataset
+                  .compactCategoryButton ||
+                "";
+
+
+              openedCategoryKey_ =
+                openedCategoryKey_ === key
+                  ? ""
+                  : key;
+
+
+              renderCompactHomeCategories_();
+            }
+          );
+        }
+      );
+
+
+    // -----------------------------------------------------
+    // 予算修正
+    // -----------------------------------------------------
+
+    container
+      .querySelectorAll(
+        "[data-compact-budget-category]"
+      )
+      .forEach(
+        function (button) {
+
+          button.addEventListener(
+            "click",
+            function (event) {
+
+              event.preventDefault();
+              event.stopPropagation();
+
+
+              const categoryName =
+                button.dataset
+                  .compactBudgetCategory ||
+                "";
+
+
+              if (
+                typeof
+                  openCategoryBudgetEditor_ ===
+                "function"
+              ) {
+
+                openCategoryBudgetEditor_(
+                  categoryName
+                );
+              }
+            }
+          );
+        }
+      );
+
+
+    // -----------------------------------------------------
+    // 支出詳細
+    // -----------------------------------------------------
+
+    container
+      .querySelectorAll(
+        "[data-compact-report-category]"
+      )
+      .forEach(
+        function (button) {
+
+          button.addEventListener(
+            "click",
+            function (event) {
+
+              event.preventDefault();
+              event.stopPropagation();
+
+
+              const categoryName =
+                button.dataset
+                  .compactReportCategory ||
+                "";
+
+
+              // 水道光熱費の場合は
+              // まずレポート画面へ移動
+              // 個別カテゴリは既存レポートを利用
+              if (
+                categoryKey_(
+                  categoryName
+                ) ===
+                "水道・光熱費" ||
+                categoryKey_(
+                  categoryName
+                ) ===
+                "水道光熱費"
+              ) {
+
+                if (
+                  typeof switchPage ===
+                  "function"
+                ) {
+
+                  switchPage(
+                    "report"
+                  );
+                }
+
+                return;
+              }
+
+
+              if (
+                typeof
+                  reportSelectedCategory_ !==
+                "undefined"
+              ) {
+
+                reportSelectedCategory_ =
+                  categoryName;
+              }
+
+
+              if (
+                typeof switchPage ===
+                "function"
+              ) {
+
+                switchPage(
+                  "report"
+                );
+              }
+            }
+          );
+        }
+      );
+  }
+
+
+  // -------------------------------------------------------
+  // CSS
+  // -------------------------------------------------------
+
+  const style =
+    document.createElement(
+      "style"
+    );
+
+
+  style.id =
+    "compactHomeCategoryStyle";
+
+
+  style.textContent = `
+
+    /* ==============================================
+       ホーム：スマホ用コンパクトカテゴリ
+       ============================================== */
+
+    #categoryList {
+      display: block !important;
+      padding: 0 !important;
+    }
+
+
+    #categoryList
+    .compact-category-item {
+      border-bottom:
+        1px solid
+        #edf0ee;
+      background:
+        #ffffff;
+    }
+
+
+    #categoryList
+    .compact-category-item:first-child {
+      border-top:
+        1px solid
+        #edf0ee;
+    }
+
+
+    #categoryList
+    .compact-category-main {
+      display: flex;
+      width: 100%;
+      min-height: 48px;
+      align-items: center;
+      justify-content:
+        space-between;
+      gap: 10px;
+
+      padding:
+        10px 4px;
+
+      border: 0;
+      background:
+        transparent;
+
+      color:
+        #202522;
+
+      text-align:
+        left;
+
+      cursor:
+        pointer;
+    }
+
+
+    #categoryList
+    .compact-category-name {
+      min-width: 0;
+      overflow: hidden;
+
+      font-size:
+        14px;
+      font-weight:
+        700;
+
+      text-overflow:
+        ellipsis;
+      white-space:
+        nowrap;
+    }
+
+
+    #categoryList
+    .compact-category-right {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 4px;
+    }
+
+
+    #categoryList
+    .compact-category-amount {
+      font-size:
+        14px;
+      font-weight:
+        800;
+      white-space:
+        nowrap;
+    }
+
+
+    #categoryList
+    .compact-category-arrow {
+      color:
+        #27b85a;
+      font-size:
+        20px;
+    }
+
+
+    #categoryList
+    .compact-category-detail {
+      padding:
+        2px 4px 13px 4px;
+
+      animation:
+        compactCategoryOpen_
+        .16s ease-out;
+    }
+
+
+    @keyframes
+    compactCategoryOpen_ {
+
+      from {
+        opacity: 0;
+        transform:
+          translateY(-3px);
+      }
+
+      to {
+        opacity: 1;
+        transform:
+          translateY(0);
+      }
+    }
+
+
+    #categoryList
+    .compact-budget-numbers {
+      display: flex;
+      align-items: center;
+      justify-content:
+        space-between;
+      gap: 8px;
+
+      margin-bottom:
+        7px;
+
+      color:
+        #7b837e;
+
+      font-size:
+        11px;
+    }
+
+
+    #categoryList
+    .compact-budget-numbers
+    strong {
+      color:
+        #343a36;
+
+      font-size:
+        12px;
+    }
+
+
+    #categoryList
+    .compact-budget-numbers
+    .is-danger,
+    #categoryList
+    .compact-budget-numbers
+    .is-danger strong {
+      color:
+        #e33b3b;
+    }
+
+
+    #categoryList
+    .compact-budget-track {
+      width: 100%;
+      height: 5px;
+
+      overflow: hidden;
+
+      border-radius:
+        999px;
+
+      background:
+        #edf1ee;
+    }
+
+
+    #categoryList
+    .compact-budget-track
+    > span {
+      display: block;
+
+      height: 100%;
+
+      border-radius:
+        inherit;
+
+      background:
+        #39bf64;
+    }
+
+
+    #categoryList
+    .compact-no-budget {
+      color:
+        #969d98;
+
+      font-size:
+        11px;
+    }
+
+
+    #categoryList
+    .compact-utility-breakdown {
+      display: grid;
+      gap: 5px;
+
+      margin-bottom:
+        10px;
+
+      padding:
+        9px 10px;
+
+      border-radius:
+        10px;
+
+      background:
+        #f7faf8;
+    }
+
+
+    #categoryList
+    .compact-utility-row {
+      display: flex;
+      align-items: center;
+      justify-content:
+        space-between;
+
+      font-size:
+        12px;
+    }
+
+
+    #categoryList
+    .compact-utility-row
+    strong {
+      font-size:
+        12px;
+    }
+
+
+    #categoryList
+    .compact-category-actions {
+      display: flex;
+      justify-content:
+        flex-end;
+      gap: 7px;
+
+      margin-top:
+        10px;
+    }
+
+
+    #categoryList
+    .compact-category-actions
+    button {
+      min-height:
+        32px;
+
+      padding:
+        6px 10px;
+
+      border:
+        1px solid
+        #dfe7e1;
+
+      border-radius:
+        9px;
+
+      background:
+        #ffffff;
+
+      color:
+        #269f4e;
+
+      font-size:
+        11px;
+      font-weight:
+        700;
+
+      cursor:
+        pointer;
+    }
+
+
+    #categoryList
+    .compact-category-empty {
+      padding:
+        18px 8px;
+
+      color:
+        #8a938d;
+
+      font-size:
+        12px;
+
+      text-align:
+        center;
+    }
+
+
+    /* 既存の大きなカテゴリカードを
+       ホームでは表示しない */
+
+    #categoryList
+    .category-item {
+      display: none !important;
+    }
+
+
+    @media (
+      max-width: 600px
+    ) {
+
+      #categoryList
+      .compact-category-main {
+        min-height:
+          44px;
+
+        padding:
+          8px 2px;
+      }
+
+
+      #categoryList
+      .compact-category-name,
+      #categoryList
+      .compact-category-amount {
+        font-size:
+          13px;
+      }
+
+    }
+
+  `;
+
+
+  document.head.appendChild(
+    style
+  );
+
+
+  // -------------------------------------------------------
+  // renderHomeの最後に新表示を適用
+  // -------------------------------------------------------
+
+  const renderHomeBeforeCompactCategories_ =
+    renderHome;
+
+
+  renderHome =
+    function () {
+
+      renderHomeBeforeCompactCategories_();
+
+      renderCompactHomeCategories_();
+    };
+
+
+  // 初期表示
+  setTimeout(
+    renderCompactHomeCategories_,
+    100
+  );
+
+})();
