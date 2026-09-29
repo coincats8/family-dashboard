@@ -21846,21 +21846,7 @@ if (
   // コンパクトカテゴリ描画後にグループ化
   // -------------------------------------------------------
 
-  const originalRenderCompact_ =
-    renderCompactHomeCategories_;
-
-
-  renderCompactHomeCategories_ =
-    function () {
-
-      originalRenderCompact_();
-
-      groupCompactCategories_();
-
-      removeHomeRecent_();
-    };
-
-
+  
   // renderHome完了後にも念のため適用
   const renderHomeBeforeGrouping_ =
     renderHome;
