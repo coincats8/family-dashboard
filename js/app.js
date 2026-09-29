@@ -20804,93 +20804,233 @@ if (
       return;
     }
 
+    // =====================================================
+    // カテゴリをグループ分けして直接描画
+    // =====================================================
 
-    container.innerHTML =
-      categories
-        .map(
-          function (category) {
-
-            const isOpen =
-              openedCategoryKey_ ===
-              category.key;
-
-
-            return `
-
-              <div
-                class="
-                  compact-category-item
-                  ${
-                    isOpen
-                      ? "is-open"
-                      : ""
-                  }
-                "
-                data-compact-category="${compactEscape_(
-                  category.key
-                )}">
-
-
-                <button
-                  type="button"
-                  class="compact-category-main"
-                  data-compact-category-button="${compactEscape_(
-                    category.key
-                  )}">
-
-                  <span
-                    class="compact-category-name">
-
-                    ${compactEscape_(
-                      category.name
-                    )}
-
-                  </span>
+    const categoryGroups = [
+      {
+        title: "住まい・固定費",
+        keys: [
+          "家賃",
+          "水道光熱費"
+        ]
+      },
+      {
+        title: "日常生活",
+        keys: [
+          "食費",
+          "医療",
+          "日用品",
+          "外食"
+        ]
+      },
+      {
+        title: "家族・子ども",
+        keys: [
+          "子ども用品",
+          "子供用品",
+          "予備費"
+        ]
+      },
+      {
+        title: "その他",
+        keys: [
+          "洋服",
+          "交通費",
+          "趣味娯楽",
+          "税金",
+          "その他"
+        ]
+      }
+    ];
 
 
-                  <span
-                    class="compact-category-right">
-
-                    <strong
-                      class="compact-category-amount">
-
-                      ${compactYen_(
-                        category.amount
-                      )}
-
-                    </strong>
-
-                    <span
-                      class="
-                        material-symbols-rounded
-                        compact-category-arrow
-                      ">
-                      ${
-                        isOpen
-                          ? "expand_less"
-                          : "chevron_right"
-                      }
-                    </span>
-
-                  </span>
-
-                </button>
+    function categoryGroupKey_(value) {
+      return String(value || "")
+        .replace(/^[^\p{L}\p{N}]+/u, "")
+        .replace(/[・\s]/g, "")
+        .trim();
+    }
 
 
+    function renderCompactCategoryRow_(category) {
+
+      const isOpen =
+        openedCategoryKey_ ===
+        category.key;
+
+      return `
+        <div
+          class="compact-category-item ${
+            isOpen ? "is-open" : ""
+          }"
+          data-compact-category="${compactEscape_(
+            category.key
+          )}"
+        >
+
+          <button
+            type="button"
+            class="compact-category-main"
+            data-compact-category-button="${compactEscape_(
+              category.key
+            )}"
+          >
+
+            <span class="compact-category-name">
+              ${compactEscape_(
+                category.name
+              )}
+            </span>
+
+            <span class="compact-category-right">
+
+              <strong class="compact-category-amount">
+                ${compactYen_(
+                  category.amount
+                )}
+              </strong>
+
+              <span
+                class="material-symbols-rounded compact-category-arrow"
+              >
                 ${
                   isOpen
-                    ? createDetailHTML_(
-                        category
-                      )
-                    : ""
+                    ? "expand_less"
+                    : "chevron_right"
+                }
+              </span>
+
+            </span>
+
+          </button>
+
+          ${
+            isOpen
+              ? createDetailHTML_(
+                  category
+                )
+              : ""
+          }
+
+        </div>
+      `;
+    }
+
+
+    const groupedKeys =
+      new Set();
+
+
+    const groupedHTML =
+      categoryGroups
+        .map(function (group) {
+
+          const items =
+            categories
+              .filter(function (category) {
+
+                const key =
+                  categoryGroupKey_(
+                    category.name
+                  );
+
+                const matched =
+                  group.keys.some(
+                    function (groupKey) {
+                      return (
+                        key === groupKey ||
+                        key.includes(groupKey)
+                      );
+                    }
+                  );
+
+                if (matched) {
+                  groupedKeys.add(
+                    category.key
+                  );
                 }
 
-              </div>
-            `;
+                return matched;
+              })
+              .sort(function (a, b) {
+                return (
+                  Number(b.amount || 0) -
+                  Number(a.amount || 0)
+                );
+              });
+
+
+          if (!items.length) {
+            return "";
           }
-        )
+
+
+          return `
+            <div class="compact-category-group">
+
+              <div class="compact-category-group-title">
+                ${group.title}
+              </div>
+
+              ${
+                items
+                  .map(
+                    renderCompactCategoryRow_
+                  )
+                  .join("")
+              }
+
+            </div>
+          `;
+        })
         .join("");
 
+
+    // 将来カテゴリが増えても消えないように
+    // 未分類項目は「その他」の最後へ表示
+    const ungrouped =
+      categories
+        .filter(function (category) {
+          return !groupedKeys.has(
+            category.key
+          );
+        })
+        .sort(function (a, b) {
+          return (
+            Number(b.amount || 0) -
+            Number(a.amount || 0)
+          );
+        });
+
+
+    const ungroupedHTML =
+      ungrouped.length
+        ? `
+          <div class="compact-category-group">
+
+            <div class="compact-category-group-title">
+              その他
+            </div>
+
+            ${
+              ungrouped
+                .map(
+                  renderCompactCategoryRow_
+                )
+                .join("")
+            }
+
+          </div>
+        `
+        : "";
+
+
+    container.innerHTML =
+      groupedHTML +
+      ungroupedHTML;
+   
 
     // -----------------------------------------------------
     // 開閉
