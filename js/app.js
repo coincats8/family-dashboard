@@ -21157,42 +21157,46 @@ category.type === "utility"
     // 予算修正
     // -----------------------------------------------------
 
-    container
-      .querySelectorAll(
-        "[data-compact-budget-category]"
-      )
-      .forEach(
-        function (button) {
+    // --------------------------------------------------
+// 予算修正
+// 再描画されても動くようにイベント委譲
+// --------------------------------------------------
 
-          button.addEventListener(
-            "click",
-            function (event) {
+if (!container.dataset.budgetClickBound) {
 
-              event.preventDefault();
-              event.stopPropagation();
+  container.dataset.budgetClickBound = "1";
 
+  container.addEventListener(
+    "click",
+    function (event) {
 
-              const categoryName =
-                button.dataset
-                  .compactBudgetCategory ||
-                "";
+      const button =
+        event.target.closest(
+          "[data-compact-budget-category]"
+        );
 
+      if (
+        !button ||
+        !container.contains(button)
+      ) {
+        return;
+      }
 
-              if (
-                typeof
-                  openCategoryBudgetEditor_ ===
-                "function"
-              ) {
+      event.preventDefault();
+      event.stopPropagation();
 
-                openCategoryBudgetEditor_(
-                  categoryName
-                );
-              }
-            }
-          );
-        }
-      );
+      const categoryName =
+        button.dataset.compactBudgetCategory || "";
 
+      if (
+        typeof openCategoryBudgetEditor_ ===
+        "function"
+      ) {
+        openCategoryBudgetEditor_(categoryName);
+      }
+    }
+  );
+}
 
     // -----------------------------------------------------
     // 支出詳細
