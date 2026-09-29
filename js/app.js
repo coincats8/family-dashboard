@@ -20725,8 +20725,8 @@ if (
         <div class="compact-category-actions">
 
           ${
-            category.type ===
-            "normal"
+            category.type === "normal" ||
+category.type === "utility"
               ? `
                 <button
                   type="button"
