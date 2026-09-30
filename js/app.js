@@ -21942,3 +21942,499 @@ if (
 
   syncHub_();
 })();
+
+
+// =========================================================
+// カテゴリ画面の整理
+// ・下のタブの順番：ホーム → カテゴリ → 日別 → …
+// ・電気／ガス／水道を「水道光熱費」に合体（押すと内訳が分かれて見える）
+// ・件数と金額を右合わせで表示
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.categoryTidyAdded_) {
+    return;
+  }
+
+  window.categoryTidyAdded_ = true;
+
+  const UTILITY_NAMES = ["電気", "ガス", "水道"];
+  const UTILITY_TITLE = "水道光熱費";
+  const UTILITY_ICON = "💡";
+
+  let utilityOpen_ = false;
+
+
+  // ---------- 下のタブ：カテゴリを日別より前にする ----------
+
+  function reorderTabs_() {
+    const nav =
+      document.querySelector(".bottom-nav");
+
+    if (!nav) {
+      return;
+    }
+
+    const report =
+      nav.querySelector('[data-page="report"]');
+
+    const receipt =
+      nav.querySelector('[data-page="receipt"]');
+
+    // 日別が先に並んでいるときだけ、カテゴリを前へ移す
+    if (
+      report &&
+      receipt &&
+      (
+        report.compareDocumentPosition(receipt) &
+        Node.DOCUMENT_POSITION_PRECEDING
+      )
+    ) {
+      nav.insertBefore(report, receipt);
+    }
+  }
+
+  reorderTabs_();
+
+
+  // ---------- 見た目 ----------
+
+  const style =
+    document.createElement("style");
+
+  style.id = "categoryTidyStyle";
+
+  style.textContent = `
+    /* 行：カテゴリ名 ｜ 件数 ｜ 金額（右合わせ） */
+    .report-history-summary {
+      grid-template-columns:
+        minmax(0, 1fr)
+        44px
+        92px !important;
+    }
+
+    .report-history-title {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .report-history-count {
+      grid-column: 2;
+      grid-row: 1;
+      text-align: right;
+      font-size: 11px !important;
+    }
+
+    .report-history-total {
+      grid-column: 3;
+      grid-row: 1;
+      text-align: right;
+      font-size: 14px !important;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 右端の「›」は表示しない */
+    .report-history-chevron {
+      display: none !important;
+    }
+
+    /* 水道光熱費の内訳 */
+    .utility-part {
+      padding: 4px 0 2px;
+    }
+
+    .utility-part + .utility-part {
+      border-top: 1px dashed #e3e8e5;
+    }
+
+    .utility-part-head {
+      display: grid;
+      grid-template-columns:
+        minmax(0, 1fr)
+        44px
+        92px;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 2px 4px;
+    }
+
+    .utility-part-name {
+      min-width: 0;
+      overflow: hidden;
+      color: #171a18;
+      font-size: 13px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .utility-part-count {
+      color: #8a928d;
+      font-size: 11px;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .utility-part-total {
+      color: #188b40;
+      font-size: 13px;
+      font-weight: 800;
+      text-align: right;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+
+  // ---------- 水道光熱費の合体 ----------
+
+  function plainName_(text) {
+    return String(text || "")
+      .replace(/[^\p{L}\p{N}]/gu, "")
+      .replace(/(代|料金|費)$/u, "");
+  }
+
+  function yenToNumber_(text) {
+    const digits =
+      String(text || "")
+        .normalize("NFKC")
+        .replace(/[^0-9]/g, "");
+
+    return digits ? Number(digits) : 0;
+  }
+
+  function yen_(number) {
+    return (
+      "¥" +
+      Math.round(number).toLocaleString("ja-JP")
+    );
+  }
+
+  function countOf_(group) {
+    const body =
+      group.querySelector(
+        ".report-history-body"
+      );
+
+    return body
+      ? body.querySelectorAll(
+          ".report-history-item"
+        ).length
+      : 0;
+  }
+
+  function mergeUtilities_() {
+    const list =
+      document.getElementById(
+        "reportCategoryList"
+      );
+
+    if (
+      !list ||
+      list.querySelector(
+        ".utility-merged-group"
+      )
+    ) {
+      return;
+    }
+
+    const groups =
+      Array.from(
+        list.querySelectorAll(
+          ".report-history-group"
+        )
+      );
+
+    const parts = [];
+
+    groups.forEach(function (group) {
+      const title =
+        group.querySelector(
+          ".report-history-title"
+        );
+
+      if (!title) {
+        return;
+      }
+
+      const name =
+        plainName_(title.textContent);
+
+      const order =
+        UTILITY_NAMES.indexOf(name);
+
+      if (order === -1) {
+        return;
+      }
+
+      parts.push({
+        group: group,
+        name: name,
+        order: order,
+        total: yenToNumber_(
+          (
+            group.querySelector(
+              ".report-history-total"
+            ) || {}
+          ).textContent
+        ),
+        count: countOf_(group)
+      });
+    });
+
+    if (parts.length === 0) {
+      return;
+    }
+
+    parts.sort(function (a, b) {
+      return a.order - b.order;
+    });
+
+    const total =
+      parts.reduce(function (sum, part) {
+        return sum + part.total;
+      }, 0);
+
+    const count =
+      parts.reduce(function (sum, part) {
+        return sum + part.count;
+      }, 0);
+
+    // 合体したグループを作る
+    const merged =
+      document.createElement("section");
+
+    merged.className =
+      "report-history-group utility-merged-group" +
+      (utilityOpen_ ? " is-open" : "");
+
+    const summary =
+      document.createElement("button");
+
+    summary.type = "button";
+    summary.className =
+      "report-history-summary";
+
+    const title =
+      document.createElement("span");
+
+    title.className = "report-history-title";
+    title.textContent =
+      UTILITY_ICON + " " + UTILITY_TITLE;
+
+    const totalNode =
+      document.createElement("span");
+
+    totalNode.className =
+      "report-history-total";
+    totalNode.textContent = yen_(total);
+
+    const countNode =
+      document.createElement("span");
+
+    countNode.className =
+      "report-history-count";
+    countNode.textContent = count + "件";
+
+    summary.appendChild(title);
+    summary.appendChild(totalNode);
+    summary.appendChild(countNode);
+
+    const body =
+      document.createElement("div");
+
+    body.className = "report-history-body";
+
+    parts.forEach(function (part) {
+      const section =
+        document.createElement("div");
+
+      section.className = "utility-part";
+
+      const head =
+        document.createElement("div");
+
+      head.className = "utility-part-head";
+
+      const partName =
+        document.createElement("span");
+
+      partName.className = "utility-part-name";
+      partName.textContent = part.name;
+
+      const partCount =
+        document.createElement("span");
+
+      partCount.className =
+        "utility-part-count";
+      partCount.textContent =
+        part.count + "件";
+
+      const partTotal =
+        document.createElement("span");
+
+      partTotal.className =
+        "utility-part-total";
+      partTotal.textContent =
+        yen_(part.total);
+
+      head.appendChild(partName);
+      head.appendChild(partCount);
+      head.appendChild(partTotal);
+
+      section.appendChild(head);
+
+      // 元のカテゴリの明細を、そのまま内訳へ移す
+      // （移しても編集ボタンは今までどおり動く）
+      const oldBody =
+        part.group.querySelector(
+          ".report-history-body"
+        );
+
+      if (oldBody) {
+        Array.from(oldBody.children).forEach(
+          function (child) {
+            section.appendChild(child);
+          }
+        );
+      }
+
+      body.appendChild(section);
+    });
+
+    merged.appendChild(summary);
+    merged.appendChild(body);
+
+    summary.addEventListener(
+      "click",
+      function () {
+        const willOpen =
+          !merged.classList.contains("is-open");
+
+        list
+          .querySelectorAll(
+            ".report-history-group"
+          )
+          .forEach(function (node) {
+            node.classList.remove("is-open");
+          });
+
+        merged.classList.toggle(
+          "is-open",
+          willOpen
+        );
+
+        utilityOpen_ = willOpen;
+      }
+    );
+
+    // 金額の大きい順になる位置へ入れる
+    const others =
+      Array.from(
+        list.querySelectorAll(
+          ".report-history-group"
+        )
+      ).filter(function (group) {
+        return !parts.some(function (part) {
+          return part.group === group;
+        });
+      });
+
+    let anchor = null;
+
+    for (let i = 0; i < others.length; i += 1) {
+      const otherTotal =
+        yenToNumber_(
+          (
+            others[i].querySelector(
+              ".report-history-total"
+            ) || {}
+          ).textContent
+        );
+
+      if (otherTotal < total) {
+        anchor = others[i];
+        break;
+      }
+    }
+
+    if (anchor) {
+      list.insertBefore(merged, anchor);
+    }
+    else {
+      list.appendChild(merged);
+    }
+
+    parts.forEach(function (part) {
+      part.group.remove();
+    });
+
+    if (utilityOpen_) {
+      others.forEach(function (group) {
+        group.classList.remove("is-open");
+      });
+    }
+  }
+
+
+  // ---------- 一覧が描き直されるたびに合体する ----------
+
+  let working_ = false;
+
+  function scheduleMerge_() {
+    if (working_) {
+      return;
+    }
+
+    working_ = true;
+
+    try {
+      mergeUtilities_();
+    }
+    catch (error) {
+      console.error(error);
+    }
+    finally {
+      working_ = false;
+    }
+  }
+
+  function watchList_() {
+    const list =
+      document.getElementById(
+        "reportCategoryList"
+      );
+
+    if (!list) {
+      return;
+    }
+
+    // 他のカテゴリを開いたら、合体グループは閉じた扱いにする
+    list.addEventListener(
+      "click",
+      function (event) {
+        const other =
+          event.target.closest &&
+          event.target.closest(
+            "[data-report-toggle]"
+          );
+
+        if (other) {
+          utilityOpen_ = false;
+        }
+      }
+    );
+
+    new MutationObserver(scheduleMerge_)
+      .observe(list, { childList: true });
+
+    scheduleMerge_();
+  }
+
+  watchList_();
+})();
