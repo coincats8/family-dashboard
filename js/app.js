@@ -19709,6 +19709,10 @@ if (
         window.clearApiCache_();
       }
 
+      if (typeof window.refreshTabBadges_ === "function") {
+        window.refreshTabBadges_();
+      }
+
       if (typeof loadDashboard === "function") {
         await loadDashboard();
       }
@@ -26501,4 +26505,2774 @@ if (
         : [];
     };
   }
+})();
+
+
+// =========================================================
+// 文字の自動認識（日付・時間・期日・個数・人）
+// 入力した文章から「いつ」「何を」「いくつ」などを取り出す
+// ・ルールで判定するので、通信なしですぐ動く
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.nlParse_) {
+    return;
+  }
+
+  const WEEK = ["月", "火", "水", "木", "金", "土", "日"];
+  const WEEK_LABEL = ["日", "月", "火", "水", "木", "金", "土"];
+
+  const UNITS =
+    "個|本|袋|パック|枚|箱|缶|冊|台|つ|コ|ヶ|セット|束|杯|人前|kg|g|グラム|ml|mL|L|リットル|cm|m|ダース|匹|切れ|玉|房|尾|丁|切|包|瓶|ロール|ケース|ボトル|カップ|斤|組|片|粒|羽|頭|株|把|帖|着|足|膳|合|升|本入|入";
+
+  function pad_(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function key_(date) {
+    return (
+      date.getFullYear() + "-" +
+      pad_(date.getMonth() + 1) + "-" +
+      pad_(date.getDate())
+    );
+  }
+
+  function makeDate_(y, m, d) {
+    const date = new Date(y, m - 1, d, 12, 0, 0);
+
+    if (
+      date.getFullYear() !== y ||
+      date.getMonth() !== m - 1 ||
+      date.getDate() !== d
+    ) {
+      return null;
+    }
+
+    return date;
+  }
+
+  function addDays_(date, days) {
+    const copy = new Date(date.getTime());
+    copy.setDate(copy.getDate() + days);
+    return copy;
+  }
+
+  function mondayOf_(date) {
+    // 月曜はじまりの週
+    const index = (date.getDay() + 6) % 7;
+    return addDays_(date, -index);
+  }
+
+  function today_(now) {
+    return new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      12, 0, 0
+    );
+  }
+
+  // 過ぎた月日は、来年のその日として扱う
+  function upcoming_(now, month, day) {
+    const base = today_(now);
+
+    let date = makeDate_(base.getFullYear(), month, day);
+
+    if (date && date < base) {
+      date = makeDate_(base.getFullYear() + 1, month, day);
+    }
+
+    return date;
+  }
+
+  function label_(dateKey) {
+    if (!dateKey) {
+      return "";
+    }
+
+    const parts = dateKey.split("-");
+
+    const date =
+      new Date(
+        Number(parts[0]),
+        Number(parts[1]) - 1,
+        Number(parts[2]),
+        12
+      );
+
+    return (
+      (date.getMonth() + 1) + "/" +
+      date.getDate() +
+      "(" + WEEK_LABEL[date.getDay()] + ")"
+    );
+  }
+
+  function timeFrom_(prefix, hourText, minuteText, half) {
+    let hour = Number(hourText);
+    let minute = 0;
+
+    if (half) {
+      minute = 30;
+    }
+    else if (minuteText !== undefined && minuteText !== "") {
+      minute = Number(minuteText);
+    }
+
+    if (hour > 24 || minute > 59) {
+      return null;
+    }
+
+    const p = String(prefix || "");
+
+    if (/午後|夜|夕方|PM|pm|晩/.test(p)) {
+      if (hour < 12) {
+        hour += 12;
+      }
+    }
+    else if (/昼/.test(p)) {
+      if (hour <= 6) {
+        hour += 12;
+      }
+    }
+    else if (/午前|朝|AM|am/.test(p)) {
+      if (hour === 12) {
+        hour = 0;
+      }
+    }
+
+    if (hour === 24) {
+      hour = 0;
+    }
+
+    return pad_(hour) + ":" + pad_(minute);
+  }
+
+  function cleanTitle_(text) {
+    let title = String(text);
+
+    // 取り出した日付や時間の「すぐあと」に残った「に」「で」「を」などを取る
+    // （間に空白があるときは、品名の一部なので残す）
+    title =
+      title.replace(
+        /\u0001[にでをはがのともへ、,]+/g,
+        "\u0001"
+      );
+
+    title =
+      title
+        .replace(/\u0001/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    // 前後に残った記号を取る
+    title =
+      title
+        .replace(/^[\s、,。.・:：\-~]+/, "")
+        .replace(/[\s、,。.・:：\-~]+$/, "");
+
+    return title;
+  }
+
+  // ---------------------------------------------------------
+  // メイン
+  // options.noDate   ：日付・時間・期限は探さない（買い物メモ用）
+  // options.qty      ：個数を取り出す（買い物メモ用）
+  // options.who      ：さとる／かな／ふたり を取り出す（予定用）
+  // ---------------------------------------------------------
+  window.nlParse_ = function (raw, now, options) {
+    const opts = options || {};
+    const base = now || new Date();
+
+    let rest =
+      String(raw || "")
+        .normalize("NFKC")
+        .replace(/[〜～]/g, "~")
+        .replace(/[\r\n]+/g, " ");
+
+    const result = {
+      raw: String(raw || ""),
+      title: "",
+      date: "",
+      time: "",
+      endTime: "",
+      qty: "",
+      who: "",
+      isDue: false
+    };
+
+    // 「3時」のように午前午後の指定がないとき、1〜6時は午後とみなす
+    function adjustHour_(time, prefix, hourText, colonMinutes) {
+      if (prefix || colonMinutes !== undefined) {
+        return time;
+      }
+
+      const hour = Number(hourText);
+
+      if (hour >= 1 && hour <= 6) {
+        return pad_(hour + 12) + time.slice(2);
+      }
+
+      return time;
+    }
+
+    function take_(regex, handler) {
+      const match = regex.exec(rest);
+
+      if (!match) {
+        return false;
+      }
+
+      const ok = handler(match);
+
+      if (ok === false) {
+        return false;
+      }
+
+      rest =
+        rest.slice(0, match.index) +
+        "\u0001" +
+        rest.slice(match.index + match[0].length);
+
+      return true;
+    }
+
+    function setDate_(date) {
+      if (date && !result.date) {
+        result.date = key_(date);
+        return true;
+      }
+
+      return false;
+    }
+
+    const t0 = today_(base);
+
+    if (!opts.noDate) {
+      // 1) 2026年10月5日 / 2026/10/5
+      take_(
+        /(\d{4})\s*[\/\-.年]\s*(\d{1,2})\s*[\/\-.月]\s*(\d{1,2})\s*日?/,
+        function (m) {
+          return setDate_(
+            makeDate_(Number(m[1]), Number(m[2]), Number(m[3]))
+          );
+        }
+      );
+
+      // 2) 10月5日
+      if (!result.date) {
+        take_(
+          /(\d{1,2})\s*月\s*(\d{1,2})\s*日?/,
+          function (m) {
+            return setDate_(
+              upcoming_(base, Number(m[1]), Number(m[2]))
+            );
+          }
+        );
+      }
+
+      // 3) 10/5
+      if (!result.date) {
+        take_(
+          /(?<![\d\/])(\d{1,2})\/(\d{1,2})(?![\d\/])/,
+          function (m) {
+            return setDate_(
+              upcoming_(base, Number(m[1]), Number(m[2]))
+            );
+          }
+        );
+      }
+
+      // 4) 来月5日 / 今月20日 / 月末
+      if (!result.date) {
+        take_(
+          /(再来月|来月|今月)\s*(\d{1,2})\s*日?/,
+          function (m) {
+            const shift =
+              m[1] === "今月" ? 0 : (m[1] === "来月" ? 1 : 2);
+
+            const month = new Date(
+              t0.getFullYear(),
+              t0.getMonth() + shift,
+              1,
+              12
+            );
+
+            return setDate_(
+              makeDate_(
+                month.getFullYear(),
+                month.getMonth() + 1,
+                Number(m[2])
+              )
+            );
+          }
+        );
+      }
+
+      if (!result.date) {
+        take_(
+          /(今月末|月末|来月末)/,
+          function (m) {
+            const shift = m[1] === "来月末" ? 1 : 0;
+
+            return setDate_(
+              new Date(
+                t0.getFullYear(),
+                t0.getMonth() + shift + 1,
+                0,
+                12
+              )
+            );
+          }
+        );
+      }
+
+      // 5) 3日後 / 2週間後 / 1ヶ月後
+      if (!result.date) {
+        take_(
+          /(\d{1,3})\s*(日|週間|週|ヶ月|か月|カ月|ケ月)\s*後/,
+          function (m) {
+            const n = Number(m[1]);
+
+            if (m[2] === "日") {
+              return setDate_(addDays_(t0, n));
+            }
+
+            if (m[2] === "週間" || m[2] === "週") {
+              return setDate_(addDays_(t0, n * 7));
+            }
+
+            return setDate_(
+              new Date(
+                t0.getFullYear(),
+                t0.getMonth() + n,
+                t0.getDate(),
+                12
+              )
+            );
+          }
+        );
+      }
+
+      // 6) 今日・明日・明後日 など
+      if (!result.date) {
+        take_(
+          /(明々後日|しあさって|明後日|あさって|明日|あした|あす|今日|本日|きょう|一昨日|おととい|昨日|きのう)/,
+          function (m) {
+            const map = {
+              "明々後日": 3, "しあさって": 3,
+              "明後日": 2, "あさって": 2,
+              "明日": 1, "あした": 1, "あす": 1,
+              "今日": 0, "本日": 0, "きょう": 0,
+              "昨日": -1, "きのう": -1,
+              "一昨日": -2, "おととい": -2
+            };
+
+            return setDate_(addDays_(t0, map[m[1]]));
+          }
+        );
+      }
+
+      // 7) 来週の月曜 / 月曜日 / (月)
+      if (!result.date) {
+        take_(
+          /(今週|来週|再来週)?\s*の?\s*([日月火水木金土])\s*曜日?/,
+          function (m) {
+            const index = WEEK.indexOf(m[2]);
+
+            if (m[1]) {
+              const weeks = m[1] === "今週" ? 0 : (m[1] === "来週" ? 1 : 2);
+
+              return setDate_(
+                addDays_(mondayOf_(t0), weeks * 7 + index)
+              );
+            }
+
+            // 今日を含めて、次にくるその曜日
+            const diff = (index - ((t0.getDay() + 6) % 7) + 7) % 7;
+
+            return setDate_(addDays_(t0, diff));
+          }
+        );
+      }
+
+      if (!result.date) {
+        take_(
+          /[(（]\s*([日月火水木金土])\s*[)）]/,
+          function (m) {
+            const index = WEEK.indexOf(m[1]);
+            const diff = (index - ((t0.getDay() + 6) % 7) + 7) % 7;
+
+            return setDate_(addDays_(t0, diff));
+          }
+        );
+      }
+
+      if (!result.date) {
+        take_(
+          /週末/,
+          function () {
+            const diff = (5 - ((t0.getDay() + 6) % 7) + 7) % 7;
+
+            return setDate_(addDays_(t0, diff));
+          }
+        );
+      }
+
+      // 8) 5日（日だけ）
+      if (!result.date) {
+        take_(
+          /(?<![\d月])(\d{1,2})\s*日(?!間|後|前|目)/,
+          function (m) {
+            const day = Number(m[1]);
+
+            if (day < 1 || day > 31) {
+              return false;
+            }
+
+            let date = makeDate_(t0.getFullYear(), t0.getMonth() + 1, day);
+
+            if (!date || date < t0) {
+              const next =
+                new Date(t0.getFullYear(), t0.getMonth() + 1, 1, 12);
+
+              date = makeDate_(next.getFullYear(), next.getMonth() + 1, day);
+            }
+
+            return setDate_(date);
+          }
+        );
+      }
+
+      // 9) 時間（範囲つき）
+      const TIME =
+        "(午前|午後|朝|昼|夕方|夜|晩|AM|PM|am|pm)?\\s*(\\d{1,2})\\s*(?:[:](\\d{2})|時\\s*(?:(半)|(\\d{1,2})\\s*分)?)(?!間)";
+
+      const rangeRegex =
+        new RegExp(TIME + "\\s*(?:~|-|から)\\s*" + TIME);
+
+      if (
+        !take_(
+          rangeRegex,
+          function (m) {
+            const start =
+              timeFrom_(
+                m[1],
+                m[2],
+                m[3] !== undefined ? m[3] : m[5],
+                m[4]
+              );
+
+            const end =
+              timeFrom_(
+                m[6] || m[1],
+                m[7],
+                m[8] !== undefined ? m[8] : m[10],
+                m[9]
+              );
+
+            if (!start || !end) {
+              return false;
+            }
+
+            result.time = adjustHour_(start, m[1], m[2], m[3]);
+            result.endTime = adjustHour_(end, m[6] || m[1], m[7], m[8]);
+
+            return true;
+          }
+        )
+      ) {
+        take_(
+          new RegExp(TIME),
+          function (m) {
+            const time =
+              timeFrom_(
+                m[1],
+                m[2],
+                m[3] !== undefined ? m[3] : m[5],
+                m[4]
+              );
+
+            if (!time) {
+              return false;
+            }
+
+            result.time = adjustHour_(time, m[1], m[2], m[3]);
+
+            return true;
+          }
+        );
+      }
+
+      // 10) 期限のことば
+      if (
+        take_(
+          /(期限|期日|締め切り|締切|〆切|〆|まで)/,
+          function () {
+            return true;
+          }
+        )
+      ) {
+        result.isDue = true;
+
+        // 何度出てきてもすべて取る
+        while (
+          take_(
+            /(期限|期日|締め切り|締切|〆切|〆|まで)/,
+            function () {
+              return true;
+            }
+          )
+        ) {
+          // 取りきる
+        }
+      }
+    }
+
+    // 11) 個数（買い物メモ）
+    if (opts.qty) {
+      const qtyRegex =
+        new RegExp(
+          "(\\d+(?:\\.\\d+)?)\\s*(" + UNITS + ")(?![A-Za-zぁ-んァ-ン一-龥])"
+        );
+
+      if (
+        !take_(
+          qtyRegex,
+          function (m) {
+            result.qty = m[1] + m[2];
+            return true;
+          }
+        )
+      ) {
+        if (
+          !take_(
+            /[x×✕*]\s*(\d+)/i,
+            function (m) {
+              result.qty = "×" + m[1];
+              return true;
+            }
+          )
+        ) {
+          // 文の最後に数字だけあるとき（例：牛乳 2）
+          take_(
+            /(?<=[^\d\s\u0001])\s+(\d{1,3})\s*$/,
+            function (m) {
+              result.qty = m[1];
+              return true;
+            }
+          );
+        }
+      }
+
+    }
+
+    // 12) だれの予定か
+    if (opts.who) {
+      take_(
+        /(さとる|サトル|かな|カナ|ふたり|フタリ|二人|夫婦)(?:さん)?(?:の)?/,
+        function (m) {
+          const name = m[1];
+
+          if (/さとる|サトル/.test(name)) {
+            result.who = "さとる";
+          }
+          else if (/かな|カナ/.test(name)) {
+            result.who = "かな";
+          }
+          else {
+            result.who = "ふたり";
+          }
+
+          return true;
+        }
+      );
+    }
+
+    result.title = cleanTitle_(rest);
+
+    return result;
+  };
+
+  // 「牛乳 2本」を、品名と個数に分ける（日付は探さない）
+  window.nlSplitQty_ = function (text) {
+    const r =
+      window.nlParse_(
+        text,
+        new Date(),
+        { qty: true, noDate: true }
+      );
+
+    return { title: r.title, qty: r.qty };
+  };
+
+  // 画面に出す用の日付・時間の文字
+  window.nlLabel_ = label_;
+  window.nlKey_ = key_;
+})();
+
+
+// =========================================================
+// 全画面の見た目の統一／文字を入力すると自動で振り分ける入力欄
+// ・余計なタイトル、説明文を削除
+// ・カレンダー／メモ／チェックリストに、文字を入力して追加する欄
+// ・チェックリスト：期日が近づくと色が変わる。タップで詳細（担当・連絡先など）
+// ・メモ：内容と個数。タップで修正・削除
+// ・下のタブに、件数を赤い丸で表示
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.unifiedUiAdded_) {
+    return;
+  }
+
+  window.unifiedUiAdded_ = true;
+
+  const FONT =
+    '"Inter", -apple-system, BlinkMacSystemFont, ' +
+    '"Hiragino Sans", "Yu Gothic", Meiryo, sans-serif';
+
+  const CHECK_KEY_OLD = "familyChecklistItems_v1";
+  const CHECK_KEY = "familyChecklist_v2";
+
+
+  // ---------- 見た目 ----------
+
+  const style =
+    document.createElement("style");
+
+  style.id = "unifiedUiStyle";
+
+  style.textContent = `
+    /* ===== 全体：色と書体をそろえる（アクセントはピンク） ===== */
+    :root {
+      --green: #ed729a;
+      --green-dark: #d9557f;
+      --green-soft: rgba(237, 114, 154, 0.12);
+    }
+
+    .app *:not(.material-symbols-rounded),
+    .bottom-nav *:not(.material-symbols-rounded) {
+      font-family: ${FONT};
+    }
+
+    /* カードの見た目をホームとそろえる */
+    .card,
+    .month-switcher,
+    .receipt-total-card,
+    .calendar-shell,
+    .selected-date-section,
+    .category-month-selector {
+      border: 1px solid #f5d7e1 !important;
+      border-radius: 22px !important;
+      background: #ffffff !important;
+      box-shadow: 0 4px 13px rgba(213, 112, 147, 0.07) !important;
+    }
+
+    /* 金額の文字はホームと同じ濃い色に */
+    .report-history-total,
+    .purchase-shop-total,
+    .selected-date-total,
+    .day-expense-price,
+    .receipt-amount,
+    .page-big-money {
+      color: #493e42 !important;
+    }
+
+    .utility-part-total {
+      color: #493e42 !important;
+    }
+
+    .utility-part-total.is-over {
+      color: #e5484d !important;
+    }
+
+    .count-badge,
+    .selected-date-total {
+      background: #fff0f5 !important;
+      color: #d9557f !important;
+    }
+
+    /* ===== 余計なタイトル・説明文を消す ===== */
+    #page-receipt .page-section-title,
+    #page-calendar .page-section-title,
+    #page-receipt .card > .section-header,
+    #page-receipt .month-switcher small,
+    #page-calendar .calendar-month-header small,
+    #page-calendar .selected-date-heading small,
+    #page-calendar .calendar-sync-status,
+    #page-calendar .add-schedule-button {
+      display: none !important;
+    }
+
+    /* 古いメモ画面の中身は使わない（新しい画面に置き換える） */
+    #page-settings > *:not(#memoV2) {
+      display: none !important;
+    }
+
+    /* 手動追加ボタンは、ホームと日別だけ */
+    #manualPurchaseAddButton {
+      display: none !important;
+    }
+
+    body:has(#page-report:not([hidden])) #manualPurchaseAddButton,
+    body:has(#page-receipt:not([hidden])) #manualPurchaseAddButton {
+      display: flex !important;
+      background: linear-gradient(135deg, #f49ab6, #ed729a) !important;
+      box-shadow: 0 8px 22px rgba(237, 114, 154, 0.3) !important;
+    }
+
+    /* 予定の保存ボタンなど */
+    .primary-button {
+      background: linear-gradient(135deg, #f49ab6, #ed729a) !important;
+      box-shadow: 0 8px 20px rgba(237, 114, 154, 0.22) !important;
+    }
+
+    /* ===== 下のタブの件数（赤い丸） ===== */
+    .bottom-nav .nav-button {
+      position: relative;
+    }
+
+    .tab-badge {
+      position: absolute;
+      top: 1px;
+      left: calc(50% + 5px);
+      display: none;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      box-sizing: border-box;
+      border-radius: 999px;
+      background: #e5484d;
+      color: #ffffff;
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 16px;
+      text-align: center;
+      pointer-events: none;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .tab-badge.is-show {
+      display: block;
+    }
+
+    /* ===== 共通の部品 ===== */
+    .u-card {
+      box-sizing: border-box;
+      width: 100%;
+      margin: 0 0 10px;
+      border: 1px solid #f5d7e1;
+      border-radius: 22px;
+      background: #ffffff;
+      box-shadow: 0 4px 13px rgba(213, 112, 147, 0.07);
+    }
+
+    .u-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 30px;
+      margin: 0 2px 8px;
+      color: #a78e97;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .u-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 7px 12px;
+      border: 1px solid #f0d5df;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #d9557f;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* 入力欄 */
+    .u-quick {
+      padding: 12px;
+    }
+
+    .u-quick-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    .u-quick-input {
+      box-sizing: border-box;
+      width: 100%;
+      min-width: 0;
+      height: 46px;
+      padding: 0 14px;
+      border: 1px solid #f0d5df;
+      border-radius: 14px;
+      outline: none;
+      background: #fffafc;
+      color: #463c40;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .u-quick-input::placeholder {
+      color: #c9b3bb;
+      font-weight: 500;
+    }
+
+    .u-quick-input:focus {
+      border-color: #ed729a;
+      box-shadow: 0 0 0 3px rgba(237, 114, 154, 0.14);
+    }
+
+    .u-quick-add {
+      height: 46px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #f49ab6, #ed729a);
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .u-quick-add:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    .u-quick-sub {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+      min-height: 26px;
+    }
+
+    .u-date {
+      box-sizing: border-box;
+      height: 30px;
+      padding: 0 8px;
+      border: 1px solid #f0d5df;
+      border-radius: 10px;
+      background: #fffafc;
+      color: #8f7a83;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .u-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #fff0f5;
+      color: #d9557f;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .u-chip small {
+      color: #b08a99;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .u-link {
+      margin-left: auto;
+      padding: 4px 2px;
+      border: 0;
+      background: transparent;
+      color: #b08a99;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* 一覧 */
+    .u-list {
+      overflow: hidden;
+      padding: 4px 0;
+    }
+
+    .u-empty {
+      padding: 26px 10px;
+      color: #c9b3bb;
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .u-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-sizing: border-box;
+      min-height: 52px;
+      padding: 8px 14px;
+      border-bottom: 1px solid #f8e8ee;
+      border-left: 4px solid transparent;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .u-row:last-child {
+      border-bottom: 0;
+    }
+
+    .u-row:active {
+      background: #fffafc;
+    }
+
+    .u-check {
+      display: grid;
+      place-items: center;
+      flex: 0 0 26px;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: 2px solid #e6c6d3;
+      border-radius: 50%;
+      background: #ffffff;
+      color: transparent;
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .u-row.is-done .u-check {
+      border-color: #ed729a;
+      background: #ed729a;
+      color: #ffffff;
+    }
+
+    .u-main {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .u-text {
+      overflow: hidden;
+      color: #463c40;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.3;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .u-row.is-done .u-text {
+      color: #c9b3bb;
+      text-decoration: line-through;
+    }
+
+    .u-sub {
+      overflow: hidden;
+      margin-top: 2px;
+      color: #b08a99;
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .u-qty {
+      flex: 0 0 auto;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #fff0f5;
+      color: #d9557f;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .u-due {
+      flex: 0 0 auto;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    /* 期日の近さで色が変わる */
+    .due-over  { border-left-color: #e5484d; }
+    .due-today { border-left-color: #f76b15; }
+    .due-soon  { border-left-color: #f5a623; }
+    .due-week  { border-left-color: #f0d24c; }
+
+    .due-over .u-due  { background: #ffe3e3; color: #d6303a; }
+    .due-today .u-due { background: #ffe8d6; color: #d9560b; }
+    .due-soon .u-due  { background: #fff1cf; color: #b7791f; }
+    .due-week .u-due  { background: #fffbe0; color: #a08a00; }
+    .due-far .u-due   { background: #f6eff2; color: #a78e97; }
+
+    .u-fold {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 14px;
+      border: 0;
+      border-top: 1px solid #f8e8ee;
+      background: #fffafc;
+      color: #a78e97;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* 修正の画面 */
+    .u-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 6300;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.32);
+      font-family: ${FONT};
+    }
+
+    .u-sheet {
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      width: min(460px, 100%);
+      max-height: 90vh;
+      max-height: 90dvh;
+      border-radius: 26px 26px 0 0;
+      background: #ffffff;
+      color: #463c40;
+    }
+
+    .u-sheet-scroll {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 20px 18px 6px;
+    }
+
+    .u-sheet h3 {
+      margin: 0 0 12px;
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .u-field {
+      display: block;
+      margin-bottom: 12px;
+    }
+
+    .u-field > span {
+      display: block;
+      margin-bottom: 5px;
+      color: #8f7a83;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .u-field input,
+    .u-field textarea {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 44px;
+      padding: 10px 12px;
+      border: 1px solid #f0d5df;
+      border-radius: 13px;
+      outline: none;
+      background: #fffafc;
+      color: #463c40;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .u-field textarea {
+      min-height: 76px;
+      resize: vertical;
+    }
+
+    .u-field input:focus,
+    .u-field textarea:focus {
+      border-color: #ed729a;
+      box-shadow: 0 0 0 3px rgba(237, 114, 154, 0.14);
+    }
+
+    .u-extra {
+      display: grid;
+      grid-template-columns: 96px minmax(0, 1fr) 34px;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .u-extra input {
+      box-sizing: border-box;
+      width: 100%;
+      min-width: 0;
+      height: 42px;
+      padding: 0 10px;
+      border: 1px solid #f0d5df;
+      border-radius: 12px;
+      outline: none;
+      background: #fffafc;
+      color: #463c40;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .u-x {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: #f7eef1;
+      color: #b0808f;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    .u-add-extra {
+      width: 100%;
+      height: 40px;
+      margin: 2px 0 10px;
+      border: 1px dashed #e6c6d3;
+      border-radius: 12px;
+      background: #fffafc;
+      color: #d9557f;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .u-sheet-actions {
+      display: grid;
+      grid-template-columns: auto 1fr 1.5fr;
+      gap: 8px;
+      padding: 10px 18px calc(16px + env(safe-area-inset-bottom, 0px));
+      border-top: 1px solid #f6e2e9;
+    }
+
+    .u-sheet-actions button {
+      height: 48px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 14px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .u-btn-del {
+      background: #ffe9ec;
+      color: #d6303a;
+    }
+
+    .u-btn-cancel {
+      background: #f7eef1;
+      color: #8f7a83;
+    }
+
+    .u-btn-save {
+      background: linear-gradient(135deg, #f49ab6, #ed729a);
+      color: #ffffff;
+    }
+
+    .u-sheet-actions button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    /* 日別の「削除」ボタンの置き場所 */
+    #receiptToolbar {
+      display: flex;
+      justify-content: flex-end;
+      margin: 0 2px 8px;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+
+  // ---------- 便利な関数 ----------
+
+  function el_(tag, className, text) {
+    const node = document.createElement(tag);
+
+    if (className) {
+      node.className = className;
+    }
+
+    if (text !== undefined) {
+      node.textContent = text;
+    }
+
+    return node;
+  }
+
+  function toast_(message) {
+    if (typeof showToast === "function") {
+      showToast(message);
+    }
+  }
+
+  function newId_() {
+    return (
+      Date.now().toString(36) +
+      Math.random().toString(36).slice(2, 7)
+    );
+  }
+
+  function todayKey_() {
+    return window.nlKey_(new Date());
+  }
+
+  function daysUntil_(dateKey) {
+    const parts = String(dateKey).split("-");
+
+    const target =
+      new Date(
+        Number(parts[0]),
+        Number(parts[1]) - 1,
+        Number(parts[2]),
+        12
+      );
+
+    const now = new Date();
+
+    const today =
+      new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        12
+      );
+
+    return Math.round((target - today) / 86400000);
+  }
+
+  function closeOverlay_(id) {
+    const node = document.getElementById(id);
+
+    if (node) {
+      node.remove();
+    }
+  }
+
+  // ページを取り出す（無ければ何もしない）
+  function page_(id) {
+    return document.getElementById(id);
+  }
+
+
+  // ---------- 文字を入力して追加する欄（共通） ----------
+  // config: { placeholder, parseOptions, showDate, describe(parsed) → チップの一覧, onAdd(parsed, dateValue) }
+
+  function buildQuick_(config) {
+    const card = el_("div", "u-card u-quick");
+
+    const row = el_("div", "u-quick-row");
+
+    const input = el_("input", "u-quick-input");
+
+    input.type = "text";
+    input.placeholder = config.placeholder;
+    input.autocomplete = "off";
+    input.maxLength = 120;
+    input.setAttribute("enterkeyhint", "done");
+
+    const add = el_("button", "u-quick-add", "追加");
+
+    add.type = "button";
+
+    row.appendChild(input);
+    row.appendChild(add);
+
+    const sub = el_("div", "u-quick-sub");
+
+    let dateInput = null;
+
+    if (config.showDate) {
+      dateInput = el_("input", "u-date");
+      dateInput.type = "date";
+      dateInput.setAttribute("aria-label", config.dateLabel || "日付");
+      sub.appendChild(dateInput);
+    }
+
+    const chips = el_("span");
+
+    chips.style.display = "contents";
+    sub.appendChild(chips);
+
+    if (config.extraLink) {
+      const link = el_("button", "u-link", config.extraLink.label);
+
+      link.type = "button";
+      link.addEventListener(
+        "click",
+        function () {
+          config.extraLink.onClick(current());
+        }
+      );
+
+      sub.appendChild(link);
+    }
+
+    card.appendChild(row);
+    card.appendChild(sub);
+
+    function current() {
+      const parsed =
+        window.nlParse_(
+          input.value,
+          new Date(),
+          config.parseOptions || {}
+        );
+
+      // 日付の欄で選んだ日を優先。空なら文章から見つけた日
+      const manual = dateInput ? dateInput.value : "";
+
+      const dateValue = manual || parsed.date || "";
+
+      return { parsed: parsed, date: dateValue, text: input.value };
+    }
+
+    function refresh() {
+      const state = current();
+
+      chips.textContent = "";
+
+      config.describe(state).forEach(function (chip) {
+        const node = el_("span", "u-chip");
+
+        if (chip.label) {
+          node.appendChild(el_("small", "", chip.label));
+        }
+
+        node.appendChild(document.createTextNode(chip.value));
+        chips.appendChild(node);
+      });
+    }
+
+    input.addEventListener("input", refresh);
+
+    if (dateInput) {
+      dateInput.addEventListener("change", refresh);
+    }
+
+    async function submit() {
+      const state = current();
+
+      if (!String(input.value).trim()) {
+        input.focus();
+        return;
+      }
+
+      add.disabled = true;
+
+      try {
+        const ok = await config.onAdd(state);
+
+        if (ok !== false) {
+          input.value = "";
+
+          if (dateInput) {
+            dateInput.value = "";
+          }
+
+          refresh();
+        }
+      }
+      catch (error) {
+        console.error(error);
+        toast_(String(error.message || error));
+      }
+      finally {
+        add.disabled = false;
+      }
+    }
+
+    add.addEventListener("click", submit);
+
+    input.addEventListener(
+      "keydown",
+      function (event) {
+        if (event.key === "Enter" && !event.isComposing) {
+          event.preventDefault();
+          submit();
+        }
+      }
+    );
+
+    refresh();
+
+    return {
+      node: card,
+      input: input,
+      refresh: refresh,
+      focus: function () {
+        input.focus();
+      }
+    };
+  }
+
+
+  // ---------- 修正の画面（共通の土台） ----------
+
+  function openSheet_(id, title, build) {
+    closeOverlay_(id);
+
+    const overlay = el_("div", "u-overlay");
+
+    overlay.id = id;
+
+    const sheet = el_("div", "u-sheet");
+
+    sheet.setAttribute("role", "dialog");
+    sheet.setAttribute("aria-modal", "true");
+
+    const scroll = el_("div", "u-sheet-scroll");
+
+    scroll.appendChild(el_("h3", "", title));
+
+    const actions = el_("div", "u-sheet-actions");
+
+    sheet.appendChild(scroll);
+    sheet.appendChild(actions);
+    overlay.appendChild(sheet);
+
+    overlay.addEventListener(
+      "click",
+      function (event) {
+        if (event.target === overlay) {
+          overlay.remove();
+        }
+      }
+    );
+
+    document.body.appendChild(overlay);
+
+    build(scroll, actions, function () {
+      overlay.remove();
+    });
+
+    return overlay;
+  }
+
+  function field_(label, type, value, placeholder) {
+    const wrap = el_("label", "u-field");
+
+    wrap.appendChild(el_("span", "", label));
+
+    const input =
+      el_(type === "textarea" ? "textarea" : "input");
+
+    if (type !== "textarea") {
+      input.type = type;
+    }
+
+    input.value = value || "";
+
+    if (placeholder) {
+      input.placeholder = placeholder;
+    }
+
+    wrap.appendChild(input);
+
+    return { wrap: wrap, input: input };
+  }
+
+  window.__ui2 = {
+    el_: el_,
+    toast_: toast_,
+    newId_: newId_,
+    todayKey_: todayKey_,
+    daysUntil_: daysUntil_,
+    buildQuick_: buildQuick_,
+    openSheet_: openSheet_,
+    field_: field_,
+    closeOverlay_: closeOverlay_,
+    page_: page_,
+    CHECK_KEY: CHECK_KEY,
+    CHECK_KEY_OLD: CHECK_KEY_OLD
+  };
+})();
+
+
+// =========================================================
+// メモ／チェックリスト／カレンダーの入力欄と、タブの件数
+// （ui2 の続き。app.jsの一番最後へ追加）
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.unifiedUiPagesAdded_ || !window.__ui2) {
+    return;
+  }
+
+  window.unifiedUiPagesAdded_ = true;
+
+  const U = window.__ui2;
+  const el_ = U.el_;
+  const toast_ = U.toast_;
+
+  function sleep_(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+
+  // ---------- 下のタブの件数（赤い丸・白い数字） ----------
+
+  function setBadge_(pageName, count) {
+    const tab =
+      document.querySelector(
+        '.bottom-nav .nav-button[data-page="' + pageName + '"]'
+      );
+
+    if (!tab) {
+      return;
+    }
+
+    let badge = tab.querySelector(".tab-badge");
+
+    if (!badge) {
+      badge = el_("span", "tab-badge");
+      tab.appendChild(badge);
+    }
+
+    const n = Number(count) || 0;
+
+    badge.textContent = n > 99 ? "99+" : String(n);
+    badge.classList.toggle("is-show", n > 0);
+  }
+
+
+  // =========================================================
+  // メモ（内容と個数）
+  // =========================================================
+
+  let memoItems_ = [];
+  let memoLoading_ = false;
+  let memoLoadedAt_ = 0;
+  let memoShowDone_ = false;
+  let memoQuick_ = null;
+
+  async function memoRequest_(action, params) {
+    const query = new URLSearchParams();
+
+    query.set("action", action);
+
+    Object.keys(params || {}).forEach(function (key) {
+      query.set(key, String(params[key]));
+    });
+
+    query.set("_", String(Date.now()));
+
+    // 読み込み（get…）は失敗しても2回までやり直す。保存はやり直さない
+    const tries = /^get/.test(action) ? 3 : 1;
+
+    let last = null;
+
+    for (let i = 0; i < tries; i += 1) {
+      try {
+        const response =
+          await fetch(
+            API_BASE + "?" + query.toString(),
+            { method: "GET", cache: "no-store" }
+          );
+
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
+
+        const result = await response.json();
+
+        if (!result || result.success !== true) {
+          throw new Error(
+            (result && result.error) ||
+            "メモを保存できませんでした"
+          );
+        }
+
+        return result;
+      }
+      catch (error) {
+        last = error;
+
+        if (i < tries - 1) {
+          await sleep_(600 * (i + 1));
+        }
+      }
+    }
+
+    throw last;
+  }
+
+  function memoView_(item) {
+    const split = window.nlSplitQty_(item.text);
+
+    return {
+      id: item.id,
+      done: item.completed === true,
+      title: split.title || String(item.text || ""),
+      qty: split.qty,
+      raw: String(item.text || "")
+    };
+  }
+
+  function memoText_(title, qty) {
+    const t = String(title || "").trim();
+    const q = String(qty || "").trim();
+
+    return q ? t + " " + q : t;
+  }
+
+  function updateMemoBadge_() {
+    setBadge_(
+      "settings",
+      memoItems_.filter(function (item) {
+        return item.completed !== true;
+      }).length
+    );
+  }
+
+  async function loadMemo_(force) {
+    if (memoLoading_) {
+      return;
+    }
+
+    if (!force && Date.now() - memoLoadedAt_ < 20000) {
+      return;
+    }
+
+    memoLoading_ = true;
+
+    try {
+      const result = await memoRequest_("getShoppingMemo");
+
+      memoItems_ = Array.isArray(result.items) ? result.items : [];
+      memoLoadedAt_ = Date.now();
+
+      renderMemo_();
+    }
+    catch (error) {
+      console.error(error);
+    }
+    finally {
+      memoLoading_ = false;
+    }
+  }
+
+  function memoRow_(view) {
+    const row = el_("div", "u-row" + (view.done ? " is-done" : ""));
+
+    const check = el_("button", "u-check", "✓");
+
+    check.type = "button";
+    check.setAttribute("aria-label", "購入済みにする");
+
+    check.addEventListener(
+      "click",
+      async function (event) {
+        event.stopPropagation();
+
+        try {
+          const result =
+            await memoRequest_(
+              "toggleShoppingMemo",
+              { id: view.id, completed: !view.done }
+            );
+
+          memoItems_ = result.items || memoItems_;
+          renderMemo_();
+        }
+        catch (error) {
+          toast_(String(error.message || error));
+        }
+      }
+    );
+
+    const main = el_("div", "u-main");
+
+    main.appendChild(el_("div", "u-text", view.title));
+
+    row.appendChild(check);
+    row.appendChild(main);
+
+    if (view.qty) {
+      row.appendChild(el_("span", "u-qty", view.qty));
+    }
+
+    row.addEventListener("click", function () {
+      openMemoSheet_(view);
+    });
+
+    return row;
+  }
+
+  function renderMemo_() {
+    const root = document.getElementById("memoV2");
+
+    if (!root) {
+      return;
+    }
+
+    const list = root.querySelector(".memo-list");
+
+    if (!list) {
+      return;
+    }
+
+    const views = memoItems_.map(memoView_);
+
+    const active = views.filter(function (v) { return !v.done; });
+    const done = views.filter(function (v) { return v.done; });
+
+    const count = root.querySelector(".memo-count");
+
+    if (count) {
+      count.textContent = "未購入 " + active.length + "品";
+    }
+
+    list.textContent = "";
+
+    if (views.length === 0) {
+      list.appendChild(el_("div", "u-empty", "まだありません"));
+    }
+
+    active.forEach(function (view) {
+      list.appendChild(memoRow_(view));
+    });
+
+    if (done.length > 0) {
+      const fold =
+        el_(
+          "button",
+          "u-fold",
+          "購入済み " + done.length + "品　" + (memoShowDone_ ? "▲" : "▼")
+        );
+
+      fold.type = "button";
+
+      fold.addEventListener(
+        "click",
+        function () {
+          memoShowDone_ = !memoShowDone_;
+          renderMemo_();
+        }
+      );
+
+      list.appendChild(fold);
+
+      if (memoShowDone_) {
+        done.forEach(function (view) {
+          list.appendChild(memoRow_(view));
+        });
+
+        const clear = el_("button", "u-fold", "購入済みをまとめて削除");
+
+        clear.type = "button";
+        clear.style.justifyContent = "center";
+        clear.style.color = "#d6303a";
+
+        clear.addEventListener(
+          "click",
+          async function () {
+            if (!window.confirm("購入済みのメモをすべて削除しますか？")) {
+              return;
+            }
+
+            try {
+              const result =
+                await memoRequest_("clearCompletedShoppingMemo");
+
+              memoItems_ = result.items || [];
+              renderMemo_();
+            }
+            catch (error) {
+              toast_(String(error.message || error));
+            }
+          }
+        );
+
+        list.appendChild(clear);
+      }
+    }
+
+    updateMemoBadge_();
+  }
+
+  function openMemoSheet_(view) {
+    U.openSheet_(
+      "memoEditOverlay",
+      "メモを修正",
+      function (scroll, actions, close) {
+        const content = U.field_("内容", "text", view.title);
+        const qty = U.field_("個数", "text", view.qty, "例：2本");
+
+        scroll.appendChild(content.wrap);
+        scroll.appendChild(qty.wrap);
+
+        const del = el_("button", "u-btn-del", "削除");
+        const cancel = el_("button", "u-btn-cancel", "キャンセル");
+        const save = el_("button", "u-btn-save", "保存");
+
+        [del, cancel, save].forEach(function (b) { b.type = "button"; });
+
+        actions.appendChild(del);
+        actions.appendChild(cancel);
+        actions.appendChild(save);
+
+        cancel.addEventListener("click", close);
+
+        del.addEventListener(
+          "click",
+          async function () {
+            del.disabled = true;
+
+            try {
+              const result =
+                await memoRequest_(
+                  "deleteShoppingMemo",
+                  { id: view.id }
+                );
+
+              memoItems_ = result.items || [];
+              renderMemo_();
+              close();
+            }
+            catch (error) {
+              del.disabled = false;
+              toast_(String(error.message || error));
+            }
+          }
+        );
+
+        save.addEventListener(
+          "click",
+          async function () {
+            const title = content.input.value.trim();
+            const quantity = qty.input.value.trim();
+
+            if (!title) {
+              toast_("内容を入力してください");
+              return;
+            }
+
+            if (title === view.title && quantity === view.qty) {
+              close();
+              return;
+            }
+
+            save.disabled = true;
+
+            try {
+              // 修正は「削除して、同じ位置ではなく新しく追加」で行う
+              const before =
+                new Set(memoItems_.map(function (i) { return String(i.id); }));
+
+              let result =
+                await memoRequest_(
+                  "deleteShoppingMemo",
+                  { id: view.id }
+                );
+
+              result =
+                await memoRequest_(
+                  "addShoppingMemo",
+                  { text: memoText_(title, quantity) }
+                );
+
+              memoItems_ = result.items || [];
+
+              // 購入済みだったメモは、購入済みのままにする
+              if (view.done) {
+                const created =
+                  memoItems_.find(function (i) {
+                    return !before.has(String(i.id));
+                  });
+
+                if (created) {
+                  result =
+                    await memoRequest_(
+                      "toggleShoppingMemo",
+                      { id: created.id, completed: true }
+                    );
+
+                  memoItems_ = result.items || memoItems_;
+                }
+              }
+
+              renderMemo_();
+              close();
+            }
+            catch (error) {
+              save.disabled = false;
+              toast_(String(error.message || error));
+            }
+          }
+        );
+      }
+    );
+  }
+
+  function ensureMemoPage_() {
+    const page = U.page_("page-settings");
+
+    if (!page) {
+      return;
+    }
+
+    // 古い更新ボタンは使わない（裏で何度も通信してしまうため）
+    const legacyRefresh =
+      document.getElementById("shoppingRefreshButton");
+
+    if (legacyRefresh) {
+      legacyRefresh.remove();
+    }
+
+    if (document.getElementById("memoV2")) {
+      return;
+    }
+
+    const root = el_("div");
+
+    root.id = "memoV2";
+
+    memoQuick_ =
+      U.buildQuick_({
+        placeholder: "例：牛乳 2本",
+        parseOptions: { qty: true, noDate: true },
+        showDate: false,
+        describe: function (state) {
+          const chips = [];
+          const p = state.parsed;
+
+          if (p.title) {
+            chips.push({ label: "内容", value: p.title });
+          }
+
+          if (p.qty) {
+            chips.push({ label: "個数", value: p.qty });
+          }
+
+          return chips;
+        },
+        onAdd: async function (state) {
+          const title = state.parsed.title || state.text.trim();
+
+          if (!title) {
+            return false;
+          }
+
+          const result =
+            await memoRequest_(
+              "addShoppingMemo",
+              { text: memoText_(title, state.parsed.qty) }
+            );
+
+          memoItems_ = result.items || [];
+          memoLoadedAt_ = Date.now();
+          renderMemo_();
+
+          return true;
+        }
+      });
+
+    const toolbar = el_("div", "u-toolbar");
+
+    toolbar.appendChild(el_("span", "memo-count", "未購入 0品"));
+
+    const list = el_("div", "u-card u-list memo-list");
+
+    root.appendChild(memoQuick_.node);
+    root.appendChild(toolbar);
+    root.appendChild(list);
+
+    page.appendChild(root);
+
+    renderMemo_();
+  }
+
+
+  // =========================================================
+  // チェックリスト（内容・期日・詳細）
+  // =========================================================
+
+  let checkItems_ = [];
+  let checkShowDone_ = false;
+  let checkQuick_ = null;
+
+  function loadChecklist_() {
+    try {
+      const raw = localStorage.getItem(U.CHECK_KEY);
+
+      if (raw) {
+        const list = JSON.parse(raw);
+
+        return Array.isArray(list) ? list : [];
+      }
+
+      // 前の版のチェックリストを引き継ぐ
+      const old = localStorage.getItem(U.CHECK_KEY_OLD);
+
+      if (old) {
+        const list = JSON.parse(old);
+
+        if (Array.isArray(list)) {
+          return list.map(function (item) {
+            return {
+              id: item.id || U.newId_(),
+              text: String(item.text || ""),
+              due: "",
+              done: item.done === true,
+              assignee: "",
+              contact: "",
+              note: "",
+              extras: [],
+              created: Date.now()
+            };
+          });
+        }
+      }
+    }
+    catch (error) {
+      console.error(error);
+    }
+
+    return [];
+  }
+
+  function saveChecklist_() {
+    try {
+      localStorage.setItem(
+        U.CHECK_KEY,
+        JSON.stringify(checkItems_)
+      );
+    }
+    catch (error) {
+      console.error(error);
+    }
+
+    updateCheckBadge_();
+  }
+
+  function updateCheckBadge_() {
+    setBadge_(
+      "checklist",
+      checkItems_.filter(function (item) { return !item.done; }).length
+    );
+  }
+
+  // 期日の近さ
+  function dueInfo_(item) {
+    if (!item.due) {
+      return { level: "none", label: "" };
+    }
+
+    const days = U.daysUntil_(item.due);
+
+    if (days < 0) {
+      return { level: "over", label: "期限切れ " + (-days) + "日" };
+    }
+
+    if (days === 0) {
+      return { level: "today", label: "今日まで" };
+    }
+
+    if (days === 1) {
+      return { level: "soon", label: "明日まで" };
+    }
+
+    if (days <= 2) {
+      return { level: "soon", label: "あと" + days + "日" };
+    }
+
+    if (days <= 7) {
+      return { level: "week", label: "あと" + days + "日" };
+    }
+
+    return { level: "far", label: window.nlLabel_(item.due) };
+  }
+
+  function sortChecklist_(list) {
+    return list.slice().sort(function (a, b) {
+      if (a.due && b.due && a.due !== b.due) {
+        return a.due < b.due ? -1 : 1;
+      }
+
+      if (a.due && !b.due) {
+        return -1;
+      }
+
+      if (!a.due && b.due) {
+        return 1;
+      }
+
+      return (b.created || 0) - (a.created || 0);
+    });
+  }
+
+  function checkRow_(item) {
+    const info = dueInfo_(item);
+
+    const row =
+      el_(
+        "div",
+        "u-row" +
+          (item.done ? " is-done" : "") +
+          (info.level !== "none" && !item.done ? " due-" + info.level : "")
+      );
+
+    const check = el_("button", "u-check", "✓");
+
+    check.type = "button";
+    check.setAttribute("aria-label", "完了にする");
+
+    check.addEventListener(
+      "click",
+      function (event) {
+        event.stopPropagation();
+
+        item.done = !item.done;
+        saveChecklist_();
+        renderChecklist_();
+      }
+    );
+
+    const main = el_("div", "u-main");
+
+    main.appendChild(el_("div", "u-text", item.text));
+
+    const bits = [];
+
+    if (item.assignee) {
+      bits.push("担当 " + item.assignee);
+    }
+
+    if (item.contact) {
+      bits.push(item.contact);
+    }
+
+    if (bits.length) {
+      main.appendChild(el_("div", "u-sub", bits.join("　")));
+    }
+
+    row.appendChild(check);
+    row.appendChild(main);
+
+    if (info.label && !item.done) {
+      row.appendChild(el_("span", "u-due", info.label));
+    }
+
+    row.addEventListener("click", function () {
+      openCheckSheet_(item);
+    });
+
+    return row;
+  }
+
+  function renderChecklist_() {
+    const root = document.getElementById("checkV2");
+
+    if (!root) {
+      return;
+    }
+
+    const list = root.querySelector(".check-list");
+
+    if (!list) {
+      return;
+    }
+
+    const active = sortChecklist_(checkItems_.filter(function (i) { return !i.done; }));
+    const done = checkItems_.filter(function (i) { return i.done; });
+
+    const count = root.querySelector(".check-count");
+
+    if (count) {
+      count.textContent = "未完了 " + active.length + "件";
+    }
+
+    list.textContent = "";
+
+    if (checkItems_.length === 0) {
+      list.appendChild(el_("div", "u-empty", "まだありません"));
+    }
+
+    active.forEach(function (item) {
+      list.appendChild(checkRow_(item));
+    });
+
+    if (done.length > 0) {
+      const fold =
+        el_(
+          "button",
+          "u-fold",
+          "完了 " + done.length + "件　" + (checkShowDone_ ? "▲" : "▼")
+        );
+
+      fold.type = "button";
+
+      fold.addEventListener(
+        "click",
+        function () {
+          checkShowDone_ = !checkShowDone_;
+          renderChecklist_();
+        }
+      );
+
+      list.appendChild(fold);
+
+      if (checkShowDone_) {
+        done.forEach(function (item) {
+          list.appendChild(checkRow_(item));
+        });
+
+        const clear = el_("button", "u-fold", "完了をまとめて削除");
+
+        clear.type = "button";
+        clear.style.justifyContent = "center";
+        clear.style.color = "#d6303a";
+
+        clear.addEventListener(
+          "click",
+          function () {
+            if (!window.confirm("完了したものをすべて削除しますか？")) {
+              return;
+            }
+
+            checkItems_ = checkItems_.filter(function (i) { return !i.done; });
+            saveChecklist_();
+            renderChecklist_();
+          }
+        );
+
+        list.appendChild(clear);
+      }
+    }
+
+    updateCheckBadge_();
+  }
+
+  function openCheckSheet_(item) {
+    U.openSheet_(
+      "checkEditOverlay",
+      "詳細",
+      function (scroll, actions, close) {
+        const text = U.field_("内容", "text", item.text);
+        const due = U.field_("期日", "date", item.due);
+        const assignee = U.field_("担当", "text", item.assignee, "例：かな");
+        const contact = U.field_("連絡先", "text", item.contact, "例：090-1234-5678");
+        const note = U.field_("メモ", "textarea", item.note);
+
+        [text, due, assignee, contact, note].forEach(function (f) {
+          scroll.appendChild(f.wrap);
+        });
+
+        // 必要な項目を自由に足せる
+        const extras = (item.extras || []).map(function (e) {
+          return { k: e.k, v: e.v };
+        });
+
+        const extraBox = el_("div");
+
+        function drawExtras() {
+          extraBox.textContent = "";
+
+          extras.forEach(function (extra, index) {
+            const row = el_("div", "u-extra");
+
+            const k = el_("input");
+            const v = el_("input");
+            const x = el_("button", "u-x", "✕");
+
+            k.placeholder = "項目名";
+            v.placeholder = "内容";
+            k.value = extra.k;
+            v.value = extra.v;
+            x.type = "button";
+            x.setAttribute("aria-label", "この項目を消す");
+
+            k.addEventListener("input", function () { extra.k = k.value; });
+            v.addEventListener("input", function () { extra.v = v.value; });
+
+            x.addEventListener(
+              "click",
+              function () {
+                extras.splice(index, 1);
+                drawExtras();
+              }
+            );
+
+            row.appendChild(k);
+            row.appendChild(v);
+            row.appendChild(x);
+            extraBox.appendChild(row);
+          });
+        }
+
+        drawExtras();
+        scroll.appendChild(extraBox);
+
+        const addExtra = el_("button", "u-add-extra", "＋ 項目を追加");
+
+        addExtra.type = "button";
+
+        addExtra.addEventListener(
+          "click",
+          function () {
+            extras.push({ k: "", v: "" });
+            drawExtras();
+
+            const inputs = extraBox.querySelectorAll("input");
+
+            if (inputs.length >= 2) {
+              inputs[inputs.length - 2].focus();
+            }
+          }
+        );
+
+        scroll.appendChild(addExtra);
+
+        const del = el_("button", "u-btn-del", "削除");
+        const cancel = el_("button", "u-btn-cancel", "キャンセル");
+        const save = el_("button", "u-btn-save", "保存");
+
+        [del, cancel, save].forEach(function (b) { b.type = "button"; });
+
+        actions.appendChild(del);
+        actions.appendChild(cancel);
+        actions.appendChild(save);
+
+        cancel.addEventListener("click", close);
+
+        del.addEventListener(
+          "click",
+          function () {
+            if (!window.confirm("「" + item.text + "」を削除しますか？")) {
+              return;
+            }
+
+            checkItems_ = checkItems_.filter(function (i) { return i.id !== item.id; });
+            saveChecklist_();
+            renderChecklist_();
+            close();
+          }
+        );
+
+        save.addEventListener(
+          "click",
+          function () {
+            const title = text.input.value.trim();
+
+            if (!title) {
+              toast_("内容を入力してください");
+              return;
+            }
+
+            item.text = title;
+            item.due = due.input.value || "";
+            item.assignee = assignee.input.value.trim();
+            item.contact = contact.input.value.trim();
+            item.note = note.input.value.trim();
+
+            item.extras =
+              extras.filter(function (e) {
+                return String(e.k).trim() || String(e.v).trim();
+              }).map(function (e) {
+                return { k: String(e.k).trim(), v: String(e.v).trim() };
+              });
+
+            saveChecklist_();
+            renderChecklist_();
+            close();
+          }
+        );
+      }
+    );
+  }
+
+  function ensureChecklistPage_() {
+    const page = U.page_("page-checklist");
+
+    if (!page || document.getElementById("checkV2")) {
+      return;
+    }
+
+    // 前の版の画面の中身は使わない
+    page.textContent = "";
+
+    const root = el_("div");
+
+    root.id = "checkV2";
+
+    checkQuick_ =
+      U.buildQuick_({
+        placeholder: "例：電気代の支払い 10/5まで",
+        parseOptions: {},
+        showDate: true,
+        dateLabel: "期日",
+        describe: function (state) {
+          const chips = [];
+          const p = state.parsed;
+
+          if (p.title) {
+            chips.push({ label: "内容", value: p.title });
+          }
+
+          if (state.date) {
+            const days = U.daysUntil_(state.date);
+
+            const extra =
+              days < 0 ? "（過ぎています）"
+              : days === 0 ? "（今日）"
+              : "（あと" + days + "日）";
+
+            chips.push({
+              label: "期日",
+              value: window.nlLabel_(state.date) + extra
+            });
+          }
+
+          return chips;
+        },
+        onAdd: function (state) {
+          const title = state.parsed.title || "";
+
+          if (!title) {
+            toast_("内容も入力してください");
+            return false;
+          }
+
+          checkItems_.unshift({
+            id: U.newId_(),
+            text: title,
+            due: state.date || "",
+            done: false,
+            assignee: "",
+            contact: "",
+            note: "",
+            extras: [],
+            created: Date.now()
+          });
+
+          saveChecklist_();
+          renderChecklist_();
+
+          return true;
+        }
+      });
+
+    const toolbar = el_("div", "u-toolbar");
+
+    toolbar.appendChild(el_("span", "check-count", "未完了 0件"));
+
+    const list = el_("div", "u-card u-list check-list");
+
+    root.appendChild(checkQuick_.node);
+    root.appendChild(toolbar);
+    root.appendChild(list);
+
+    page.appendChild(root);
+
+    renderChecklist_();
+  }
+
+
+  // =========================================================
+  // カレンダー（文字を入力して予定を追加）
+  // =========================================================
+
+  let calendarQuick_ = null;
+
+  function plusHour_(time) {
+    const parts = String(time).split(":");
+    const hour = (Number(parts[0]) + 1) % 24;
+
+    return String(hour).padStart(2, "0") + ":" + parts[1];
+  }
+
+  function calendarDefaultDate_() {
+    return (
+      (typeof selectedCalendarDate !== "undefined" && selectedCalendarDate) ||
+      U.todayKey_()
+    );
+  }
+
+  async function refreshCalendarBadge_() {
+    try {
+      const data =
+        await fetchJson(API_BASE + "?mode=todaySchedules");
+
+      if (data && data.success === true) {
+        setBadge_(
+          "calendar",
+          Array.isArray(data.schedules) ? data.schedules.length : 0
+        );
+      }
+    }
+    catch (error) {
+      console.error(error);
+    }
+  }
+
+  function ensureCalendarQuick_() {
+    const page = U.page_("page-calendar");
+
+    if (!page || document.getElementById("calendarQuick")) {
+      return;
+    }
+
+    calendarQuick_ =
+      U.buildQuick_({
+        placeholder: "例：明日15時 かな 美容院",
+        parseOptions: { who: true },
+        showDate: true,
+        dateLabel: "日付",
+        extraLink: {
+          label: "詳しく入力",
+          onClick: function (state) {
+            if (typeof openScheduleModal !== "function") {
+              return;
+            }
+
+            openScheduleModal();
+
+            const set = function (id, value) {
+              const node = document.getElementById(id);
+
+              if (node && value) {
+                node.value = value;
+              }
+            };
+
+            const p = state.parsed;
+
+            set("scheduleDate", state.date || calendarDefaultDate_());
+            set("scheduleStart", p.time);
+            set("scheduleEnd", p.endTime || (p.time ? plusHour_(p.time) : ""));
+            set("scheduleTitle", p.title);
+
+            if (p.who) {
+              set("scheduleTarget", p.who);
+
+              document
+                .querySelectorAll('input[name="scheduleTargetRadio"]')
+                .forEach(function (radio) {
+                  radio.checked = radio.value === p.who;
+                });
+            }
+          }
+        },
+        describe: function (state) {
+          const chips = [];
+          const p = state.parsed;
+          const date = state.date || calendarDefaultDate_();
+
+          chips.push({ label: "日付", value: window.nlLabel_(date) });
+
+          if (p.time) {
+            chips.push({
+              label: "時間",
+              value: p.time + (p.endTime ? "〜" + p.endTime : "")
+            });
+          }
+
+          if (p.title) {
+            chips.push({ label: "予定", value: p.title });
+          }
+
+          if (p.who) {
+            chips.push({ label: "対象", value: p.who });
+          }
+
+          return chips;
+        },
+        onAdd: async function (state) {
+          const p = state.parsed;
+
+          if (!p.title) {
+            toast_("予定の内容も入力してください");
+            return false;
+          }
+
+          const date = state.date || calendarDefaultDate_();
+
+          const params = new URLSearchParams();
+
+          params.set("action", "addGoogleSchedule");
+          params.set("date", date);
+          params.set("start", p.time || "");
+          params.set("end", p.endTime || (p.time ? plusHour_(p.time) : ""));
+          params.set("title", p.title);
+          params.set("target", p.who || "ふたり");
+          params.set("memo", "");
+
+          const result =
+            await fetchJson(API_BASE + "?" + params.toString());
+
+          if (!result || result.success !== true) {
+            throw new Error(
+              (result && result.error) ||
+              "予定を保存できませんでした"
+            );
+          }
+
+          selectedCalendarDate = date;
+          calendarDate = new Date(date + "T00:00:00");
+
+          if (typeof refreshCalendarPage === "function") {
+            await refreshCalendarPage();
+          }
+
+          toast_("予定を追加しました");
+          refreshCalendarBadge_();
+
+          return true;
+        }
+      });
+
+    calendarQuick_.node.id = "calendarQuick";
+
+    page.insertBefore(calendarQuick_.node, page.firstChild);
+  }
+
+
+  // =========================================================
+  // 日別：「削除」ボタンを見やすい場所へ
+  // =========================================================
+
+  function moveReceiptToolbar_() {
+    const page = U.page_("page-receipt");
+    const button = document.getElementById("receiptDeleteToggle");
+
+    if (!page || !button) {
+      return;
+    }
+
+    let bar = document.getElementById("receiptToolbar");
+
+    if (!bar) {
+      bar = el_("div");
+      bar.id = "receiptToolbar";
+      page.insertBefore(bar, page.firstChild);
+    }
+
+    if (button.parentElement !== bar) {
+      button.style.marginLeft = "0";
+      bar.appendChild(button);
+    }
+  }
+
+
+  // =========================================================
+  // つなぎ込み
+  // =========================================================
+
+  function ensureAll_() {
+    ensureMemoPage_();
+    ensureChecklistPage_();
+    ensureCalendarQuick_();
+    moveReceiptToolbar_();
+  }
+
+  checkItems_ = loadChecklist_();
+
+  ensureAll_();
+  updateCheckBadge_();
+
+  if (typeof switchPage === "function") {
+    const originalSwitchPage_ = switchPage;
+
+    switchPage = async function (page) {
+      const result = await originalSwitchPage_(page);
+
+      ensureAll_();
+
+      if (page === "settings") {
+        loadMemo_(false);
+      }
+
+      if (page === "checklist") {
+        renderChecklist_();
+      }
+
+      return result;
+    };
+  }
+
+  // 起動後：画面が後から作り直されても整える
+  setTimeout(ensureAll_, 800);
+  setTimeout(ensureAll_, 2500);
+
+  // 件数の赤い丸のために、最初に一度読み込む
+  setTimeout(function () { loadMemo_(true); }, 2200);
+  setTimeout(refreshCalendarBadge_, 3200);
+
+  // ときどき最新にする（画面を見ているときだけ）
+  setInterval(
+    function () {
+      if (document.visibilityState === "visible") {
+        loadMemo_(true);
+      }
+    },
+    90000
+  );
+
+  setInterval(
+    function () {
+      if (document.visibilityState === "visible") {
+        refreshCalendarBadge_();
+      }
+    },
+    300000
+  );
+
+  document.addEventListener(
+    "visibilitychange",
+    function () {
+      if (document.visibilityState === "visible") {
+        loadMemo_(false);
+        refreshCalendarBadge_();
+      }
+    }
+  );
+
+  // 画面の外から呼べるように
+  window.refreshTabBadges_ = function () {
+    loadMemo_(true);
+    refreshCalendarBadge_();
+    updateCheckBadge_();
+  };
 })();
