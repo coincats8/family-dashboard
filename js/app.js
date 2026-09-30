@@ -20041,3 +20041,95 @@ if (
 
   document.head.appendChild(style);
 })();
+
+
+// =========================================================
+// ホーム：カードを縦に伸ばして、下のタブとの空白をなくす
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.homeFillHeightAdded_) {
+    return;
+  }
+
+  window.homeFillHeightAdded_ = true;
+
+  const style =
+    document.createElement("style");
+
+  style.id = "homeFillHeightStyle";
+
+  style.textContent = `
+    :root {
+      /* 下のタブの分として空けておく高さ（パソコン） */
+      --home-bottom-space:
+        calc(
+          96px +
+          env(safe-area-inset-bottom, 0px)
+        );
+    }
+
+    @media (max-width: 600px) {
+      :root {
+        /* 下のタブの分として空けておく高さ（スマホ） */
+        --home-bottom-space:
+          calc(
+            82px +
+            env(safe-area-inset-bottom, 0px)
+          );
+      }
+    }
+
+    /* ホーム表示中は、下の余白を必要な分だけにする */
+    body:has(#page-home:not([hidden])) .app {
+      padding-bottom:
+        var(--home-bottom-space)
+        !important;
+    }
+
+    /* ホームでは「最終更新」の行と下の余白ブロックを出さない */
+    body:has(#page-home:not([hidden])) .update-status,
+    body:has(#page-home:not([hidden])) .bottom-space {
+      display: none !important;
+    }
+
+    /* ホーム全体を、画面の高さいっぱいにする */
+    #page-home {
+      display: flex !important;
+      flex-direction: column !important;
+
+      min-height:
+        calc(
+          100dvh -
+          var(--home-bottom-space)
+        ) !important;
+
+      padding-bottom: 12px !important;
+    }
+
+    #page-home .cute-home {
+      flex: 1 1 auto !important;
+    }
+
+    /* 今月の残金カード：余った高さを多めにもらう */
+    #page-home .cute-main-card {
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: center !important;
+
+      flex: 1.4 1 auto !important;
+      max-height: 230px !important;
+    }
+
+    /* 下のカード：余った高さを分け合う */
+    #page-home .cute-link-card {
+      flex: 1 1 auto !important;
+      max-height: 96px !important;
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
