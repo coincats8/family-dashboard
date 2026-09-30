@@ -20270,6 +20270,9 @@ if (
 
   const STORE_KEY = "familyChecklistItems_v1";
 
+  // 裏で更新中の一瞬の値を表示しないための待機用
+  const pendingValues_ = new Map();
+
 
   // ---------- 見た目 ----------
 
@@ -21137,7 +21140,7 @@ if (
 
           toast_("修正しました");
           closeEditSheet_();
-          syncHub_();
+          syncHub_(true);
         }
         catch (error) {
           console.error(error);
@@ -21571,7 +21574,7 @@ if (
         </div>
       `;
 
-      syncHub_();
+      syncHub_(true);
       return;
     }
 
@@ -21779,20 +21782,49 @@ if (
 
   // ---------- カードの数字を最新にする ----------
 
-  function setValue_(id, text) {
+  // 裏で更新中の一瞬の値で点滅しないよう、
+  // 2回続けて同じ値になったときだけ表示を変える
+  // （最初の表示と、自分で修正したときはすぐ反映）
+  function setValue_(id, text, immediate) {
     const node =
       document.getElementById(id);
 
-    if (
-      node &&
-      text &&
-      node.textContent !== text
-    ) {
-      node.textContent = text;
+    if (!node || !text) {
+      return;
     }
+
+    if (node.textContent === text) {
+      pendingValues_.delete(id);
+      return;
+    }
+
+    if (immediate || node.dataset.synced !== "1") {
+      node.textContent = text;
+      node.dataset.synced = "1";
+      pendingValues_.delete(id);
+      return;
+    }
+
+    const pending = pendingValues_.get(id);
+
+    if (pending && pending.text === text) {
+      pending.count += 1;
+
+      if (pending.count >= 2) {
+        node.textContent = text;
+        pendingValues_.delete(id);
+      }
+
+      return;
+    }
+
+    pendingValues_.set(
+      id,
+      { text: text, count: 1 }
+    );
   }
 
-  function syncSummary_() {
+  function syncSummary_(immediate) {
     const remainingText =
       textOf_("totalMoney").trim();
 
@@ -21805,13 +21837,13 @@ if (
     const savingsText =
       textOf_("savingActual").trim();
 
-    setValue_("hubSummaryBalance", remainingText);
-    setValue_("hubSummaryBudget", budgetText);
-    setValue_("hubSummaryUsed", usedText);
-    setValue_("hubSummarySavings", savingsText);
+    setValue_("hubSummaryBalance", remainingText, immediate);
+    setValue_("hubSummaryBudget", budgetText, immediate);
+    setValue_("hubSummaryUsed", usedText, immediate);
+    setValue_("hubSummarySavings", savingsText, immediate);
 
-    const budget = yenToNumber_(budgetText);
-    const used = yenToNumber_(usedText);
+    const budget = yenToNumber_(textOf_("hubSummaryBudget"));
+    const used = yenToNumber_(textOf_("hubSummaryUsed"));
 
     const percent =
       budget > 0
@@ -21834,13 +21866,13 @@ if (
     if (balance) {
       balance.classList.toggle(
         "is-danger",
-        remainingText.indexOf("-") !== -1
+        textOf_("hubSummaryBalance").indexOf("-") !== -1
       );
     }
   }
 
-  function syncHub_() {
-    syncSummary_();
+  function syncHub_(immediate) {
+    syncSummary_(immediate === true);
 
     const purchase =
       document.getElementById(
@@ -21850,7 +21882,8 @@ if (
     if (purchase) {
       setValue_(
         "hubPurchaseValue",
-        String(purchase.textContent || "").trim()
+        String(purchase.textContent || "").trim(),
+        immediate === true
       );
     }
 
@@ -21867,14 +21900,16 @@ if (
       if (match) {
         setValue_(
           "hubMemoValue",
-          match[1] + "件"
+          match[1] + "件",
+          immediate === true
         );
       }
     }
 
     setValue_(
       "hubChecklistValue",
-      activeCount_() + "件"
+      activeCount_() + "件",
+      true
     );
   }
 
@@ -23807,4 +23842,245 @@ if (
 
   ensureToggleButton_();
   ensureBar_();
+})();
+
+
+// =========================================================
+// カテゴリ画面を1画面に収める／裏の更新で点滅しないようにする
+// ・カテゴリ画面の「RANKING」「カテゴリ別支出」「説明文」を削除
+// ・その分、全体を上に詰める
+// ・更新のたびに一覧がいったん消えて作り直される動きをやめる
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.calmRefreshAdded_) {
+    return;
+  }
+
+  window.calmRefreshAdded_ = true;
+
+
+  // ---------- カテゴリ画面：文字を消して上に詰める ----------
+
+  const style =
+    document.createElement("style");
+
+  style.id = "calmRefreshStyle";
+
+  style.textContent = `
+    /* 「RANKING」「カテゴリ別支出」と説明文は表示しない */
+    #page-report .card > .section-header,
+    #reportCategoryList .report-purchase-intro {
+      display: none !important;
+    }
+
+    /* カテゴリ画面：上と下の余白を減らす */
+    body:has(#page-report:not([hidden])) .app {
+      padding-top: max(12px, env(safe-area-inset-top)) !important;
+      padding-bottom:
+        var(--home-bottom-space, 90px) !important;
+    }
+
+    #page-report .card {
+      margin-bottom: 8px !important;
+      padding: 10px 12px 6px !important;
+    }
+
+    .category-month-selector {
+      margin: 0 0 10px !important;
+      padding: 6px 10px !important;
+    }
+
+    .category-month-button {
+      width: 40px !important;
+      height: 40px !important;
+    }
+
+    #reportCategoryList .genre-header {
+      margin: 12px 2px 7px !important;
+    }
+
+    #reportCategoryList > .genre-header:first-child,
+    #reportCategoryList .report-purchase-intro + .genre-header {
+      margin-top: 2px !important;
+    }
+
+    #reportCategoryList .report-history-group {
+      margin-bottom: 7px !important;
+    }
+
+    #reportCategoryList .report-history-summary {
+      padding: 11px 14px !important;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+
+  // ---------- カテゴリ一覧：更新中に消さない ----------
+  // 更新のたびに「読み込んでいます…」や古い形式の一覧が
+  // 一瞬出て、また元に戻る動きを止める
+
+  let renderedMonth_ = "";
+
+  function currentMonthLabel_() {
+    const label =
+      document.getElementById(
+        "categoryMonthLabel"
+      );
+
+    return label
+      ? String(label.textContent || "")
+      : "";
+  }
+
+  function guardCategoryList_() {
+    const list =
+      document.getElementById(
+        "reportCategoryList"
+      );
+
+    if (!list || list.__calmGuard) {
+      return;
+    }
+
+    const descriptor =
+      Object.getOwnPropertyDescriptor(
+        Element.prototype,
+        "innerHTML"
+      );
+
+    if (!descriptor || !descriptor.set) {
+      return;
+    }
+
+    Object.defineProperty(
+      list,
+      "innerHTML",
+      {
+        configurable: true,
+        enumerable: true,
+
+        get: function () {
+          return descriptor.get.call(this);
+        },
+
+        set: function (value) {
+          const text = String(value);
+
+          const isHistory =
+            text.indexOf(
+              "report-history-group"
+            ) !== -1 ||
+            (
+              text.indexOf(
+                "report-history-empty"
+              ) !== -1 &&
+              text.indexOf(
+                "まだありません"
+              ) !== -1
+            );
+
+          // 本来のカテゴリ一覧はそのまま表示する
+          if (isHistory) {
+            renderedMonth_ =
+              currentMonthLabel_();
+
+            descriptor.set.call(this, value);
+            return;
+          }
+
+          // 古い形式の一覧は使わない
+          if (text.indexOf("category-item") !== -1) {
+            return;
+          }
+
+          // 読み込み中・取得失敗の表示で、
+          // 同じ月の一覧を消さない
+          const hasList =
+            Boolean(
+              this.querySelector(
+                ".report-history-group"
+              )
+            );
+
+          if (
+            hasList &&
+            currentMonthLabel_() === renderedMonth_
+          ) {
+            return;
+          }
+
+          descriptor.set.call(this, value);
+        }
+      }
+    );
+
+    list.__calmGuard = true;
+  }
+
+  guardCategoryList_();
+
+
+  // ---------- 日別：変化がないときは作り直さない ----------
+  // 60秒ごとの更新で、開いている行が閉じたり、
+  // 選択が消えたりしないようにする
+
+  function receiptSignature_(receipts) {
+    return JSON.stringify(
+      receipts.map(function (item) {
+        return [
+          item.row,
+          item.date,
+          item.shop,
+          item.productName || item.name || item.itemName,
+          item.quantity,
+          item.unitPrice,
+          item.amount,
+          item.classification ||
+            item.normalizedName ||
+            item.category
+        ];
+      })
+    );
+  }
+
+  if (typeof renderReceiptList === "function") {
+    const originalRenderReceiptList_ =
+      renderReceiptList;
+
+    let lastSignature_ = "";
+
+    renderReceiptList =
+      function (container, receipts, limit) {
+        if (
+          container &&
+          container.id === "receiptFullList" &&
+          Array.isArray(receipts)
+        ) {
+          const signature =
+            receiptSignature_(receipts);
+
+          if (
+            signature === lastSignature_ &&
+            container.querySelector(
+              ".purchase-shop-group"
+            )
+          ) {
+            return;
+          }
+
+          lastSignature_ = signature;
+        }
+
+        return originalRenderReceiptList_(
+          container,
+          receipts,
+          limit
+        );
+      };
+  }
 })();
