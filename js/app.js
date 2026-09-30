@@ -1441,11 +1441,22 @@ function renderHome() {
       : []
   );
 
-// 「最近の支出」の処理はここから無くなる
 
-renderAdvice();
+  renderReceiptList(
+    el("recentList"),
+    Array.isArray(
+      dashboardData.recent
+    )
+      ? dashboardData.recent
+      : [],
+    5
+  );
+
+
+  renderAdvice();
 
 }
+
 
 // =========================================================
 // CATEGORY
@@ -15515,98 +15526,6 @@ loadDashboard =
   async function openCategoryBudgetEditor_(
     categoryName
   ) {
-      const requestedName = categoryBudgetName_(categoryName);
-
-  // 水道・光熱費は「電気・ガス・水道」を個別に編集
-  if (
-    requestedName === "水道・光熱費" ||
-    requestedName === "水道光熱費"
-  ) {
-    const utilityNames = ["電気", "ガス", "水道"];
-
-    for (const utilityName of utilityNames) {
-      const utilityCategory = findCategoryData_(utilityName);
-
-      if (!utilityCategory) {
-        continue;
-      }
-
-      const currentBudget =
-        categoryBudgetNumber_(utilityCategory.budget);
-
-      const entered = window.prompt(
-        utilityName +
-          "の月予算を入力してください\n" +
-          "未設定に戻す場合は空欄のままOKを押してください",
-        currentBudget > 0 ? String(currentBudget) : ""
-      );
-
-      // キャンセルしたら以降の編集を終了
-      if (entered === null) {
-        return;
-      }
-
-      const trimmed = String(entered).trim();
-      const unset = trimmed === "";
-      const budget = unset
-        ? 0
-        : Number(trimmed.replace(/,/g, ""));
-
-      if (
-        !unset &&
-        (!Number.isFinite(budget) ||
-          budget < 0 ||
-          budget > 10000000)
-      ) {
-        if (typeof showToast === "function") {
-          showToast("正しい予算金額を入力してください");
-        }
-        return;
-      }
-
-      try {
-        const result = await fetchJson(
-          API_BASE +
-            "?action=saveCategoryBudget" +
-            "&category=" +
-            encodeURIComponent(utilityName) +
-            "&budget=" +
-            encodeURIComponent(unset ? "" : budget) +
-            "&unset=" +
-            (unset ? "1" : "0") +
-            "&_=" +
-            Date.now()
-        );
-
-        if (result && result.ok === false) {
-          throw new Error(
-            result.message || "予算の保存に失敗しました"
-          );
-        }
-      } catch (error) {
-        console.error(error);
-
-        if (typeof showToast === "function") {
-          showToast(
-            utilityName + "の予算を保存できませんでした"
-          );
-        }
-
-        return;
-      }
-    }
-
-    // 3項目保存後に最新データを再取得
-    if (typeof loadDashboard === "function") {
-      await loadDashboard();
-    }
-
-    if (typeof showToast === "function") {
-      showToast("水道・光熱費の予算を更新しました");
-    }
-
-    return;
-  }
     const category =
       findCategoryData_(
         categoryName
@@ -15616,6 +15535,7 @@ loadDashboard =
       categoryBudgetName_(
         categoryName
       );
+
     const currentBudget =
       categoryBudgetNumber_(
         category?.budget
@@ -15751,7 +15671,6 @@ loadDashboard =
     }
   }
 
-window.openCategoryBudgetEditor_ = openCategoryBudgetEditor_;  
 
   function addCategoryBudgetButtons_() {
     const container =
@@ -16831,339 +16750,155 @@ window.openCategoryBudgetEditor_ = openCategoryBudgetEditor_;
   // -------------------------------------------------------
 
   function createShopGroups_(
-  receipts
-) {
-  const map =
-    new Map();
+    receipts
+  ) {
+    const map =
+      new Map();
 
-  receipts.forEach(
-    function(item, itemIndex) {
+    receipts.forEach(
+      function(item) {
+        const date =
+          shopGroupDate_(
+            item.date
+          );
 
-      const date =
-        shopGroupDate_(
-          item.date
-        );
+        const shop =
+          String(
+            item.shop ||
+            "店名不明"
+          ).trim();
 
-      const shop =
-        String(
-          item.shop ||
-          "店名不明"
-        ).trim();
+        const key =
+          date.key +
+          "::" +
+          shopGroupShopKey_(
+            shop
+          );
 
-      const receiptId =
-        String(
-          item.receiptId || ""
-        ).trim();
+        if (!map.has(key)) {
+          map.set(
+            key,
+            {
+              key:
+                key,
 
+              date:
+                date,
 
-      // receiptIdがある場合は
-      // 必ずレシート1枚単位でまとめる
-      //
-      // 古いデータなどreceiptIdがない場合だけ
-      // 日付＋店名でまとめる
-      const key =
-        receiptId
-          ? "receipt::" +
-            receiptId
-          : "legacy::" +
-            date.key +
-            "::" +
-            shopGroupShopKey_(
-              shop
-            );
+              shop:
+                shop,
 
+              items:
+                [],
 
-      if (!map.has(key)) {
+              total:
+                0,
 
-        map.set(
-          key,
-          {
-            key:
-              key,
+              quantity:
+                0
+            }
+          );
+        }
 
-            receiptId:
-              receiptId,
+        const group =
+          map.get(key);
 
-            date:
-              date,
-
-            shop:
-              shop,
-
-            items:
-              [],
-
-            total:
-              0,
-
-            quantity:
-              0,
-
-            firstIndex:
-              itemIndex
-          }
-        );
-      }
-
-
-      const group =
-        map.get(key);
-
-
-      group.items.push(
-        item
-      );
-
-
-      group.total +=
-        shopGroupAmount_(
+        group.items.push(
           item
         );
 
+        group.total +=
+          shopGroupAmount_(
+            item
+          );
 
-      group.quantity +=
-        Math.max(
-          1,
-          shopGroupNumber_(
-            item.quantity
-          )
-        );
-    }
-  );
+        group.quantity +=
+          Math.max(
+            1,
+            shopGroupNumber_(
+              item.quantity
+            )
+          );
+      }
+    );
 
+    return Array.from(
+      map.values()
+    ).sort(
+      function(a, b) {
+        if (
+          a.date.time !==
+          b.date.time
+        ) {
+          return (
+            b.date.time -
+            a.date.time
+          );
+        }
 
-  return Array.from(
-    map.values()
-  ).sort(
-    function(a, b) {
-
-      if (
-        a.date.time !==
-        b.date.time
-      ) {
-
-        return (
-          b.date.time -
-          a.date.time
+        return a.shop.localeCompare(
+          b.shop,
+          "ja"
         );
       }
-
-
-      // 同じ日なら元データの順番を維持
-      return (
-        a.firstIndex -
-        b.firstIndex
-      );
-    }
-  );
-}
+    );
+  }
 
 
   // -------------------------------------------------------
   // まとめた購入一覧を表示
   // -------------------------------------------------------
 
- function renderGroupedPurchases_(
-  container,
-  receipts
-) {
-  const source =
-    Array.isArray(receipts)
-      ? receipts
-      : [];
+  function renderGroupedPurchases_(
+    container,
+    receipts
+  ) {
+    const source =
+      Array.isArray(receipts)
+        ? receipts
+        : [];
 
-  if (!source.length) {
-    renderReceiptListBeforeShopGrouping_(
-      container,
-      source
-    );
-    return;
-  }
+    if (!source.length) {
+      renderReceiptListBeforeShopGrouping_(
+        container,
+        source
+      );
 
-  const groups =
-    createShopGroups_(source);
+      return;
+    }
 
-  const countTarget =
-    document.getElementById(
-      "receiptCount"
-    );
+    const groups =
+      createShopGroups_(
+        source
+      );
 
-  if (countTarget) {
-    countTarget.textContent =
-      groups.length + "件";
-  }
+    const countTarget =
+      document.getElementById(
+        "receiptCount"
+      );
 
-
-  // =====================================================
-  // 削除モード状態
-  // =====================================================
-
-  let deleteMode = false;
-
-  const selectedIds =
-    new Set();
-
-
-  // =====================================================
-  // 通常一覧を描画
-  // =====================================================
-
-  function draw_() {
+    if (countTarget) {
+      countTarget.textContent =
+        groups.length +
+        "件";
+    }
 
     container.innerHTML = `
-
-      <div class="purchase-delete-header">
-
-        <span class="purchase-delete-title">
-          日付・店名
-        </span>
-
-        <button
-          type="button"
-          class="purchase-delete-mode-button">
-          ${
-            deleteMode
-              ? "完了"
-              : "削除"
-          }
-        </button>
-
-      </div>
-
-
-      ${
-        deleteMode
-          ? `
-            <div class="purchase-delete-tools">
-
-              <label class="purchase-select-all">
-
-                <input
-                  type="checkbox"
-                  class="purchase-select-all-input">
-
-                <span>
-                  すべて選択
-                </span>
-
-              </label>
-
-
-              <button
-                type="button"
-                class="purchase-delete-selected purchase-delete-selected-top"
-                disabled>
-                選択したレシートを削除
-              </button>
-
-            </div>
-          `
-          : ""
-      }
-
-
       <div class="purchase-shop-groups">
 
         <div class="purchase-shop-group-head">
-
-          ${
-            deleteMode
-              ? `<span></span>`
-              : ""
-          }
-
-          <span>
-            日付・店名
-          </span>
-
-          <span>
-            合計金額
-          </span>
-
+          <span>日付・店名</span>
+          <span>合計金額</span>
         </div>
-
 
         ${
           groups
             .map(
               function(group, index) {
-
-                const receiptId =
-                  String(
-                    group.receiptId ||
-                    (
-                      group.items &&
-                      group.items[0] &&
-                      group.items[0].receiptId
-                    ) ||
-                    ""
-                  ).trim();
-
-
-                const selectable =
-                  !!receiptId;
-
-
                 return `
-
                   <section
-                    class="
-                      purchase-shop-group
-                      ${
-                        selectedIds.has(
-                          receiptId
-                        )
-                          ? "is-delete-selected"
-                          : ""
-                      }
-                    "
-                    data-shop-group="${index}"
-                    data-receipt-id="${escapeHTML(
-                      receiptId
-                    )}">
-
-
-                    ${
-                      deleteMode
-                        ? `
-                          <label
-                            class="
-                              purchase-receipt-selector
-                              ${
-                                selectable
-                                  ? ""
-                                  : "is-disabled"
-                              }
-                            ">
-
-                            <input
-                              type="checkbox"
-                              class="purchase-receipt-checkbox"
-                              value="${escapeHTML(
-                                receiptId
-                              )}"
-                              ${
-                                selectedIds.has(
-                                  receiptId
-                                )
-                                  ? "checked"
-                                  : ""
-                              }
-                              ${
-                                selectable
-                                  ? ""
-                                  : "disabled"
-                              }>
-
-                            <span
-                              class="purchase-receipt-circle">
-                            </span>
-
-                          </label>
-                        `
-                        : ""
-                    }
-
+                    class="purchase-shop-group"
+                    data-shop-group="${index}">
 
                     <button
                       type="button"
@@ -17171,77 +16906,45 @@ window.openCategoryBudgetEditor_ = openCategoryBudgetEditor_;
                       data-shop-group-button="${index}"
                       aria-expanded="false">
 
-                      <span
-                        class="purchase-shop-date">
-
-                        ${escapeHTML(
-                          group.date.label
-                        )}
-
+                      <span class="purchase-shop-date">
+                        ${escapeHTML(group.date.label)}
                       </span>
 
-
-                      <span
-                        class="purchase-shop-information">
+                      <span class="purchase-shop-information">
 
                         <strong
                           class="purchase-shop-name"
-                          title="${escapeHTML(
-                            group.shop
-                          )}">
-
-                          ${escapeHTML(
-                            group.shop
-                          )}
-
+                          title="${escapeHTML(group.shop)}">
+                          ${escapeHTML(group.shop)}
                         </strong>
 
-
                         <small>
-
                           ${
                             group.items.length
                           }商品
-
                           ・数量
-
                           ${
                             group.quantity
                           }点
-
                         </small>
 
                       </span>
 
-
-                      <strong
-                        class="purchase-shop-total">
-
+                      <strong class="purchase-shop-total">
                         ${escapeHTML(
                           shopGroupYen_(
                             group.total
                           )
                         )}
-
                       </strong>
 
-
-                      ${
-                        deleteMode
-                          ? ""
-                          : `
-                            <span
-                              class="
-                                material-symbols-rounded
-                                purchase-shop-arrow
-                              ">
-                              expand_more
-                            </span>
-                          `
-                      }
+                      <span
+                        class="material-symbols-rounded
+                        purchase-shop-arrow">
+                        expand_more
+                      </span>
 
                     </button>
-
 
                     <div
                       class="purchase-shop-details"
@@ -17255,730 +16958,110 @@ window.openCategoryBudgetEditor_ = openCategoryBudgetEditor_;
             .join("")
         }
 
-
-        ${
-          deleteMode
-            ? `
-              <div class="purchase-delete-bottom">
-
-                <button
-                  type="button"
-                  class="
-                    purchase-delete-selected
-                    purchase-delete-selected-bottom
-                  "
-                  disabled>
-
-                  選択したレシートを削除
-
-                </button>
-
-              </div>
-            `
-            : ""
-        }
-
       </div>
     `;
 
 
-    bind_();
-  }
-
-
-  // =====================================================
-  // 選択数を更新
-  // =====================================================
-
-  function updateSelection_() {
-
-    const count =
-      selectedIds.size;
-
-
     container
       .querySelectorAll(
-        ".purchase-delete-selected"
+        "[data-shop-group-button]"
       )
       .forEach(
         function(button) {
-
-          button.disabled =
-            count === 0;
-
-          button.textContent =
-            count > 0
-              ? "選択したレシートを削除（" +
-                count +
-                "件）"
-              : "選択したレシートを削除";
-        }
-      );
-
-
-    const selectAll =
-      container.querySelector(
-        ".purchase-select-all-input"
-      );
-
-
-    if (selectAll) {
-
-      const selectableGroups =
-        groups.filter(
-          function(group) {
-
-            return !!String(
-              group.receiptId ||
-              (
-                group.items &&
-                group.items[0] &&
-                group.items[0].receiptId
-              ) ||
-              ""
-            ).trim();
-          }
-        );
-
-
-      selectAll.checked =
-        selectableGroups.length > 0 &&
-        selectedIds.size ===
-          selectableGroups.length;
-    }
-  }
-
-
-  // =====================================================
-  // 選択レシート削除
-  // =====================================================
-
-  async function deleteSelected_() {
-
-    const ids =
-      Array.from(
-        selectedIds
-      );
-
-
-    if (!ids.length) {
-
-      showToast(
-        "削除するレシートを選択してください"
-      );
-
-      return;
-    }
-
-
-    const ok =
-      window.confirm(
-        "選択した" +
-        ids.length +
-        "件のレシートを削除しますか？\n\n" +
-        "レシートに含まれる購入明細もすべて削除されます。\n" +
-        "この操作は元に戻せません。"
-      );
-
-
-    if (!ok) {
-      return;
-    }
-
-
-    const buttons =
-      container.querySelectorAll(
-        ".purchase-delete-selected"
-      );
-
-
-    buttons.forEach(
-      function(button) {
-
-        button.disabled =
-          true;
-
-        button.textContent =
-          "削除中…";
-      }
-    );
-
-
-    try {
-
-      for (
-        const receiptId
-        of ids
-      ) {
-
-        const result =
-          await fetchJson(
-
-            API_BASE +
-
-            "?action=deleteReceiptCompletely" +
-
-            "&receiptId=" +
-
-            encodeURIComponent(
-              receiptId
-            )
-
-          );
-
-
-        if (
-          !result ||
-          result.success !== true
-        ) {
-
-          throw new Error(
-            result &&
-            result.error
-              ? result.error
-              : "削除できませんでした"
-          );
-        }
-      }
-
-
-      selectedIds.clear();
-
-
-      showToast(
-        ids.length +
-        "件のレシートを削除しました"
-      );
-
-
-      if (
-        typeof refreshReceiptPage ===
-        "function"
-      ) {
-
-        await refreshReceiptPage();
-      }
-
-
-      if (
-        typeof loadDashboard ===
-        "function"
-      ) {
-
-        loadDashboard();
-      }
-
-    }
-    catch (error) {
-
-      console.error(
-        "Receipt delete error:",
-        error
-      );
-
-
-      showToast(
-        "削除できませんでした：" +
-        String(
-          error.message ||
-          error
-        )
-      );
-
-
-      updateSelection_();
-    }
-  }
-
-
-  // =====================================================
-  // イベント
-  // =====================================================
-
-  function bind_() {
-
-    const modeButton =
-      container.querySelector(
-        ".purchase-delete-mode-button"
-      );
-
-
-    if (modeButton) {
-
-      modeButton.addEventListener(
-        "click",
-        function() {
-
-          deleteMode =
-            !deleteMode;
-
-          selectedIds.clear();
-
-          draw_();
-        }
-      );
-    }
-
-
-    // -----------------------------------------------------
-    // レシート選択
-    // -----------------------------------------------------
-
-    container
-      .querySelectorAll(
-        ".purchase-receipt-checkbox"
-      )
-      .forEach(
-        function(checkbox) {
-
-          checkbox.addEventListener(
-            "change",
+          button.addEventListener(
+            "click",
             function() {
-
-              const id =
-                String(
-                  checkbox.value ||
-                  ""
-                ).trim();
-
-
-              if (!id) {
-                return;
-              }
-
-
-              if (
-                checkbox.checked
-              ) {
-
-                selectedIds.add(
-                  id
+              const index =
+                Number(
+                  button.dataset
+                    .shopGroupButton
                 );
-
-              } else {
-
-                selectedIds.delete(
-                  id
-                );
-              }
-
 
               const section =
-                checkbox.closest(
+                button.closest(
                   ".purchase-shop-group"
                 );
 
-
-              if (section) {
-
-                section.classList.toggle(
-                  "is-delete-selected",
-                  checkbox.checked
+              const details =
+                section.querySelector(
+                  "[data-shop-group-details]"
                 );
+
+              const isOpen =
+                section.classList.contains(
+                  "is-open"
+                );
+
+              container
+                .querySelectorAll(
+                  ".purchase-shop-group"
+                )
+                .forEach(
+                  function(otherSection) {
+                    otherSection
+                      .classList
+                      .remove(
+                        "is-open"
+                      );
+
+                    const otherButton =
+                      otherSection.querySelector(
+                        ".purchase-shop-summary"
+                      );
+
+                    if (otherButton) {
+                      otherButton.setAttribute(
+                        "aria-expanded",
+                        "false"
+                      );
+                    }
+                  }
+                );
+
+              if (isOpen) {
+                return;
               }
 
+              section.classList.add(
+                "is-open"
+              );
 
-              updateSelection_();
+              button.setAttribute(
+                "aria-expanded",
+                "true"
+              );
+
+              if (
+                details.dataset.rendered !==
+                "true"
+              ) {
+                // 現在の商品明細と鉛筆編集をそのまま表示
+                renderReceiptListBeforeShopGrouping_(
+                  details,
+                  groups[index].items
+                );
+
+                details.dataset.rendered =
+                  "true";
+              }
+
+              setTimeout(
+                function() {
+                  section.scrollIntoView({
+                    behavior:
+                      "smooth",
+
+                    block:
+                      "nearest"
+                  });
+                },
+                100
+              );
             }
           );
         }
       );
-
-
-    // -----------------------------------------------------
-    // 全選択
-    // -----------------------------------------------------
-
-    const selectAll =
-      container.querySelector(
-        ".purchase-select-all-input"
-      );
-
-
-    if (selectAll) {
-
-      selectAll.addEventListener(
-        "change",
-        function() {
-
-          container
-            .querySelectorAll(
-              ".purchase-receipt-checkbox:not(:disabled)"
-            )
-            .forEach(
-              function(checkbox) {
-
-                const id =
-                  String(
-                    checkbox.value ||
-                    ""
-                  ).trim();
-
-
-                checkbox.checked =
-                  selectAll.checked;
-
-
-                if (
-                  selectAll.checked
-                ) {
-
-                  selectedIds.add(
-                    id
-                  );
-
-                } else {
-
-                  selectedIds.delete(
-                    id
-                  );
-                }
-
-
-                const section =
-                  checkbox.closest(
-                    ".purchase-shop-group"
-                  );
-
-
-                if (section) {
-
-                  section.classList.toggle(
-                    "is-delete-selected",
-                    selectAll.checked
-                  );
-                }
-              }
-            );
-
-
-          updateSelection_();
-        }
-      );
-    }
-
-
-    // -----------------------------------------------------
-    // 削除実行
-    // -----------------------------------------------------
-
-    container
-      .querySelectorAll(
-        ".purchase-delete-selected"
-      )
-      .forEach(
-        function(button) {
-
-          button.addEventListener(
-            "click",
-            deleteSelected_
-          );
-        }
-      );
-
-
-    // -----------------------------------------------------
-    // 通常時の商品詳細開閉
-    // -----------------------------------------------------
-
-    if (!deleteMode) {
-
-      container
-        .querySelectorAll(
-          "[data-shop-group-button]"
-        )
-        .forEach(
-          function(button) {
-
-            button.addEventListener(
-              "click",
-              function() {
-
-                const index =
-                  Number(
-                    button.dataset
-                      .shopGroupButton
-                  );
-
-
-                const section =
-                  button.closest(
-                    ".purchase-shop-group"
-                  );
-
-
-                const details =
-                  section.querySelector(
-                    "[data-shop-group-details]"
-                  );
-
-
-                const isOpen =
-                  section.classList.contains(
-                    "is-open"
-                  );
-
-
-                container
-                  .querySelectorAll(
-                    ".purchase-shop-group"
-                  )
-                  .forEach(
-                    function(otherSection) {
-
-                      otherSection
-                        .classList
-                        .remove(
-                          "is-open"
-                        );
-
-
-                      const otherButton =
-                        otherSection.querySelector(
-                          ".purchase-shop-summary"
-                        );
-
-
-                      if (otherButton) {
-
-                        otherButton.setAttribute(
-                          "aria-expanded",
-                          "false"
-                        );
-                      }
-                    }
-                  );
-
-
-                if (isOpen) {
-                  return;
-                }
-
-
-                section.classList.add(
-                  "is-open"
-                );
-
-
-                button.setAttribute(
-                  "aria-expanded",
-                  "true"
-                );
-
-
-                if (
-                  details.dataset.rendered !==
-                  "true"
-                ) {
-
-                  renderReceiptListBeforeShopGrouping_(
-                    details,
-                    groups[index].items
-                  );
-
-
-                  details.dataset.rendered =
-                    "true";
-                }
-
-
-                setTimeout(
-                  function() {
-
-                    section.scrollIntoView({
-                      behavior:
-                        "smooth",
-
-                      block:
-                        "nearest"
-                    });
-
-                  },
-                  100
-                );
-              }
-            );
-          }
-        );
-    }
-
-
-    updateSelection_();
   }
-
-
-  // =====================================================
-  // CSSは1回だけ追加
-  // =====================================================
-
-  if (
-    !document.getElementById(
-      "receiptDeleteSelectionStyle"
-    )
-  ) {
-
-    const style =
-      document.createElement(
-        "style"
-      );
-
-
-    style.id =
-      "receiptDeleteSelectionStyle";
-
-
-    style.textContent = `
-
-      .purchase-delete-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 10px;
-      }
-
-
-      .purchase-delete-title {
-        font-size: 12px;
-        font-weight: 700;
-        color: #7d8580;
-      }
-
-
-      .purchase-delete-mode-button {
-        border: 0;
-        border-radius: 10px;
-        padding: 8px 13px;
-        background: #fff0f0;
-        color: #e53935;
-        font-size: 12px;
-        font-weight: 800;
-        cursor: pointer;
-      }
-
-
-      .purchase-delete-tools {
-        display: grid;
-        gap: 10px;
-        margin-bottom: 10px;
-        padding: 12px;
-        border-radius: 14px;
-        background: #fff7f7;
-      }
-
-
-      .purchase-select-all {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-        font-weight: 700;
-        cursor: pointer;
-      }
-
-
-      .purchase-select-all-input {
-        width: 18px;
-        height: 18px;
-      }
-
-
-      .purchase-delete-selected {
-        width: 100%;
-        min-height: 42px;
-        border: 0;
-        border-radius: 12px;
-        background: #e53935;
-        color: white;
-        font-size: 13px;
-        font-weight: 800;
-        cursor: pointer;
-      }
-
-
-      .purchase-delete-selected:disabled {
-        opacity: .35;
-        cursor: default;
-      }
-
-
-      .purchase-delete-bottom {
-        padding: 12px;
-        border-top: 1px solid #e7ece8;
-        background: #fff7f7;
-      }
-
-
-      .purchase-shop-group {
-        position: relative;
-      }
-
-
-      .purchase-receipt-selector {
-        position: absolute;
-        left: 10px;
-        top: 50%;
-        z-index: 20;
-        display: flex;
-        width: 24px;
-        height: 24px;
-        align-items: center;
-        justify-content: center;
-        transform: translateY(-50%);
-        cursor: pointer;
-      }
-
-
-      .purchase-receipt-selector input {
-        position: absolute;
-        opacity: 0;
-        pointer-events: none;
-      }
-
-
-      .purchase-receipt-circle {
-        display: block;
-        width: 19px;
-        height: 19px;
-        box-sizing: border-box;
-        border: 2px solid #b7bfba;
-        border-radius: 50%;
-        background: #ffffff;
-      }
-
-
-      .purchase-receipt-selector
-      input:checked +
-      .purchase-receipt-circle {
-        border: 6px solid #e53935;
-      }
-
-
-      .purchase-receipt-selector.is-disabled {
-        opacity: .25;
-      }
-
-
-      .purchase-shop-group.is-delete-selected {
-        background: #fff5f5;
-      }
-
-
-      .purchase-receipt-selector
-      + .purchase-shop-summary {
-        padding-left: 44px;
-      }
-
-    `;
-
-
-    document.head.appendChild(
-      style
-    );
-  }
-
-
-  draw_();
-}
 
 
   // -------------------------------------------------------
@@ -19361,8 +18444,66 @@ if (
         )
       );
 
-}
-    
+
+    const mainMoney =
+      document.getElementById(
+        "totalMoney"
+      );
+
+    const bottomRightMoney =
+      document.getElementById(
+        "balanceMoney"
+      );
+
+
+    /* 大きな金額を今月の残金に変更 */
+
+    if (mainMoney) {
+      mainMoney.textContent =
+        yen(remaining);
+
+      mainMoney.classList.toggle(
+        "is-danger",
+        remaining < 0
+      );
+
+      const mainLabel =
+        mainMoney
+          .closest(".summary-header")
+          ?.querySelector(".card-title");
+
+      if (mainLabel) {
+        mainLabel.textContent =
+          "今月の残金";
+      }
+    }
+
+
+    /* 右下を今月の生活費に変更 */
+
+    if (bottomRightMoney) {
+      bottomRightMoney.textContent =
+        yen(expense);
+
+      bottomRightMoney.classList.remove(
+        "is-danger"
+      );
+
+      const bottomLabel =
+        bottomRightMoney
+          .closest(".budget-item")
+          ?.querySelector(
+            ".budget-label"
+          );
+
+      if (bottomLabel) {
+        bottomLabel.textContent =
+          "今月の生活費";
+      }
+    }
+  }
+
+
   const renderHomeBeforeBalanceSwap_ =
     renderHome;
 
@@ -19371,11 +18512,9 @@ if (
     swapHomeBalance_();
   };
 
-    
+
   swapHomeBalance_();
-
-  })();
-
+})();
 // =========================================================
 // ホームの生活費・残金をカテゴリ合計から正しく計算
 // =========================================================
@@ -19423,26 +18562,16 @@ if (
         0
       );
 
-const totalMoney =
-  document.getElementById(
-    "totalMoney"
-  );
-
-if (totalMoney) {
-  totalMoney.textContent =
-    yen(expense);
-}
-    
     const remaining =
       budget - expense;
 
 
     /* 大きな表示：今月の残金 */
 
-   const mainMoney =
-  document.getElementById(
-    "balanceMoney"
-  );
+    const mainMoney =
+      document.getElementById(
+        "totalMoney"
+      );
 
     if (mainMoney) {
       mainMoney.textContent =
@@ -19461,11 +18590,41 @@ if (totalMoney) {
       if (label) {
         label.textContent =
           "今月の残金";
+      }
     }
-  
+
+
+    /* 右下：今月の生活費 */
+
+    const expenseMoney =
+      document.getElementById(
+        "balanceMoney"
+      );
+
+    if (expenseMoney) {
+      expenseMoney.textContent =
+        yen(expense);
+
+      expenseMoney.classList.remove(
+        "is-danger"
+      );
+
+      const label =
+        expenseMoney
+          .closest(".budget-item")
+          ?.querySelector(
+            ".budget-label"
+          );
+
+      if (label) {
+        label.textContent =
+          "今月の生活費";
+      }
     }
-  
- const renderHomeBeforeCorrectTotals_ =
+  }
+
+
+  const renderHomeBeforeCorrectTotals_ =
     renderHome;
 
   renderHome = function () {
@@ -19479,9 +18638,7 @@ if (totalMoney) {
   };
 
   correctHomeMoneyTotals_();
-
 })();
-
 // =========================================================
 // ホームに「その他」カテゴリを追加
 // 日別の購入金額とホームの生活費を一致させる
@@ -20343,1304 +19500,4 @@ if (totalMoney) {
   };
 
   renderHomeMonthlyPurchase_();
-})();
-
-// =========================================================
-// HOME：スマホ用コンパクトカテゴリ
-// ・1カテゴリ1行
-// ・タップした項目だけ詳細表示
-// ・電気 / ガス / 水道 → 水道・光熱費へ統合
-// =========================================================
-
-(function () {
-  "use strict";
-
-  if (window.compactHomeCategoriesAdded_) {
-    return;
-  }
-
-  window.compactHomeCategoriesAdded_ = true;
-
-  let openedCategoryKey_ = "";
-
-
-  // -------------------------------------------------------
-  // カテゴリ名から絵文字などを除いて比較
-  // -------------------------------------------------------
-
-  function categoryKey_(value) {
-    return String(value || "")
-      .replace(
-        /^[^\p{L}\p{N}]+/u,
-        ""
-      )
-      .replace(/\s+/g, "")
-      .trim();
-  }
-
-
-  // -------------------------------------------------------
-  // 数値取得
-  // -------------------------------------------------------
-
-  function categoryNumber_(
-    category,
-    key
-  ) {
-    return (
-      Number(
-        category &&
-        category[key]
-      ) || 0
-    );
-  }
-
-
-  // -------------------------------------------------------
-  // 電気・ガス・水道を統合
-  // -------------------------------------------------------
-
-  function createCompactCategories_(
-    categories
-  ) {
-
-    const source =
-      Array.isArray(categories)
-        ? categories
-        : [];
-
-    const result = [];
-
-    const utilityItems = [];
-
-    source.forEach(
-      function (category) {
-
-        const key =
-          categoryKey_(
-            category.name
-          );
-
-        if (
-          key === "電気" ||
-          key === "ガス" ||
-          key === "水道"
-        ) {
-          utilityItems.push(
-            category
-          );
-          return;
-        }
-
-        result.push({
-          type: "normal",
-          key: key,
-          name:
-            category.name ||
-            "その他",
-          amount:
-            categoryNumber_(
-              category,
-              "amount"
-            ),
-          budget:
-            categoryNumber_(
-              category,
-              "budget"
-            ),
-          original:
-            category
-        });
-      }
-    );
-
-
-    // 光熱費は1項目として表示
-    if (utilityItems.length) {
-
-      const amount =
-        utilityItems.reduce(
-          function (sum, item) {
-            return (
-              sum +
-              categoryNumber_(
-                item,
-                "amount"
-              )
-            );
-          },
-          0
-        );
-
-      const budget =
-        utilityItems.reduce(
-          function (sum, item) {
-            return (
-              sum +
-              categoryNumber_(
-                item,
-                "budget"
-              )
-            );
-          },
-          0
-        );
-
-      result.push({
-        type: "utility",
-        key: "水道光熱費",
-        name: "💡 水道・光熱費",
-        amount: amount,
-        budget: budget,
-        utilityItems:
-          utilityItems
-      });
-    }
-
-
-    // 金額が大きい順にはせず、
-    // 元カテゴリの並びをできるだけ維持
-    return result;
-  }
-
-
-  // -------------------------------------------------------
-  // 金額表示
-  // -------------------------------------------------------
-
-  function compactYen_(value) {
-
-    const amount =
-      Number(value) || 0;
-
-    return (
-      "¥" +
-      amount.toLocaleString(
-        "ja-JP"
-      )
-    );
-  }
-
-
-  // -------------------------------------------------------
-  // HTML escape
-  // -------------------------------------------------------
-
-  function compactEscape_(value) {
-
-    return String(
-      value ?? ""
-    )
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-
-  // -------------------------------------------------------
-  // 詳細部分
-  // -------------------------------------------------------
-
-  function createDetailHTML_(
-    category
-  ) {
-
-    const budget =
-      Number(
-        category.budget
-      ) || 0;
-
-    const amount =
-      Number(
-        category.amount
-      ) || 0;
-
-    const remaining =
-      budget - amount;
-
-    const rate =
-      budget > 0
-        ? Math.round(
-            (
-              amount /
-              budget
-            ) * 100
-          )
-        : 0;
-
-
-    let utilityHTML = "";
-
-
-    if (
-      category.type ===
-      "utility"
-    ) {
-
-      const utilityMap = {
-        "電気": {
-          icon: "⚡",
-          amount: 0
-        },
-
-        "ガス": {
-          icon: "🔥",
-          amount: 0
-        },
-
-        "水道": {
-          icon: "🚰",
-          amount: 0
-        }
-      };
-
-
-      (
-        category.utilityItems ||
-        []
-      ).forEach(
-        function (item) {
-
-          const key =
-            categoryKey_(
-              item.name
-            );
-
-          if (
-            utilityMap[key]
-          ) {
-            utilityMap[key]
-              .amount =
-                categoryNumber_(
-                  item,
-                  "amount"
-                );
-          }
-        }
-      );
-
-
-      utilityHTML = `
-
-        <div class="compact-utility-breakdown">
-
-          ${
-            [
-              "電気",
-              "ガス",
-              "水道"
-            ]
-              .map(
-                function (name) {
-
-                  const item =
-                    utilityMap[name];
-
-                  return `
-                    <div class="compact-utility-row">
-
-                      <span>
-                        ${item.icon}
-                        ${name}
-                      </span>
-
-                      <strong>
-                        ${compactYen_(
-                          item.amount
-                        )}
-                      </strong>
-
-                    </div>
-                  `;
-                }
-              )
-              .join("")
-          }
-
-        </div>
-      `;
-    }
-
-
-    const budgetHTML =
-      budget > 0
-        ? `
-          <div class="compact-category-budget">
-
-            <div class="compact-budget-numbers">
-
-              <span>
-                予算
-                <strong>
-                  ${compactYen_(
-                    budget
-                  )}
-                </strong>
-              </span>
-
-              <span
-                class="${
-                  remaining < 0
-                    ? "is-danger"
-                    : ""
-                }">
-
-                ${
-                  remaining >= 0
-                    ? "残り "
-                    : "超過 "
-                }
-
-                <strong>
-                  ${compactYen_(
-                    Math.abs(
-                      remaining
-                    )
-                  )}
-                </strong>
-
-              </span>
-
-            </div>
-
-
-            <div class="compact-budget-track">
-
-              <span
-                style="
-                  width:
-                  ${Math.min(
-                    100,
-                    Math.max(
-                      0,
-                      rate
-                    )
-                  )}%;
-                ">
-              </span>
-
-            </div>
-
-          </div>
-        `
-        : `
-          <div class="compact-no-budget">
-            予算未設定
-          </div>
-        `;
-
-
-    return `
-
-      <div class="compact-category-detail">
-
-        ${utilityHTML}
-
-        ${budgetHTML}
-
-        <div class="compact-category-actions">
-
-          ${
-            category.type === "normal" ||
-category.type === "utility"
-              ? `
-                <button
-                  type="button"
-                  class="compact-budget-edit-button"
-                  data-compact-budget-category="${compactEscape_(
-                    category.name
-                  )}">
-                  予算を修正
-                </button>
-              `
-              : ""
-          }
-
-
-          <button
-            type="button"
-            class="compact-report-button"
-            data-compact-report-category="${compactEscape_(
-              category.name
-            )}">
-            支出の詳細を見る
-          </button>
-
-        </div>
-
-      </div>
-    `;
-  }
-
-
-  // -------------------------------------------------------
-  // ホームカテゴリ描画
-  // -------------------------------------------------------
-
-  function renderCompactHomeCategories_() {
-
-    if (!dashboardData) {
-      return;
-    }
-
-
-    const container =
-      document.getElementById(
-        "categoryList"
-      );
-
-
-    if (!container) {
-      return;
-    }
-
-
-    const categories =
-      createCompactCategories_(
-        dashboardData.categories
-      );
-
-
-    if (!categories.length) {
-
-      container.innerHTML =
-        '<div class="compact-category-empty">カテゴリデータがありません</div>';
-
-      return;
-    }
-
-    // =====================================================
-    // カテゴリをグループ分けして直接描画
-    // =====================================================
-
-    const categoryGroups = [
-      {
-        title: "住まい・固定費",
-        keys: [
-          "家賃",
-          "水道光熱費"
-        ]
-      },
-      {
-        title: "日常生活",
-        keys: [
-          "食費",
-          "医療",
-          "日用品",
-          "外食"
-        ]
-      },
-      {
-        title: "家族・子ども",
-        keys: [
-          "子ども用品",
-          "子供用品",
-          "予備費"
-        ]
-      },
-      {
-        title: "その他",
-        keys: [
-          "洋服",
-          "交通費",
-          "趣味娯楽",
-          "税金",
-          "その他"
-        ]
-      }
-    ];
-
-
-    function categoryGroupKey_(value) {
-      return String(value || "")
-        .replace(/^[^\p{L}\p{N}]+/u, "")
-        .replace(/[・\s]/g, "")
-        .trim();
-    }
-
-
-    function renderCompactCategoryRow_(category) {
-
-      const isOpen =
-        openedCategoryKey_ ===
-        category.key;
-
-      return `
-        <div
-          class="compact-category-item ${
-            isOpen ? "is-open" : ""
-          }"
-          data-compact-category="${compactEscape_(
-            category.key
-          )}"
-        >
-
-          <button
-            type="button"
-            class="compact-category-main"
-            data-compact-category-button="${compactEscape_(
-              category.key
-            )}"
-          >
-
-            <span class="compact-category-name">
-              ${compactEscape_(
-                category.name
-              )}
-            </span>
-
-            <span class="compact-category-right">
-
-              <strong class="compact-category-amount">
-                ${compactYen_(
-                  category.amount
-                )}
-              </strong>
-
-              <span
-                class="material-symbols-rounded compact-category-arrow"
-              >
-                ${
-                  isOpen
-                    ? "expand_less"
-                    : "chevron_right"
-                }
-              </span>
-
-            </span>
-
-          </button>
-
-          ${
-            isOpen
-              ? createDetailHTML_(
-                  category
-                )
-              : ""
-          }
-
-        </div>
-      `;
-    }
-
-
-    const groupedKeys =
-      new Set();
-
-
-    const groupedHTML =
-      categoryGroups
-        .map(function (group) {
-
-          const items =
-            categories
-              .filter(function (category) {
-
-                const key =
-                  categoryGroupKey_(
-                    category.name
-                  );
-
-                const matched =
-                  group.keys.some(
-                    function (groupKey) {
-                      return (
-                        key === groupKey ||
-                        key.includes(groupKey)
-                      );
-                    }
-                  );
-
-                if (matched) {
-                  groupedKeys.add(
-                    category.key
-                  );
-                }
-
-                return matched;
-              })
-              .sort(function (a, b) {
-                return (
-                  Number(b.amount || 0) -
-                  Number(a.amount || 0)
-                );
-              });
-
-
-          if (!items.length) {
-            return "";
-          }
-
-
-          return `
-            <div class="compact-category-group">
-
-             <div
-  class="compact-category-group-title"
-  data-group-title="${compactEscape_(group.title)}"
->
-  ${compactEscape_(group.title)}
-</div>
-
-              ${
-                items
-                  .map(
-                    renderCompactCategoryRow_
-                  )
-                  .join("")
-              }
-
-            </div>
-          `;
-        })
-        .join("");
-
-
-    // 将来カテゴリが増えても消えないように
-    // 未分類項目は「その他」の最後へ表示
-    const ungrouped =
-      categories
-        .filter(function (category) {
-          return !groupedKeys.has(
-            category.key
-          );
-        })
-        .sort(function (a, b) {
-          return (
-            Number(b.amount || 0) -
-            Number(a.amount || 0)
-          );
-        });
-
-
-    const ungroupedHTML =
-      ungrouped.length
-        ? `
-          <div class="compact-category-group">
-
-            <div class="compact-category-group-title">
-              その他
-            </div>
-
-            ${
-              ungrouped
-                .map(
-                  renderCompactCategoryRow_
-                )
-                .join("")
-            }
-
-          </div>
-        `
-        : "";
-
-
-    container.innerHTML =
-      groupedHTML +
-      ungroupedHTML;
-   
-
-    // -----------------------------------------------------
-    // 開閉
-    // -----------------------------------------------------
-
-    container
-      .querySelectorAll(
-        "[data-compact-category-button]"
-      )
-      .forEach(
-        function (button) {
-
-          button.addEventListener(
-            "click",
-            function (event) {
-
-              event.preventDefault();
-              event.stopPropagation();
-
-
-              const key =
-                button.dataset
-                  .compactCategoryButton ||
-                "";
-
-
-              openedCategoryKey_ =
-                openedCategoryKey_ === key
-                  ? ""
-                  : key;
-
-
-              renderCompactHomeCategories_();
-            }
-          );
-        }
-      );
-
-
-    // -----------------------------------------------------
-    // 予算修正
-    // -----------------------------------------------------
-
-    // --------------------------------------------------
-// 予算修正
-// 再描画されても動くようにイベント委譲
-// --------------------------------------------------
-
-if (!container.dataset.budgetClickBound) {
-
-  container.dataset.budgetClickBound = "1";
-
-  container.addEventListener(
-    "click",
-    function (event) {
-
-      const button =
-        event.target.closest(
-          "[data-compact-budget-category]"
-        );
-
-      if (
-        !button ||
-        !container.contains(button)
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      const categoryName =
-        button.dataset.compactBudgetCategory || "";
-
-      if (
-        typeof openCategoryBudgetEditor_ ===
-        "function"
-      ) {
-        openCategoryBudgetEditor_(categoryName);
-      }
-    }
-  );
-}
-
-    // -----------------------------------------------------
-    // 支出詳細
-    // -----------------------------------------------------
-
-    container
-      .querySelectorAll(
-        "[data-compact-report-category]"
-      )
-      .forEach(
-        function (button) {
-
-          button.addEventListener(
-            "click",
-            function (event) {
-
-              event.preventDefault();
-              event.stopPropagation();
-
-
-              const categoryName =
-                button.dataset
-                  .compactReportCategory ||
-                "";
-
-
-              // 水道光熱費の場合は
-              // まずレポート画面へ移動
-              // 個別カテゴリは既存レポートを利用
-              if (
-                categoryKey_(
-                  categoryName
-                ) ===
-                "水道・光熱費" ||
-                categoryKey_(
-                  categoryName
-                ) ===
-                "水道光熱費"
-              ) {
-
-                if (
-                  typeof switchPage ===
-                  "function"
-                ) {
-
-                  switchPage(
-                    "report"
-                  );
-                }
-
-                return;
-              }
-
-
-              if (
-                typeof
-                  reportSelectedCategory_ !==
-                "undefined"
-              ) {
-
-                reportSelectedCategory_ =
-                  categoryName;
-              }
-
-
-              if (
-                typeof switchPage ===
-                "function"
-              ) {
-
-                switchPage(
-                  "report"
-                );
-              }
-            }
-          );
-        }
-      );
-  }
-
-
-  // -------------------------------------------------------
-  // CSS
-  // -------------------------------------------------------
-
-  const style =
-    document.createElement(
-      "style"
-    );
-
-
-  style.id =
-    "compactHomeCategoryStyle";
-
-  style.textContent = `
-
-/* =========================================
-   カテゴリ グループ見出し
-========================================= */
-
-#categoryList .compact-category-group-title {
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0.03em;
-  padding: 8px 4px 4px;
-  margin: 0;
-}
-
-/* 住まい・固定費：青 */
-#categoryList
-.compact-category-group-title[data-group-title="住まい・固定費"] {
-  color: #4f7cac;
-}
-
-/* 日常生活：緑 */
-#categoryList
-.compact-category-group-title[data-group-title="日常生活"] {
-  color: #36a269;
-}
-
-/* 家族・子ども：オレンジ */
-#categoryList
-.compact-category-group-title[data-group-title="家族・子ども"] {
-  color: #d88932;
-}
-
-/* その他：グレー */
-#categoryList
-.compact-category-group-title[data-group-title="その他"] {
-  color: #8a9390;
-}
-
-/* グループ間の点線 */
-#categoryList .compact-category-group + .compact-category-group {
-  border-top: 1px dashed #dce3df;
-  margin-top: 5px;
-  padding-top: 3px;
-}
-
-
-/* =========================================
-   ホーム：スマホ用コンパクトカテゴリ
-========================================= */
-
-    /* ==============================================
-       ホーム：スマホ用コンパクトカテゴリ
-       ============================================== */
-
-    #categoryList {
-      display: block !important;
-      padding: 0 !important;
-    }
-
-
-    #categoryList
-    .compact-category-item {
-      border-bottom:
-        1px solid
-        #edf0ee;
-      background:
-        #ffffff;
-    }
-
-
-    #categoryList
-    .compact-category-item:first-child {
-      border-top:
-        1px solid
-        #edf0ee;
-    }
-
-
-    #categoryList
-    .compact-category-main {
-      display: flex;
-      width: 100%;
-      min-height: 48px;
-      align-items: center;
-      justify-content:
-        space-between;
-      gap: 10px;
-
-      padding:
-        10px 4px;
-
-      border: 0;
-      background:
-        transparent;
-
-      color:
-        #202522;
-
-      text-align:
-        left;
-
-      cursor:
-        pointer;
-    }
-
-
-    #categoryList
-    .compact-category-name {
-      min-width: 0;
-      overflow: hidden;
-
-      font-size:
-        14px;
-      font-weight:
-        700;
-
-      text-overflow:
-        ellipsis;
-      white-space:
-        nowrap;
-    }
-
-
-    #categoryList
-    .compact-category-right {
-      display: flex;
-      flex: 0 0 auto;
-      align-items: center;
-      gap: 4px;
-    }
-
-
-    #categoryList
-    .compact-category-amount {
-      font-size:
-        14px;
-      font-weight:
-        800;
-      white-space:
-        nowrap;
-    }
-
-
-    #categoryList
-    .compact-category-arrow {
-      color:
-        #27b85a;
-      font-size:
-        20px;
-    }
-
-
-    #categoryList
-    .compact-category-detail {
-      padding:
-        2px 4px 13px 4px;
-
-      animation:
-        compactCategoryOpen_
-        .16s ease-out;
-    }
-
-
-    @keyframes
-    compactCategoryOpen_ {
-
-      from {
-        opacity: 0;
-        transform:
-          translateY(-3px);
-      }
-
-      to {
-        opacity: 1;
-        transform:
-          translateY(0);
-      }
-    }
-
-
-    #categoryList
-    .compact-budget-numbers {
-      display: flex;
-      align-items: center;
-      justify-content:
-        space-between;
-      gap: 8px;
-
-      margin-bottom:
-        7px;
-
-      color:
-        #7b837e;
-
-      font-size:
-        11px;
-    }
-
-
-    #categoryList
-    .compact-budget-numbers
-    strong {
-      color:
-        #343a36;
-
-      font-size:
-        12px;
-    }
-
-
-    #categoryList
-    .compact-budget-numbers
-    .is-danger,
-    #categoryList
-    .compact-budget-numbers
-    .is-danger strong {
-      color:
-        #e33b3b;
-    }
-
-
-    #categoryList
-    .compact-budget-track {
-      width: 100%;
-      height: 5px;
-
-      overflow: hidden;
-
-      border-radius:
-        999px;
-
-      background:
-        #edf1ee;
-    }
-
-
-    #categoryList
-    .compact-budget-track
-    > span {
-      display: block;
-
-      height: 100%;
-
-      border-radius:
-        inherit;
-
-      background:
-        #39bf64;
-    }
-
-
-    #categoryList
-    .compact-no-budget {
-      color:
-        #969d98;
-
-      font-size:
-        11px;
-    }
-
-
-    #categoryList
-    .compact-utility-breakdown {
-      display: grid;
-      gap: 5px;
-
-      margin-bottom:
-        10px;
-
-      padding:
-        9px 10px;
-
-      border-radius:
-        10px;
-
-      background:
-        #f7faf8;
-    }
-
-
-    #categoryList
-    .compact-utility-row {
-      display: flex;
-      align-items: center;
-      justify-content:
-        space-between;
-
-      font-size:
-        12px;
-    }
-
-
-    #categoryList
-    .compact-utility-row
-    strong {
-      font-size:
-        12px;
-    }
-
-
-    #categoryList
-    .compact-category-actions {
-      display: flex;
-      justify-content:
-        flex-end;
-      gap: 7px;
-
-      margin-top:
-        10px;
-    }
-
-
-    #categoryList
-    .compact-category-actions
-    button {
-      min-height:
-        32px;
-
-      padding:
-        6px 10px;
-
-      border:
-        1px solid
-        #dfe7e1;
-
-      border-radius:
-        9px;
-
-      background:
-        #ffffff;
-
-      color:
-        #269f4e;
-
-      font-size:
-        11px;
-      font-weight:
-        700;
-
-      cursor:
-        pointer;
-    }
-
-
-    #categoryList
-    .compact-category-empty {
-      padding:
-        18px 8px;
-
-      color:
-        #8a938d;
-
-      font-size:
-        12px;
-
-      text-align:
-        center;
-    }
-
-
-    /* 既存の大きなカテゴリカードを
-       ホームでは表示しない */
-
-    #categoryList
-    .category-item {
-      display: none !important;
-    }
-
-
-    @media (
-      max-width: 600px
-    ) {
-
-      #categoryList
-      .compact-category-main {
-        min-height:
-          44px;
-
-        padding:
-          8px 2px;
-      }
-
-
-      #categoryList
-      .compact-category-name,
-      #categoryList
-      .compact-category-amount {
-        font-size:
-          13px;
-      }
-
-    }
-
-  `;
-
-
-  document.head.appendChild(
-    style
-  );
-
-
-  // -------------------------------------------------------
-  // renderHomeの最後に新表示を適用
-  // -------------------------------------------------------
-
-  const renderHomeBeforeCompactCategories_ =
-    renderHome;
-
-
-  renderHome =
-    function () {
-
-      renderHomeBeforeCompactCategories_();
-
-      renderCompactHomeCategories_();
-    };
-
-
-  // 初期表示
-  setTimeout(
-    renderCompactHomeCategories_,
-    100
-  );
-
 })();
