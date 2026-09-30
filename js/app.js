@@ -20246,6 +20246,8 @@ if (
 // =========================================================
 // ホーム：カードの作り直し／チェックリスト
 // ・AI診断カードを削除
+// ・今月の残金・予算・生活費・現在の貯蓄を1枚のカードに合体
+// ・修正ボタンは1つ（予算と現在の貯蓄をまとめて修正）
 // ・右側の矢印を削除
 // ・ホームの書体・サイズを統一
 // ・カードから各画面へ移動
@@ -20292,39 +20294,168 @@ if (
       display: none !important;
     }
 
-    /* 順番：残金カードを一番上に */
+    /* 古い残金カードは使わず、合体カードに置き換える */
+    #page-home .cute-home > #cuteBalanceCard {
+      display: none !important;
+    }
+
+    /* 順番：合体カードを一番上に */
     #page-home .cute-home > * {
       order: 20;
     }
 
-    #page-home .cute-home > #cuteBalanceCard {
+    #page-home .cute-home > #hubSummary {
       order: 1;
     }
 
     /* ホーム全体を同じ書体にする */
     #page-home,
-    #page-home * {
+    #page-home *:not(.material-symbols-rounded) {
       font-family: ${FONT} !important;
     }
 
-    /* 今月の残金カードの文字サイズをそろえる */
-    #page-home .cute-main-heading {
-      font-size: 13px !important;
-      font-weight: 800 !important;
+    /* 合体カード（今月の残金・予算・生活費・現在の貯蓄） */
+    #page-home .hub-summary {
+      position: relative;
+      display: flex !important;
+      flex-direction: column;
+      justify-content: center;
+
+      flex: 1.6 1 auto;
+      max-height: 250px;
+      min-width: 0;
+      margin: 0;
+      padding: 16px 18px 15px;
+
+      box-sizing: border-box;
+      border: 1px solid #f5d7e1;
+      border-radius: 24px;
+      background:
+        radial-gradient(
+          circle at 100% 0%,
+          #ffe2ec 0 66px,
+          transparent 67px
+        ),
+        #ffffff;
+      box-shadow:
+        0 6px 20px
+        rgba(216, 113, 148, 0.09);
+
+      color: #463c40;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    #page-home .cute-budget-row span {
-      font-size: 11px !important;
-      font-weight: 700 !important;
+    #page-home .hub-summary:active {
+      transform: scale(0.995);
     }
 
-    #page-home .cute-budget-row strong {
-      font-size: 15px !important;
-      font-weight: 800 !important;
+    #page-home .hub-summary-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
     }
 
-    #page-home .cute-balance {
-      font-weight: 800 !important;
+    #page-home .hub-summary-title {
+      color: #df7297;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    #page-home .hub-summary-edit {
+      display: grid;
+      place-items: center;
+      flex: 0 0 32px;
+      width: 32px;
+      height: 32px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow:
+        0 3px 10px
+        rgba(219, 116, 151, 0.18);
+      color: #df7297;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    #page-home .hub-summary-balance {
+      margin: 3px 0 0;
+      color: #42383c;
+      font-size: 38px;
+      font-weight: 800;
+      line-height: 1.12;
+      letter-spacing: -1px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #page-home .hub-summary-balance.is-danger {
+      color: #e5484d;
+    }
+
+    #page-home .hub-progress {
+      width: 100%;
+      height: 7px;
+      margin: 12px 0;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #f8e5ec;
+    }
+
+    #page-home .hub-progress-bar {
+      width: 0%;
+      height: 100%;
+      border-radius: 999px;
+      background:
+        linear-gradient(
+          90deg,
+          #f49ab6,
+          #ed729a
+        );
+      transition: width 0.25s ease;
+    }
+
+    #page-home .hub-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    #page-home .hub-stat {
+      min-width: 0;
+      padding: 0 8px;
+      border-left: 1px solid #f6e2e9;
+    }
+
+    #page-home .hub-stat:first-child {
+      padding-left: 0;
+      border-left: 0;
+    }
+
+    #page-home .hub-stat span {
+      display: block;
+      margin-bottom: 2px;
+      color: #a78e97;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+
+    #page-home .hub-stat strong {
+      display: block;
+      color: #493e42;
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.3;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
 
     /* 新しいカード */
@@ -20395,27 +20526,145 @@ if (
       font-variant-numeric: tabular-nums;
     }
 
-    #page-home .hub-edit {
-      display: grid;
-      place-items: center;
-      flex: 0 0 26px;
-      width: 26px;
-      height: 26px;
-      margin: 0;
-      padding: 0;
-      border: 0;
-      border-radius: 50%;
-      background: #ffe5ed;
-      color: #df7297;
-      font-size: 12px;
-      line-height: 1;
-      cursor: pointer;
-    }
-
     @media (max-height: 700px) {
       #page-home .hub-card {
         min-height: 54px;
       }
+
+      #page-home .hub-summary {
+        padding: 12px 15px;
+      }
+
+      #page-home .hub-summary-balance {
+        font-size: 32px;
+      }
+    }
+
+    /* 金額の修正シート */
+    #hubEditOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 6000;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.32);
+      font-family: ${FONT};
+    }
+
+    #hubEditOverlay .hub-sheet {
+      box-sizing: border-box;
+      width: min(460px, 100%);
+      padding:
+        22px
+        20px
+        calc(20px + env(safe-area-inset-bottom, 0px));
+      border-radius: 26px 26px 0 0;
+      background: #ffffff;
+      box-shadow:
+        0 -10px 40px
+        rgba(0, 0, 0, 0.18);
+      color: #463c40;
+    }
+
+    #hubEditOverlay .hub-sheet h3 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    #hubEditOverlay .hub-sheet p {
+      margin: 0 0 16px;
+      color: #a78e97;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    #hubEditOverlay label {
+      display: block;
+      margin-bottom: 14px;
+    }
+
+    #hubEditOverlay label > span {
+      display: block;
+      margin-bottom: 6px;
+      color: #8f7a83;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    #hubEditOverlay .hub-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 52px;
+      padding: 0 14px;
+      box-sizing: border-box;
+      border: 1px solid #f0d5df;
+      border-radius: 15px;
+      background: #fffafc;
+    }
+
+    #hubEditOverlay .hub-input-wrap:focus-within {
+      border-color: #ed729a;
+      box-shadow: 0 0 0 3px rgba(237, 114, 154, 0.14);
+    }
+
+    #hubEditOverlay .hub-input-wrap b {
+      color: #b49aa3;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    #hubEditOverlay input {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 100%;
+      padding: 0;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: #463c40;
+      font-family: inherit;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    #hubEditOverlay .hub-sheet-actions {
+      display: grid;
+      grid-template-columns: 1fr 1.6fr;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    #hubEditOverlay .hub-sheet-actions button {
+      height: 50px;
+      border: 0;
+      border-radius: 15px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    #hubEditOverlay .hub-sheet-cancel {
+      background: #f7eef1;
+      color: #8f7a83;
+    }
+
+    #hubEditOverlay .hub-sheet-save {
+      background:
+        linear-gradient(
+          135deg,
+          #f49ab6,
+          #ed729a
+        );
+      color: #ffffff;
+    }
+
+    #hubEditOverlay .hub-sheet-actions button:disabled {
+      opacity: 0.6;
+      cursor: wait;
     }
 
     /* 下のタブ：6つ並べる */
@@ -20449,15 +20698,6 @@ if (
   // ---------- ホームのカードを作る ----------
 
   const CARDS = [
-    {
-      id: "hubSavings",
-      icon: "🐷",
-      color: "hub-yellow",
-      title: "現在の貯蓄",
-      value: "¥0",
-      page: "report",
-      edit: true
-    },
     {
       id: "hubPurchase",
       icon: "🛒",
@@ -20533,22 +20773,6 @@ if (
       box.appendChild(icon);
       box.appendChild(title);
 
-      // 修正ボタンは「現在の貯蓄」のすぐ右横に置く
-      if (card.edit) {
-        const edit =
-          document.createElement("button");
-
-        edit.type = "button";
-        edit.className = "hub-edit";
-        edit.setAttribute(
-          "aria-label",
-          "現在の貯蓄を修正"
-        );
-        edit.textContent = "✎";
-
-        box.appendChild(edit);
-      }
-
       const value =
         document.createElement("span");
 
@@ -20565,6 +20789,374 @@ if (
   buildHubCards_();
 
 
+  // ---------- 合体カード ----------
+
+  function buildSummary_() {
+    const home =
+      document.querySelector(
+        "#page-home .cute-home"
+      );
+
+    if (
+      !home ||
+      document.getElementById("hubSummary")
+    ) {
+      return;
+    }
+
+    const box =
+      document.createElement("div");
+
+    box.id = "hubSummary";
+    box.className = "hub-summary";
+    box.dataset.page = "report";
+    box.setAttribute("role", "button");
+    box.tabIndex = 0;
+
+    box.innerHTML = `
+      <div class="hub-summary-head">
+
+        <span class="hub-summary-title">
+          ♡ 今月の残金
+        </span>
+
+        <button
+          type="button"
+          class="hub-summary-edit"
+          aria-label="予算と現在の貯蓄を修正"
+        >
+          ✎
+        </button>
+
+      </div>
+
+      <div
+        class="hub-summary-balance"
+        id="hubSummaryBalance"
+      >
+        ¥0
+      </div>
+
+      <div class="hub-progress">
+        <div
+          class="hub-progress-bar"
+          id="hubSummaryBar"
+        ></div>
+      </div>
+
+      <div class="hub-stats">
+
+        <div class="hub-stat">
+          <span>予算</span>
+          <strong id="hubSummaryBudget">¥0</strong>
+        </div>
+
+        <div class="hub-stat">
+          <span>今月の生活費</span>
+          <strong id="hubSummaryUsed">¥0</strong>
+        </div>
+
+        <div class="hub-stat">
+          <span>現在の貯蓄</span>
+          <strong id="hubSummarySavings">¥0</strong>
+        </div>
+
+      </div>
+    `;
+
+    home.insertBefore(box, home.firstChild);
+  }
+
+  buildSummary_();
+
+
+  // ---------- 予算と現在の貯蓄の修正 ----------
+
+  function yenToNumber_(text) {
+    const digits =
+      String(text || "")
+        .normalize("NFKC")
+        .replace(/[^0-9]/g, "");
+
+    return digits ? Number(digits) : 0;
+  }
+
+  function textOf_(id) {
+    const node =
+      document.getElementById(id);
+
+    return node
+      ? String(node.textContent || "")
+      : "";
+  }
+
+  function toast_(message) {
+    if (typeof showToast === "function") {
+      showToast(message);
+    }
+  }
+
+  function closeEditSheet_() {
+    const overlay =
+      document.getElementById(
+        "hubEditOverlay"
+      );
+
+    if (overlay) {
+      overlay.remove();
+    }
+  }
+
+  function openEditSheet_() {
+    if (document.getElementById("hubEditOverlay")) {
+      return;
+    }
+
+    const budgetNow =
+      yenToNumber_(textOf_("budgetMoney"));
+
+    const savingsNow =
+      yenToNumber_(textOf_("savingActual"));
+
+    const overlay =
+      document.createElement("div");
+
+    overlay.id = "hubEditOverlay";
+
+    overlay.innerHTML = `
+      <div
+        class="hub-sheet"
+        role="dialog"
+        aria-modal="true"
+      >
+
+        <h3>金額を修正</h3>
+
+        <p>変えたい金額を入力して保存してください。</p>
+
+        <label>
+          <span>毎月の予算</span>
+
+          <div class="hub-input-wrap">
+            <b>¥</b>
+            <input
+              type="text"
+              inputmode="numeric"
+              id="hubEditBudget"
+              autocomplete="off"
+            >
+          </div>
+        </label>
+
+        <label>
+          <span>現在の貯蓄</span>
+
+          <div class="hub-input-wrap">
+            <b>¥</b>
+            <input
+              type="text"
+              inputmode="numeric"
+              id="hubEditSavings"
+              autocomplete="off"
+            >
+          </div>
+        </label>
+
+        <div class="hub-sheet-actions">
+
+          <button
+            type="button"
+            class="hub-sheet-cancel"
+          >
+            キャンセル
+          </button>
+
+          <button
+            type="button"
+            class="hub-sheet-save"
+          >
+            保存
+          </button>
+
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const budgetInput =
+      document.getElementById("hubEditBudget");
+
+    const savingsInput =
+      document.getElementById("hubEditSavings");
+
+    budgetInput.value = String(budgetNow);
+    savingsInput.value = String(savingsNow);
+
+    [budgetInput, savingsInput].forEach(
+      function (input) {
+        input.addEventListener(
+          "input",
+          function () {
+            input.value =
+              input.value
+                .normalize("NFKC")
+                .replace(/[^0-9]/g, "");
+          }
+        );
+
+        input.addEventListener(
+          "focus",
+          function () {
+            input.select();
+          }
+        );
+      }
+    );
+
+    overlay.addEventListener(
+      "click",
+      function (event) {
+        if (event.target === overlay) {
+          closeEditSheet_();
+        }
+      }
+    );
+
+    overlay
+      .querySelector(".hub-sheet-cancel")
+      .addEventListener(
+        "click",
+        closeEditSheet_
+      );
+
+    const saveButton =
+      overlay.querySelector(".hub-sheet-save");
+
+    saveButton.addEventListener(
+      "click",
+      async function () {
+        const newBudget =
+          yenToNumber_(budgetInput.value);
+
+        const newSavings =
+          yenToNumber_(savingsInput.value);
+
+        if (
+          newBudget < 10000 ||
+          newBudget > 10000000
+        ) {
+          toast_("予算は1万円以上で入力してください");
+          return;
+        }
+
+        saveButton.disabled = true;
+        saveButton.textContent = "保存中…";
+
+        try {
+          // 予算
+          if (newBudget !== budgetNow) {
+            const result =
+              await fetchJson(
+                API_BASE +
+                "?action=saveMonthlyBudget" +
+                "&budget=" +
+                encodeURIComponent(newBudget) +
+                "&_=" +
+                Date.now()
+              );
+
+            if (!result || result.success !== true) {
+              throw new Error(
+                (result && result.error) ||
+                "予算を保存できませんでした"
+              );
+            }
+
+            if (typeof loadDashboard === "function") {
+              await loadDashboard();
+            }
+          }
+
+          // 現在の貯蓄
+          if (newSavings !== savingsNow) {
+            const response =
+              await fetch(
+                API_BASE +
+                "?action=saveCurrentSavings" +
+                "&amount=" +
+                encodeURIComponent(newSavings) +
+                "&_=" +
+                Date.now(),
+                {
+                  method: "GET",
+                  cache: "no-store"
+                }
+              );
+
+            const result =
+              await response.json();
+
+            if (!result || result.success !== true) {
+              throw new Error(
+                (result && result.error) ||
+                "貯蓄を保存できませんでした"
+              );
+            }
+
+            const amount =
+              Number(result.amount) || 0;
+
+            if (
+              typeof dashboardData !== "undefined" &&
+              dashboardData
+            ) {
+              if (!dashboardData.saving) {
+                dashboardData.saving = {};
+              }
+
+              dashboardData.saving.current = amount;
+              dashboardData.saving.actual = amount;
+            }
+
+            const yen =
+              "¥" + amount.toLocaleString("ja-JP");
+
+            ["savingActual", "reportSaving"].forEach(
+              function (id) {
+                const node =
+                  document.getElementById(id);
+
+                if (node) {
+                  node.textContent = yen;
+                }
+              }
+            );
+          }
+
+          toast_("修正しました");
+          closeEditSheet_();
+          syncHub_();
+        }
+        catch (error) {
+          console.error(error);
+
+          toast_(
+            "保存できませんでした：" +
+            String(error.message || error)
+          );
+
+          saveButton.disabled = false;
+          saveButton.textContent = "保存";
+        }
+      }
+    );
+
+    budgetInput.focus();
+  }
+
+
   // ---------- クリック ----------
 
   document.addEventListener(
@@ -20579,17 +21171,15 @@ if (
         return;
       }
 
-      // 貯蓄の修正ボタン
-      if (target.closest("#hubSavings .hub-edit")) {
-        const legacy =
-          document.getElementById(
-            "currentSavingsEditButton"
-          );
+      // 修正ボタン（予算と現在の貯蓄）
+      if (target.closest("#hubSummary .hub-summary-edit")) {
+        openEditSheet_();
+        return;
+      }
 
-        if (legacy) {
-          legacy.click();
-        }
-
+      // 合体カード → カテゴリ
+      if (target.closest("#hubSummary")) {
+        go_("report");
         return;
       }
 
@@ -20598,15 +21188,6 @@ if (
       if (card) {
         go_(card.dataset.page);
         return;
-      }
-
-      // 今月の残金 → カテゴリ（✎ボタンは除く）
-      if (target.closest("#cuteBalanceCard")) {
-        if (target.closest("button")) {
-          return;
-        }
-
-        go_("report");
       }
     }
   );
@@ -20630,11 +21211,11 @@ if (
         return;
       }
 
-      if (target.closest(".hub-edit")) {
+      if (target.closest(".hub-summary-edit")) {
         return;
       }
 
-      if (target.id === "cuteBalanceCard") {
+      if (target.id === "hubSummary") {
         event.preventDefault();
         go_("report");
         return;
@@ -21211,16 +21792,55 @@ if (
     }
   }
 
-  function syncHub_() {
-    const saving =
-      document.getElementById("savingActual");
+  function syncSummary_() {
+    const remainingText =
+      textOf_("totalMoney").trim();
 
-    if (saving) {
-      setValue_(
-        "hubSavingsValue",
-        String(saving.textContent || "").trim()
+    const budgetText =
+      textOf_("budgetMoney").trim();
+
+    const usedText =
+      textOf_("balanceMoney").trim();
+
+    const savingsText =
+      textOf_("savingActual").trim();
+
+    setValue_("hubSummaryBalance", remainingText);
+    setValue_("hubSummaryBudget", budgetText);
+    setValue_("hubSummaryUsed", usedText);
+    setValue_("hubSummarySavings", savingsText);
+
+    const budget = yenToNumber_(budgetText);
+    const used = yenToNumber_(usedText);
+
+    const percent =
+      budget > 0
+        ? Math.max(
+            0,
+            Math.min(100, (used / budget) * 100)
+          )
+        : 0;
+
+    const bar =
+      document.getElementById("hubSummaryBar");
+
+    if (bar) {
+      bar.style.width = percent + "%";
+    }
+
+    const balance =
+      document.getElementById("hubSummaryBalance");
+
+    if (balance) {
+      balance.classList.toggle(
+        "is-danger",
+        remainingText.indexOf("-") !== -1
       );
     }
+  }
+
+  function syncHub_() {
+    syncSummary_();
 
     const purchase =
       document.getElementById(
