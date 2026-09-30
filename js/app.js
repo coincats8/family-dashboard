@@ -21985,6 +21985,8 @@ if (
 // ・電気／ガス／水道を「水道光熱費」に合体（押すと内訳が分かれて見える）
 // ・内訳では「電気」「ガス」「水道」だけを見出しにし、同じ意味の言葉は重ねない
 // ・近いカテゴリをジャンルにまとめ、点線とジャンル名で区切る
+// ・各行を「件数 ｜ 金額 ｜ 予算額」の右合わせにし、長いときは幅に合わせて縮小
+// ・表示月の下に「今月の残金・予算・生活費・現在の貯蓄」を表示
 // ・件数と金額を右合わせで表示
 // app.jsの一番最後へ追加
 // =========================================================
@@ -22082,12 +22084,21 @@ if (
   style.id = "categoryTidyStyle";
 
   style.textContent = `
-    /* 行：カテゴリ名 ｜ 件数 ｜ 金額（右合わせ） */
+    /* 列の幅（件数 ｜ 金額 ｜ 予算） */
+    #reportCategoryList {
+      --c-count: 34px;
+      --c-total: 74px;
+      --c-budget: 68px;
+    }
+
+    /* 行：カテゴリ名 ｜ 件数 ｜ 金額 ｜ 予算額（すべて右合わせ） */
     .report-history-summary {
       grid-template-columns:
         minmax(0, 1fr)
-        44px
-        92px !important;
+        var(--c-count)
+        var(--c-total)
+        var(--c-budget) !important;
+      column-gap: 6px !important;
     }
 
     .report-history-title {
@@ -22095,19 +22106,40 @@ if (
       grid-row: 1;
     }
 
+    .report-history-count,
+    .report-history-total,
+    .report-history-budget {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-align: right;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
     .report-history-count {
       grid-column: 2;
       grid-row: 1;
-      text-align: right;
-      font-size: 11px !important;
+      color: #8a928d;
+      font-size: 11px;
     }
 
     .report-history-total {
       grid-column: 3;
       grid-row: 1;
-      text-align: right;
-      font-size: 14px !important;
-      font-variant-numeric: tabular-nums;
+      font-size: 14px;
+    }
+
+    .report-history-total.is-over {
+      color: #e5484d !important;
+    }
+
+    .report-history-budget {
+      grid-column: 4;
+      grid-row: 1;
+      color: #a78e97;
+      font-size: 12px;
+      font-weight: 600;
     }
 
     /* 右端の「›」は表示しない */
@@ -22183,9 +22215,10 @@ if (
       display: grid;
       grid-template-columns:
         minmax(0, 1fr)
-        44px
-        92px;
-      gap: 8px;
+        var(--c-count)
+        var(--c-total)
+        var(--c-budget);
+      column-gap: 6px;
       align-items: center;
       padding: 10px 2px 4px;
     }
@@ -22200,21 +22233,118 @@ if (
       white-space: nowrap;
     }
 
+    .utility-part-count,
+    .utility-part-total,
+    .utility-part-budget {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-align: right;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
     .utility-part-count {
       color: #8a928d;
       font-size: 11px;
-      text-align: right;
-      white-space: nowrap;
     }
 
     .utility-part-total {
       color: #188b40;
       font-size: 13px;
       font-weight: 800;
+    }
+
+    .utility-part-total.is-over {
+      color: #e5484d;
+    }
+
+    .utility-part-budget {
+      color: #a78e97;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* 最初のジャンル見出しの右に「件数・金額・予算」の見出しを出す */
+    .genre-header.has-cols {
+      padding-right: 15px;
+    }
+
+    .genre-header.has-cols::after {
+      order: 2;
+    }
+
+    .genre-cols {
+      order: 3;
+      display: flex;
+      flex: 0 0 auto;
+      gap: 6px;
+      color: #b8a3ab;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .genre-cols span {
+      display: block;
       text-align: right;
+    }
+
+    .genre-cols span:nth-child(1) { width: var(--c-count); }
+    .genre-cols span:nth-child(2) { width: var(--c-total); }
+    .genre-cols span:nth-child(3) { width: var(--c-budget); }
+
+    /* 表示月の下：今月の残金・予算・生活費・現在の貯蓄 */
+    #categorySummary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      box-sizing: border-box;
+      width: 100%;
+      margin: 0 0 8px;
+      padding: 8px 4px;
+      border: 1px solid #f5d7e1;
+      border-radius: 20px;
+      background: #ffffff;
+      box-shadow: 0 4px 13px rgba(213, 112, 147, 0.07);
+    }
+
+    #categorySummary .strip-item {
+      min-width: 0;
+      padding: 0 7px;
+      border-left: 1px solid #f6e2e9;
+    }
+
+    #categorySummary .strip-item:first-child {
+      border-left: 0;
+    }
+
+    #categorySummary .strip-label {
+      display: block;
+      overflow: hidden;
+      margin-bottom: 2px;
+      color: #a78e97;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.3;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #categorySummary .strip-value {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      color: #493e42;
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.3;
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
+
+    #categorySummary .strip-value.is-danger {
+      color: #e5484d;
+    }
+
   `;
 
   document.head.appendChild(style);
@@ -22235,6 +22365,70 @@ if (
         .replace(/[^0-9]/g, "");
 
     return digits ? Number(digits) : 0;
+  }
+
+  // カテゴリごとの予算（家計データのカテゴリ名 → 予算額）
+  function budgetMap_() {
+    const map = new Map();
+
+    const categories =
+      typeof dashboardData !== "undefined" &&
+      dashboardData &&
+      Array.isArray(dashboardData.categories)
+        ? dashboardData.categories
+        : [];
+
+    categories.forEach(function (category) {
+      const budget =
+        Number(
+          String(
+            category.budget === undefined ||
+            category.budget === null
+              ? 0
+              : category.budget
+          ).replace(/[^0-9.-]/g, "")
+        ) || 0;
+
+      [category.name, category.category]
+        .forEach(function (label) {
+          const key = fullName_(label);
+
+          if (key && !map.has(key)) {
+            map.set(key, budget);
+          }
+        });
+    });
+
+    return map;
+  }
+
+  // 名前が「電気」「電気代」のように少し違っても同じカテゴリとして探す
+  function budgetFor_(map, name) {
+    const key = fullName_(name);
+
+    if (map.has(key)) {
+      return map.get(key);
+    }
+
+    const base = plainName_(name);
+
+    let found = 0;
+
+    map.forEach(function (budget, label) {
+      if (
+        !found &&
+        base &&
+        plainName_(label) === base
+      ) {
+        found = budget;
+      }
+    });
+
+    return found;
+  }
+
+  function budgetText_(budget) {
+    return budget > 0 ? yen_(budget) : "―";
   }
 
   function yen_(number) {
@@ -22467,6 +22661,185 @@ if (
     });
   }
 
+  // 最初のジャンル見出しだけ、右に「件数 金額 予算」を出す
+  function updateHeaderCols_() {
+    const list =
+      document.getElementById(
+        "reportCategoryList"
+      );
+
+    if (!list) {
+      return;
+    }
+
+    const headers =
+      Array.from(list.children)
+        .filter(isHeader_);
+
+    headers.forEach(function (header, index) {
+      const cols =
+        header.querySelector(".genre-cols");
+
+      if (index === 0) {
+        header.classList.add("has-cols");
+
+        if (!cols) {
+          const box =
+            document.createElement("div");
+
+          box.className = "genre-cols";
+
+          ["件数", "金額", "予算"].forEach(
+            function (label) {
+              const span =
+                document.createElement("span");
+
+              span.textContent = label;
+              box.appendChild(span);
+            }
+          );
+
+          header.appendChild(box);
+        }
+      }
+      else {
+        header.classList.remove("has-cols");
+
+        if (cols) {
+          cols.remove();
+        }
+      }
+    });
+  }
+
+  // 各行の右側に予算額を入れ、予算を超えた金額は赤くする
+  function decorateBudgets_() {
+    const list =
+      document.getElementById(
+        "reportCategoryList"
+      );
+
+    if (!list) {
+      return;
+    }
+
+    const map = budgetMap_();
+
+    Array.from(list.children)
+      .filter(isGroup_)
+      .forEach(function (group) {
+        const summary =
+          group.querySelector(
+            ":scope > .report-history-summary"
+          );
+
+        if (!summary) {
+          return;
+        }
+
+        let budgetNode =
+          summary.querySelector(
+            ".report-history-budget"
+          );
+
+        if (!budgetNode) {
+          budgetNode =
+            document.createElement("span");
+
+          budgetNode.className =
+            "report-history-budget";
+
+          summary.appendChild(budgetNode);
+        }
+
+        let budget = 0;
+
+        if (group.dataset.utility === "1") {
+          // 水道光熱費：電気・ガス・水道の予算を合計
+          group
+            .querySelectorAll(
+              ".utility-part-budget"
+            )
+            .forEach(function (partNode) {
+              const partBudget =
+                budgetFor_(
+                  map,
+                  partNode.dataset.utilityName
+                );
+
+              setText_(
+                partNode,
+                budgetText_(partBudget)
+              );
+
+              const head =
+                partNode.parentElement;
+
+              const totalNode =
+                head &&
+                head.querySelector(
+                  ".utility-part-total"
+                );
+
+              if (totalNode) {
+                totalNode.classList.toggle(
+                  "is-over",
+                  partBudget > 0 &&
+                    yenToNumber_(
+                      totalNode.textContent
+                    ) > partBudget
+                );
+              }
+
+              budget += partBudget;
+            });
+
+          if (budget === 0) {
+            budget =
+              budgetFor_(map, UTILITY_TITLE);
+          }
+        }
+        else {
+          const title =
+            group.querySelector(
+              ".report-history-title"
+            );
+
+          budget =
+            budgetFor_(
+              map,
+              title ? title.textContent : ""
+            );
+        }
+
+        setText_(
+          budgetNode,
+          budgetText_(budget)
+        );
+
+        const totalNode =
+          summary.querySelector(
+            ".report-history-total"
+          );
+
+        if (totalNode) {
+          totalNode.classList.toggle(
+            "is-over",
+            budget > 0 &&
+              yenToNumber_(
+                totalNode.textContent
+              ) > budget
+          );
+        }
+      });
+  }
+
+  function setText_(node, text) {
+    if (node.textContent !== text) {
+      node.textContent = text;
+    }
+  }
+
   function countOf_(group) {
     const body =
       group.querySelector(
@@ -22593,9 +22966,18 @@ if (
       "report-history-count";
     countNode.textContent = count + "件";
 
+    const budgetNode =
+      document.createElement("span");
+
+    budgetNode.className =
+      "report-history-budget";
+
     summary.appendChild(title);
     summary.appendChild(totalNode);
     summary.appendChild(countNode);
+    summary.appendChild(budgetNode);
+
+    merged.dataset.utility = "1";
 
     const body =
       document.createElement("div");
@@ -22635,9 +23017,18 @@ if (
       partTotal.textContent =
         yen_(part.total);
 
+      const partBudget =
+        document.createElement("span");
+
+      partBudget.className =
+        "utility-part-budget";
+      partBudget.dataset.utilityName =
+        part.name;
+
       head.appendChild(partName);
       head.appendChild(partCount);
       head.appendChild(partTotal);
+      head.appendChild(partBudget);
 
       section.appendChild(head);
 
@@ -22752,6 +23143,312 @@ if (
   }
 
 
+  // ---------- 表示月の下：今月の残金・予算・生活費・現在の貯蓄 ----------
+
+  const STRIP_ITEMS = [
+    { id: "stripBalance", label: "今月の残金" },
+    { id: "stripBudget", label: "予算" },
+    { id: "stripUsed", label: "今月の生活費" },
+    { id: "stripSavings", label: "現在の貯蓄" }
+  ];
+
+  function ensureStrip_() {
+    const page =
+      document.getElementById("page-report");
+
+    if (!page) {
+      return null;
+    }
+
+    let strip =
+      document.getElementById("categorySummary");
+
+    if (!strip) {
+      strip = document.createElement("div");
+      strip.id = "categorySummary";
+
+      STRIP_ITEMS.forEach(function (item) {
+        const box =
+          document.createElement("div");
+
+        box.className = "strip-item";
+
+        const label =
+          document.createElement("span");
+
+        label.className = "strip-label";
+        label.textContent = item.label;
+
+        const value =
+          document.createElement("strong");
+
+        value.className = "strip-value";
+        value.id = item.id;
+        value.textContent = "―";
+
+        box.appendChild(label);
+        box.appendChild(value);
+        strip.appendChild(box);
+      });
+    }
+
+    // 表示月の選択のすぐ下に置く
+    const selector =
+      document.getElementById(
+        "categoryMonthSelector"
+      );
+
+    if (selector) {
+      if (selector.nextElementSibling !== strip) {
+        selector.insertAdjacentElement(
+          "afterend",
+          strip
+        );
+      }
+    }
+    else if (!strip.parentNode) {
+      const card =
+        document.querySelector(
+          "#page-report .card"
+        );
+
+      if (card && card.parentNode) {
+        card.parentNode.insertBefore(strip, card);
+      }
+    }
+
+    return strip;
+  }
+
+  function monthLabelNow_() {
+    const now = new Date();
+
+    return (
+      now.getFullYear() +
+      "年" +
+      (now.getMonth() + 1) +
+      "月"
+    );
+  }
+
+  function updateStrip_() {
+    const strip = ensureStrip_();
+
+    if (!strip) {
+      return;
+    }
+
+    const budgetText =
+      textOf_("hubSummaryBudget") ||
+      textOf_("budgetMoney");
+
+    const savingsText =
+      textOf_("hubSummarySavings") ||
+      textOf_("savingActual");
+
+    let balanceText;
+    let usedText;
+
+    const label =
+      document.getElementById(
+        "categoryMonthLabel"
+      );
+
+    const shown =
+      label
+        ? String(label.textContent || "").trim()
+        : "";
+
+    if (!shown || shown === monthLabelNow_()) {
+      // 今月：ホームと同じ数字
+      balanceText =
+        textOf_("hubSummaryBalance") ||
+        textOf_("totalMoney");
+
+      usedText =
+        textOf_("hubSummaryUsed") ||
+        textOf_("balanceMoney");
+    }
+    else {
+      // 過去の月：表示している一覧の合計から計算
+      const list =
+        document.getElementById(
+          "reportCategoryList"
+        );
+
+      let used = 0;
+
+      if (list) {
+        Array.from(list.children)
+          .filter(isGroup_)
+          .forEach(function (group) {
+            const totalNode =
+              group.querySelector(
+                ".report-history-total"
+              );
+
+            used += yenToNumber_(
+              totalNode
+                ? totalNode.textContent
+                : ""
+            );
+          });
+      }
+
+      const budget = yenToNumber_(budgetText);
+      const remaining = budget - used;
+
+      usedText = yen_(used);
+
+      balanceText =
+        (remaining < 0 ? "-" : "") +
+        yen_(Math.abs(remaining));
+    }
+
+    setText_(
+      document.getElementById("stripBalance"),
+      balanceText || "―"
+    );
+    setText_(
+      document.getElementById("stripBudget"),
+      budgetText || "―"
+    );
+    setText_(
+      document.getElementById("stripUsed"),
+      usedText || "―"
+    );
+    setText_(
+      document.getElementById("stripSavings"),
+      savingsText || "―"
+    );
+
+    document
+      .getElementById("stripBalance")
+      .classList.toggle(
+        "is-danger",
+        String(balanceText || "").indexOf("-") !== -1
+      );
+  }
+
+  function textOf_(id) {
+    const node =
+      document.getElementById(id);
+
+    return node
+      ? String(node.textContent || "").trim()
+      : "";
+  }
+
+
+  // ---------- 文字が入りきらないときは、幅に合わせて縮小 ----------
+  // 同じ列は同じ大きさにそろえる（一番小さくなる大きさに合わせる）
+
+  const FIT_GROUPS = [
+    { selector: "#reportCategoryList .report-history-title", base: 14, min: 11 },
+    { selector: "#reportCategoryList .report-history-count", base: 11, min: 9 },
+    { selector: "#reportCategoryList .report-history-total", base: 14, min: 9 },
+    { selector: "#reportCategoryList .report-history-budget", base: 12, min: 9 },
+    { selector: "#reportCategoryList .utility-part-count", base: 11, min: 9 },
+    { selector: "#reportCategoryList .utility-part-total", base: 13, min: 9 },
+    { selector: "#reportCategoryList .utility-part-budget", base: 12, min: 9 },
+    { selector: "#categorySummary .strip-value", base: 15, min: 10 },
+    { selector: "#categorySummary .strip-label", base: 11, min: 9 }
+  ];
+
+  function fitGroup_(group) {
+    const nodes =
+      Array.from(
+        document.querySelectorAll(group.selector)
+      ).filter(function (node) {
+        return node.clientWidth > 0;
+      });
+
+    if (nodes.length === 0) {
+      return;
+    }
+
+    let smallest = group.base;
+
+    nodes.forEach(function (node) {
+      let size = group.base;
+
+      node.style.setProperty(
+        "font-size",
+        size + "px",
+        "important"
+      );
+
+      while (
+        node.scrollWidth > node.clientWidth + 0.5 &&
+        size > group.min
+      ) {
+        size -= 0.5;
+
+        node.style.setProperty(
+          "font-size",
+          size + "px",
+          "important"
+        );
+      }
+
+      smallest = Math.min(smallest, size);
+    });
+
+    nodes.forEach(function (node) {
+      node.style.setProperty(
+        "font-size",
+        smallest + "px",
+        "important"
+      );
+    });
+  }
+
+  let fitSignature_ = "";
+  let fitFrame_ = 0;
+
+  function fitAll_() {
+    if (fitFrame_) {
+      return;
+    }
+
+    fitFrame_ =
+      requestAnimationFrame(function () {
+        fitFrame_ = 0;
+
+        const page =
+          document.getElementById("page-report");
+
+        if (!page || page.hidden) {
+          return;
+        }
+
+        const list =
+          document.getElementById(
+            "reportCategoryList"
+          );
+
+        const signature =
+          (list ? list.textContent : "") +
+          "|" +
+          (
+            document.getElementById(
+              "categorySummary"
+            ) || { textContent: "" }
+          ).textContent +
+          "|" +
+          page.clientWidth;
+
+        if (signature === fitSignature_) {
+          return;
+        }
+
+        fitSignature_ = signature;
+
+        FIT_GROUPS.forEach(fitGroup_);
+      });
+  }
+
+
   // ---------- 一覧が描き直されるたびに合体する ----------
 
   let working_ = false;
@@ -22766,6 +23463,10 @@ if (
     try {
       mergeUtilities_();
       organizeGenres_();
+      updateHeaderCols_();
+      decorateBudgets_();
+      updateStrip_();
+      fitAll_();
     }
     catch (error) {
       console.error(error);
@@ -22805,6 +23506,45 @@ if (
       .observe(list, { childList: true });
 
     scheduleMerge_();
+
+    // 家計データが更新されたときも、予算や数字を最新にする
+    setInterval(function () {
+      const page =
+        document.getElementById("page-report");
+
+      if (page && !page.hidden) {
+        scheduleMerge_();
+      }
+    }, 1500);
+
+    window.addEventListener("resize", function () {
+      fitSignature_ = "";
+      fitAll_();
+    });
+
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () {
+        fitSignature_ = "";
+        fitAll_();
+      });
+    }
+
+    // カテゴリ画面を開いたときにも整える
+    if (typeof switchPage === "function") {
+      const originalSwitchPage_ = switchPage;
+
+      switchPage = async function (page) {
+        const result =
+          await originalSwitchPage_(page);
+
+        if (page === "report") {
+          fitSignature_ = "";
+          scheduleMerge_();
+        }
+
+        return result;
+      };
+    }
   }
 
   watchList_();
@@ -23904,16 +24644,23 @@ if (
     }
 
     #reportCategoryList > .genre-header:first-child,
+    #reportCategoryList .genre-header.has-cols,
     #reportCategoryList .report-purchase-intro + .genre-header {
       margin-top: 2px !important;
     }
 
     #reportCategoryList .report-history-group {
-      margin-bottom: 7px !important;
+      margin-bottom: 6px !important;
     }
 
     #reportCategoryList .report-history-summary {
-      padding: 11px 14px !important;
+      padding: 10px 14px !important;
+    }
+
+    /* カテゴリ画面は1画面に収めるため、下の更新時刻の行は出さない */
+    body:has(#page-report:not([hidden])) .update-status,
+    body:has(#page-report:not([hidden])) .bottom-space {
+      display: none !important;
     }
   `;
 
