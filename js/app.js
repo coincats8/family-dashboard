@@ -19501,3 +19501,439 @@ if (
 
   renderHomeMonthlyPurchase_();
 })();
+
+
+// =========================================================
+// 引っ張って更新（プルトゥリフレッシュ）
+// 右上の更新ボタンは非表示にする
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.pullToRefreshAdded_) {
+    return;
+  }
+
+  window.pullToRefreshAdded_ = true;
+
+  const THRESHOLD = 70;
+  const MAX_PULL = 130;
+
+  let startY = 0;
+  let startX = 0;
+  let pulling = false;
+  let pullDistance = 0;
+  let refreshing = false;
+  let indicator = null;
+
+
+  // ---------- 表示 ----------
+
+  function addStyle_() {
+    const style =
+      document.createElement("style");
+
+    style.textContent = `
+      #pullRefreshIndicator {
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: 0;
+        z-index: 9999;
+        display: flex;
+        justify-content: center;
+        pointer-events: none;
+        transform: translateY(-60px);
+        opacity: 0;
+        padding-top:
+          env(safe-area-inset-top, 0px);
+      }
+
+      #pullRefreshIndicator .pr-chip {
+        margin-top: 10px;
+        padding: 8px 16px;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #555;
+        font-size: 13px;
+        font-weight: 600;
+        box-shadow:
+          0 4px 14px rgba(0, 0, 0, 0.12);
+        white-space: nowrap;
+      }
+
+      #pullRefreshIndicator.pr-animate {
+        transition:
+          transform 0.25s ease,
+          opacity 0.25s ease;
+      }
+
+      html,
+      body {
+        overscroll-behavior-y: contain;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+
+  function createIndicator_() {
+    indicator =
+      document.createElement("div");
+
+    indicator.id =
+      "pullRefreshIndicator";
+
+    indicator.innerHTML =
+      '<div class="pr-chip">' +
+      "↓ 引っ張って更新" +
+      "</div>";
+
+    document.body.appendChild(indicator);
+  }
+
+
+  function setChip_(text) {
+    if (!indicator) {
+      return;
+    }
+
+    const chip =
+      indicator.querySelector(".pr-chip");
+
+    if (chip) {
+      chip.textContent = text;
+    }
+  }
+
+
+  function moveIndicator_(distance) {
+    if (!indicator) {
+      return;
+    }
+
+    const y = distance - 60;
+
+    indicator.style.transform =
+      "translateY(" + y + "px)";
+
+    indicator.style.opacity =
+      String(Math.min(distance / THRESHOLD, 1));
+  }
+
+
+  function hideIndicator_() {
+    if (!indicator) {
+      return;
+    }
+
+    indicator.classList.add("pr-animate");
+    indicator.style.transform =
+      "translateY(-60px)";
+    indicator.style.opacity = "0";
+
+    setTimeout(function () {
+      if (indicator) {
+        indicator.classList.remove("pr-animate");
+      }
+    }, 300);
+  }
+
+
+  // ---------- 判定 ----------
+
+  function isModalOpen_() {
+    return Boolean(
+      document.querySelector(
+        '#scheduleModal:not([hidden]), ' +
+        '.modal:not([hidden]), ' +
+        '[role="dialog"]:not([hidden])'
+      )
+    );
+  }
+
+
+  function insideScrolledArea_(target) {
+    let node = target;
+
+    while (
+      node &&
+      node !== document.body &&
+      node !== document.documentElement
+    ) {
+      if (node.nodeType === 1) {
+        const style =
+          window.getComputedStyle(node);
+
+        const scrollable =
+          /(auto|scroll)/.test(
+            style.overflowY
+          ) &&
+          node.scrollHeight >
+            node.clientHeight;
+
+        if (scrollable && node.scrollTop > 0) {
+          return true;
+        }
+      }
+
+      node = node.parentElement;
+    }
+
+    return false;
+  }
+
+
+  function pageScrollTop_() {
+    return (
+      window.scrollY ||
+      document.documentElement.scrollTop ||
+      document.body.scrollTop ||
+      0
+    );
+  }
+
+
+  // ---------- 更新処理 ----------
+
+  async function doRefresh_() {
+    try {
+      if (typeof loadDashboard === "function") {
+        await loadDashboard();
+      }
+
+      if (typeof loadTodaySchedules === "function") {
+        await loadTodaySchedules();
+      }
+
+      if (
+        typeof currentPage !== "undefined"
+      ) {
+        if (
+          currentPage === "receipt" &&
+          typeof refreshReceiptPage === "function"
+        ) {
+          await refreshReceiptPage();
+        }
+
+        if (
+          currentPage === "calendar" &&
+          typeof refreshCalendarPage === "function"
+        ) {
+          await refreshCalendarPage();
+        }
+
+        if (currentPage === "settings") {
+          const memoButton =
+            document.getElementById(
+              "shoppingRefreshButton"
+            );
+
+          if (memoButton) {
+            memoButton.click();
+          }
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+
+  // ---------- タッチ操作 ----------
+
+  function onTouchStart_(event) {
+    if (
+      refreshing ||
+      event.touches.length !== 1 ||
+      pageScrollTop_() > 0 ||
+      isModalOpen_() ||
+      insideScrolledArea_(event.target)
+    ) {
+      pulling = false;
+      return;
+    }
+
+    startY = event.touches[0].clientY;
+    startX = event.touches[0].clientX;
+    pulling = true;
+    pullDistance = 0;
+
+    if (indicator) {
+      indicator.classList.remove("pr-animate");
+    }
+  }
+
+
+  function onTouchMove_(event) {
+    if (!pulling || refreshing) {
+      return;
+    }
+
+    const touch = event.touches[0];
+    const dy = touch.clientY - startY;
+    const dx = touch.clientX - startX;
+
+    if (dy <= 0) {
+      pulling = false;
+      moveIndicator_(0);
+      return;
+    }
+
+    // 横スワイプのときは何もしない
+    if (Math.abs(dx) > Math.abs(dy)) {
+      pulling = false;
+      moveIndicator_(0);
+      return;
+    }
+
+    if (pageScrollTop_() > 0) {
+      pulling = false;
+      return;
+    }
+
+    pullDistance =
+      Math.min(dy * 0.5, MAX_PULL);
+
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+
+    setChip_(
+      pullDistance >= THRESHOLD
+        ? "↑ 離して更新"
+        : "↓ 引っ張って更新"
+    );
+
+    moveIndicator_(pullDistance);
+  }
+
+
+  async function onTouchEnd_() {
+    if (!pulling) {
+      return;
+    }
+
+    pulling = false;
+
+    if (pullDistance < THRESHOLD) {
+      hideIndicator_();
+      pullDistance = 0;
+      return;
+    }
+
+    refreshing = true;
+
+    if (indicator) {
+      indicator.classList.add("pr-animate");
+    }
+
+    setChip_("更新中…");
+    moveIndicator_(THRESHOLD);
+
+    await doRefresh_();
+
+    setChip_("更新しました");
+
+    setTimeout(function () {
+      hideIndicator_();
+      refreshing = false;
+      pullDistance = 0;
+    }, 500);
+  }
+
+
+  // ---------- 右上の更新ボタンを隠す ----------
+
+  function hideRefreshButton_() {
+    const candidates =
+      document.querySelectorAll(
+        "button, [role='button'], a, div, span"
+      );
+
+    candidates.forEach(function (node) {
+      if (node.children.length > 0) {
+        return;
+      }
+
+      const text =
+        (node.textContent || "").trim();
+
+      if (text !== "↻") {
+        return;
+      }
+
+      const target =
+        node.closest(
+          "button, [role='button']"
+        ) || node;
+
+      target.style.display = "none";
+    });
+  }
+
+
+  // ---------- 開始 ----------
+
+  function start_() {
+    addStyle_();
+    createIndicator_();
+    hideRefreshButton_();
+
+    document.addEventListener(
+      "touchstart",
+      onTouchStart_,
+      { passive: true }
+    );
+
+    document.addEventListener(
+      "touchmove",
+      onTouchMove_,
+      { passive: false }
+    );
+
+    document.addEventListener(
+      "touchend",
+      onTouchEnd_,
+      { passive: true }
+    );
+
+    document.addEventListener(
+      "touchcancel",
+      onTouchEnd_,
+      { passive: true }
+    );
+
+    // 画面が描き換わっても更新ボタンを隠し続ける
+    const observer =
+      new MutationObserver(function () {
+        clearTimeout(
+          window.hideRefreshTimer_
+        );
+
+        window.hideRefreshTimer_ =
+          setTimeout(hideRefreshButton_, 100);
+      });
+
+    observer.observe(
+      document.body,
+      {
+        childList: true,
+        subtree: true
+      }
+    );
+  }
+
+
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      start_
+    );
+  } else {
+    start_();
+  }
+})();
