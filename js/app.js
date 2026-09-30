@@ -19647,10 +19647,14 @@ if (
 
   function isModalOpen_() {
     return Boolean(
+      document.body.classList.contains(
+        "modal-open"
+      ) ||
       document.querySelector(
         '#scheduleModal:not([hidden]), ' +
-        '.modal:not([hidden]), ' +
-        '[role="dialog"]:not([hidden])'
+        '.modal-backdrop.show, ' +
+        '[class*="backdrop"].is-open, ' +
+        '[class*="sheet"].is-open'
       )
     );
   }
@@ -20132,4 +20136,54 @@ if (
   `;
 
   document.head.appendChild(style);
+})();
+
+
+
+// =========================================================
+// ホーム：「今月の残金」と「今月の生活費」の入れ替え修正
+// 新しいホーム画面では、大きい金額と右側の金額の部品名が
+// 古い計算処理と逆になっていたため、部品名を入れ替える
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.homeMoneyIdSwapAdded_) {
+    return;
+  }
+
+  window.homeMoneyIdSwapAdded_ = true;
+
+  function swapMoneyIds_() {
+    const big =
+      document.getElementById("balanceMoney");
+
+    const small =
+      document.getElementById("totalMoney");
+
+    if (!big || !small) {
+      return;
+    }
+
+    // 大きい金額（cute-balance）の部品だけ入れ替える
+    // すでに入れ替え済みなら何もしない
+    if (!big.classList.contains("cute-balance")) {
+      return;
+    }
+
+    big.id = "totalMoney";
+    small.id = "balanceMoney";
+  }
+
+  swapMoneyIds_();
+
+  if (
+    typeof dashboardData !== "undefined" &&
+    dashboardData &&
+    typeof renderHome === "function"
+  ) {
+    renderHome();
+  }
 })();
