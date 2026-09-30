@@ -19360,7 +19360,9 @@ if (
           budget - expense
         )
       );
-   
+
+}
+    
   const renderHomeBeforeBalanceSwap_ =
     renderHome;
 
@@ -19369,8 +19371,10 @@ if (
     swapHomeBalance_();
   };
 
-
+    
   swapHomeBalance_();
+
+  })();
 
 // =========================================================
 // ホームの生活費・残金をカテゴリ合計から正しく計算
@@ -19474,7 +19478,8 @@ if (totalMoney) {
   };
 
   correctHomeMoneyTotals_();
-})();
+
+  })();
 
 // =========================================================
 // ホームに「その他」カテゴリを追加
