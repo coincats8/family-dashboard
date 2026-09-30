@@ -19871,7 +19871,7 @@ if (
           "button, [role='button']"
         ) || node;
 
-      target.style.display = "none";
+      target.style.setProperty("display", "none", "important");
     });
   }
 
@@ -19962,6 +19962,13 @@ if (
   style.id = "fullScreenLayoutStyle";
 
   style.textContent = `
+    /* 更新ボタン（↻）は引っ張って更新に変えたので、常に非表示 */
+    #page-home .cute-home-tools,
+    #page-home .cute-refresh,
+    #cuteHomeRefresh {
+      display: none !important;
+    }
+
     @media (max-width: 600px) {
 
       /* 外枠：左右の余白をなくす */
