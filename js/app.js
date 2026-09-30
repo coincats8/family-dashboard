@@ -21948,6 +21948,7 @@ if (
 // カテゴリ画面の整理
 // ・下のタブの順番：ホーム → カテゴリ → 日別 → …
 // ・電気／ガス／水道を「水道光熱費」に合体（押すと内訳が分かれて見える）
+// ・内訳では「電気」「ガス」「水道」だけを見出しにし、同じ意味の言葉は重ねない
 // ・件数と金額を右合わせで表示
 // app.jsの一番最後へ追加
 // =========================================================
@@ -22041,6 +22042,38 @@ if (
       display: none !important;
     }
 
+    /* ボタンを押したときの黒い枠は出さない */
+    .report-history-summary:focus {
+      outline: none;
+    }
+
+    /* 内訳：見出し（電気など）と同じ意味の名前・金額は重ねて出さない */
+    .utility-part .utility-item {
+      grid-template-columns:
+        minmax(0, 1fr)
+        auto !important;
+      grid-template-rows: auto !important;
+    }
+
+    .utility-part .utility-item .report-history-name {
+      display: none !important;
+    }
+
+    .utility-part .utility-item .report-history-meta {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .utility-part .utility-item .report-history-actions {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .utility-single .report-history-price,
+    .utility-single .report-history-quantity {
+      display: none !important;
+    }
+
     /* 水道光熱費の内訳 */
     .utility-part {
       padding: 4px 0 2px;
@@ -22113,6 +22146,66 @@ if (
       "¥" +
       Math.round(number).toLocaleString("ja-JP")
     );
+  }
+
+  // 「電気料金」「ガス代9月」など、見出しと同じ意味だけの名前か
+  function isRedundantName_(itemName, partName) {
+    const name =
+      String(itemName || "")
+        .normalize("NFKC")
+        .replace(/\s+/g, "");
+
+    if (name.indexOf(partName) !== 0) {
+      return false;
+    }
+
+    return /^[料金代費使用のご請求分月年0-9\-\/\.()]*$/.test(
+      name.slice(partName.length)
+    );
+  }
+
+  function tidyItem_(item, partName) {
+    const nameNode =
+      item.querySelector(
+        ".report-history-name"
+      );
+
+    if (
+      nameNode &&
+      isRedundantName_(
+        nameNode.textContent,
+        partName
+      )
+    ) {
+      item.classList.add("utility-item");
+    }
+
+    // 「/個」「×1」は光熱費には不要
+    const price =
+      item.querySelector(
+        ".report-history-price"
+      );
+
+    if (price) {
+      price.textContent =
+        price.textContent.replace(
+          /\s*\/\s*個\s*$/,
+          ""
+        );
+    }
+
+    const quantity =
+      item.querySelector(
+        ".report-history-quantity"
+      );
+
+    if (
+      quantity &&
+      quantity.textContent
+        .replace(/\s/g, "") === "×1"
+    ) {
+      quantity.style.display = "none";
+    }
   }
 
   function countOf_(group) {
@@ -22297,8 +22390,26 @@ if (
         );
 
       if (oldBody) {
-        Array.from(oldBody.children).forEach(
+        const children =
+          Array.from(oldBody.children);
+
+        // 明細が1件だけなら、金額は見出しにあるので重ねない
+        section.classList.toggle(
+          "utility-single",
+          part.count === 1
+        );
+
+        children.forEach(
           function (child) {
+            if (
+              child.classList &&
+              child.classList.contains(
+                "report-history-item"
+              )
+            ) {
+              tidyItem_(child, part.name);
+            }
+
             section.appendChild(child);
           }
         );
