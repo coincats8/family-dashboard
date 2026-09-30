@@ -19937,3 +19937,100 @@ if (
     start_();
   }
 })();
+
+
+// =========================================================
+// スマホを画面いっぱいに表示（のりしろ削除）
+// ・左右の余白をなくす
+// ・下のナビを画面下いっぱいに固定
+// ・ホームの背景を画面全体に広げる
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.fullScreenLayoutAdded_) {
+    return;
+  }
+
+  window.fullScreenLayoutAdded_ = true;
+
+  const style =
+    document.createElement("style");
+
+  style.id = "fullScreenLayoutStyle";
+
+  style.textContent = `
+    @media (max-width: 600px) {
+
+      /* 外枠：左右の余白をなくす */
+      .app {
+        max-width: none !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+      }
+
+      /* ホーム以外の画面は、各ページ側で左右の余白をつける */
+      .app-page {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+
+      /* 下の「最終更新」表示の位置をそろえる */
+      .update-status {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+
+      /* ホーム：上の更新ボタンの行をなくして詰める */
+      #page-home .cute-home-tools {
+        display: none !important;
+      }
+
+      #page-home {
+        padding-top:
+          max(10px, env(safe-area-inset-top))
+          !important;
+      }
+
+      /* ホーム表示中は、画面全体をホームと同じ色にする */
+      html:has(#page-home:not([hidden])),
+      body:has(#page-home:not([hidden])) {
+        background: #fff7fa !important;
+      }
+
+      /* 下のナビ：画面の下いっぱいに固定 */
+      .bottom-nav {
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        transform: none !important;
+
+        width: 100% !important;
+
+        padding:
+          8px
+          8px
+          calc(
+            8px +
+            env(safe-area-inset-bottom)
+          ) !important;
+
+        border-left: 0 !important;
+        border-right: 0 !important;
+        border-bottom: 0 !important;
+        border-radius: 24px 24px 0 0 !important;
+
+        background:
+          rgba(255, 255, 255, 0.97) !important;
+
+        box-shadow:
+          0 -6px 24px
+          rgba(0, 0, 0, 0.07) !important;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
