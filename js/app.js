@@ -19705,6 +19705,10 @@ if (
 
   async function doRefresh_() {
     try {
+      if (typeof window.clearApiCache_ === "function") {
+        window.clearApiCache_();
+      }
+
       if (typeof loadDashboard === "function") {
         await loadDashboard();
       }
@@ -21924,56 +21928,13 @@ if (
     }
   }
 
-  // 今日の予定があるかどうか
-  async function loadCalendarState_() {
-    const node =
-      document.getElementById(
-        "hubCalendarValue"
-      );
-
-    if (!node) {
-      return;
-    }
-
-    try {
-      const data =
-        await fetchJson(
-          `${API_BASE}?mode=todaySchedules`
-        );
-
-      if (!data || data.success !== true) {
-        throw new Error("予定を取得できません");
-      }
-
-      node.textContent =
-        Array.isArray(data.schedules) &&
-        data.schedules.length > 0
-          ? "予定あり"
-          : "予定なし";
-    }
-    catch (error) {
-      console.error(error);
-      node.textContent = "―";
-    }
-  }
-
+  // ホームは表示しないため、ここでは通信しない（数字の反映だけ行う）
   window.refreshHomeCards_ =
     async function () {
-      requestMemoLoad_();
-
-      setTimeout(syncHub_, 1500);
-
-      await loadCalendarState_();
-
       syncHub_();
     };
 
   setInterval(syncHub_, 1000);
-
-  setTimeout(
-    window.refreshHomeCards_,
-    1200
-  );
 
   syncHub_();
 })();
@@ -24861,14 +24822,16 @@ if (
       renderReceiptList;
 
     let lastSignature_ = "";
+    let lastCountText_ = "";
 
     renderReceiptList =
       function (container, receipts, limit) {
-        if (
+        const isFull =
           container &&
           container.id === "receiptFullList" &&
-          Array.isArray(receipts)
-        ) {
+          Array.isArray(receipts);
+
+        if (isFull) {
           const signature =
             receiptSignature_(receipts);
 
@@ -24878,17 +24841,41 @@ if (
               ".purchase-shop-group"
             )
           ) {
+            // 作り直しを省いても、件数は前回の表示（店ごとの件数）に戻す
+            const countNode =
+              document.getElementById("receiptCount");
+
+            if (
+              countNode &&
+              lastCountText_ &&
+              countNode.textContent !== lastCountText_
+            ) {
+              countNode.textContent = lastCountText_;
+            }
+
             return;
           }
 
           lastSignature_ = signature;
         }
 
-        return originalRenderReceiptList_(
-          container,
-          receipts,
-          limit
-        );
+        const result =
+          originalRenderReceiptList_(
+            container,
+            receipts,
+            limit
+          );
+
+        if (isFull) {
+          const countNode =
+            document.getElementById("receiptCount");
+
+          if (countNode) {
+            lastCountText_ = countNode.textContent;
+          }
+        }
+
+        return result;
       };
   }
 })();
@@ -26166,5 +26153,352 @@ if (
       cancelButton.disabled = false;
       saveButton.textContent = "保存";
     }
+  }
+})();
+
+
+// =========================================================
+// 通信の安定化（一時的な「HTTP 404」で止まらないようにする）
+// ・読み込みが失敗したら自動でやり直す（保存は重複を防ぐためやり直さない）
+// ・同時に送る数を減らす（Apps Script の負担を下げる）
+// ・同じ内容の読み込みを1つにまとめ、購入明細は短時間だけ使い回す
+//   （使い回すのは、月などで絞り込む前の生のデータ）
+// ・ホームを表示しなくなったため、使われない「今日の予定」の読み込みをやめる
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.resilientApiAdded_) {
+    return;
+  }
+
+  window.resilientApiAdded_ = true;
+
+  const OPTIONS =
+    Object.assign(
+      {
+        maxParallel: 2,
+        retryDelays: [800, 2000],
+        timeout: 30000,
+        ttl: { purchaseItems: 40000, googleSchedules: 15000 }
+      },
+      window.apiResilienceOptions || {}
+    );
+
+  const cache = new Map();
+  const inflight = new Map();
+  const waiting = [];
+
+  let active = 0;
+
+
+  // ---------- 同時に送る数を制限 ----------
+
+  function acquire_() {
+    return new Promise(function (resolve) {
+      if (active < OPTIONS.maxParallel) {
+        active += 1;
+        resolve();
+      }
+      else {
+        waiting.push(resolve);
+      }
+    });
+  }
+
+  function release_() {
+    active -= 1;
+
+    const next = waiting.shift();
+
+    if (next) {
+      active += 1;
+      next();
+    }
+  }
+
+  async function limited_(task) {
+    await acquire_();
+
+    try {
+      return await task();
+    }
+    finally {
+      release_();
+    }
+  }
+
+  function withTimeout_(promise, ms) {
+    return new Promise(function (resolve, reject) {
+      const timer =
+        setTimeout(function () {
+          reject(new Error("timeout"));
+        }, ms);
+
+      promise.then(
+        function (value) {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        function (error) {
+          clearTimeout(timer);
+          reject(error);
+        }
+      );
+    });
+  }
+
+  function sleep_(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+
+  // ---------- 判定 ----------
+
+  // 保存（action=save… など）。action=get… は読み込みなので除く
+  function isWrite_(url) {
+    return /[?&]action=(?!get)/.test(String(url));
+  }
+
+  // 家計簿のAPIへの読み込み（?mode=…）
+  function isRead_(url) {
+    return (
+      typeof API_BASE !== "undefined" &&
+      String(url).indexOf(API_BASE) === 0 &&
+      /[?&]mode=/.test(String(url))
+    );
+  }
+
+  function canonical_(url) {
+    try {
+      const parsed =
+        new URL(String(url), location.href);
+
+      parsed.searchParams.delete("_");
+
+      return parsed.toString();
+    }
+    catch (error) {
+      return String(url);
+    }
+  }
+
+  function ttlFor_(url) {
+    const keys = Object.keys(OPTIONS.ttl);
+
+    for (let i = 0; i < keys.length; i += 1) {
+      if (String(url).indexOf("mode=" + keys[i]) !== -1) {
+        return OPTIONS.ttl[keys[i]];
+      }
+    }
+
+    return 0;
+  }
+
+  function retryableStatus_(status) {
+    return (
+      status === 404 ||
+      status === 408 ||
+      status === 429 ||
+      status >= 500
+    );
+  }
+
+  function retryableError_(error) {
+    return /Failed to fetch|NetworkError|Load failed|timeout/i
+      .test(String((error && error.message) || error));
+  }
+
+  function makeResponse_(text) {
+    return new Response(
+      text,
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  }
+
+  window.clearApiCache_ = function () {
+    cache.clear();
+  };
+
+
+  // ---------- 通信そのもの（fetch）に対して働く ----------
+  // 上に重なっている「月で絞る」などの処理より下で動くので、
+  // 使い回すのは絞り込み前のデータになる
+
+  if (typeof window.fetch === "function") {
+    const baseFetch_ = window.fetch.bind(window);
+
+    async function readOnce_(url, init) {
+      const response = await baseFetch_(url, init);
+
+      if (!response.ok) {
+        return { ok: false, status: response.status };
+      }
+
+      const text = await response.text();
+
+      const head = String(text || "").trim();
+
+      if (
+        head.indexOf("<!DOCTYPE") === 0 ||
+        head.indexOf("<html") === 0
+      ) {
+        return {
+          ok: false,
+          status: 502,
+          html: true,
+          text: text
+        };
+      }
+
+      return { ok: true, text: text };
+    }
+
+    async function resilientRead_(url, init) {
+      const key = canonical_(url);
+      const ttl = ttlFor_(url);
+
+      const hit = cache.get(key);
+
+      if (hit && Date.now() - hit.at < hit.ttl) {
+        return makeResponse_(hit.text);
+      }
+
+      if (!inflight.has(key)) {
+        const job =
+          (async function () {
+            let last = null;
+
+            for (let i = 0; i <= OPTIONS.retryDelays.length; i += 1) {
+              try {
+                const outcome =
+                  await limited_(function () {
+                    return withTimeout_(
+                      readOnce_(url, init),
+                      OPTIONS.timeout
+                    );
+                  });
+
+                if (outcome.ok) {
+                  if (ttl > 0) {
+                    cache.set(
+                      key,
+                      {
+                        at: Date.now(),
+                        ttl: ttl,
+                        text: outcome.text
+                      }
+                    );
+                  }
+
+                  return outcome;
+                }
+
+                last = outcome;
+
+                if (
+                  !retryableStatus_(outcome.status) ||
+                  i >= OPTIONS.retryDelays.length
+                ) {
+                  break;
+                }
+              }
+              catch (error) {
+                last = { ok: false, error: error };
+
+                if (
+                  !retryableError_(error) ||
+                  i >= OPTIONS.retryDelays.length
+                ) {
+                  break;
+                }
+              }
+
+              await sleep_(OPTIONS.retryDelays[i]);
+            }
+
+            return last;
+          })();
+
+        inflight.set(key, job);
+
+        const forget = function () {
+          if (inflight.get(key) === job) {
+            inflight.delete(key);
+          }
+        };
+
+        job.then(forget, forget);
+      }
+
+      const outcome = await inflight.get(key);
+
+      if (outcome.ok) {
+        return makeResponse_(outcome.text);
+      }
+
+      if (outcome.error) {
+        throw outcome.error;
+      }
+
+      // HTML が返り続けた場合は、そのまま渡す（アプリ側の通常のエラー表示になる）
+      if (outcome.html) {
+        return makeResponse_(outcome.text);
+      }
+
+      // やり直しても失敗したときは、失敗の返事をそのまま渡す
+      return new Response(
+        "",
+        { status: outcome.status }
+      );
+    }
+
+    window.fetch = function (input, init) {
+      const url =
+        typeof input === "string"
+          ? input
+          : (input && input.url) || "";
+
+      const method =
+        String((init && init.method) || "GET")
+          .toUpperCase();
+
+      // 保存・POST：やり直さずにそのまま送り、使い回しのデータを捨てる
+      if (method === "POST" || isWrite_(url)) {
+        cache.clear();
+
+        return baseFetch_(input, init);
+      }
+
+      if (
+        method === "GET" &&
+        typeof input === "string" &&
+        isRead_(url)
+      ) {
+        return resilientRead_(url, init);
+      }
+
+      return baseFetch_(input, init);
+    };
+  }
+
+
+  // ---------- 使われなくなった読み込みをやめる ----------
+  // ホームを表示しなくなったので「今日の予定」は不要
+
+  if (typeof loadTodaySchedules === "function") {
+    loadTodaySchedules = async function () {
+      return typeof todayScheduleData !== "undefined" &&
+        Array.isArray(todayScheduleData)
+        ? todayScheduleData
+        : [];
+    };
   }
 })();
