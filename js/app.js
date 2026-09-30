@@ -20243,32 +20243,38 @@ if (
 })();
 
 
-
 // =========================================================
-// ホームのカード整理
+// ホーム：カードの作り直し／チェックリスト
 // ・AI診断カードを削除
+// ・右側の矢印を削除
+// ・ホームの書体・サイズを統一
 // ・カードから各画面へ移動
-// ・カードの順番を変更
-// ・「次の予定」「買い物メモの件数」を表示
+// ・下のタブに「チェックリスト」を追加
 // app.jsの一番最後へ追加
 // =========================================================
 
 (function () {
   "use strict";
 
-  if (window.homeCardsHubAdded_) {
+  if (window.homeHubV2Added_) {
     return;
   }
 
-  window.homeCardsHubAdded_ = true;
+  window.homeHubV2Added_ = true;
+
+  const FONT =
+    '"Inter", -apple-system, BlinkMacSystemFont, ' +
+    '"Hiragino Sans", "Yu Gothic", Meiryo, sans-serif';
+
+  const STORE_KEY = "familyChecklistItems_v1";
 
 
-  // ---------- 見た目：AI診断を消す・順番を変える ----------
+  // ---------- 見た目 ----------
 
   const style =
     document.createElement("style");
 
-  style.id = "homeCardsHubStyle";
+  style.id = "homeHubV2Style";
 
   style.textContent = `
     /* AI診断カードは表示しない */
@@ -20276,7 +20282,17 @@ if (
       display: none !important;
     }
 
-    /* カードの順番：残金 → 貯蓄 → 買い物額 → 予定 → メモ → チェックリスト */
+    /* 古いカード5枚は使わず、新しいカードに置き換える */
+    #page-home .cute-home > .cute-link-card {
+      display: none !important;
+    }
+
+    /* 右側の矢印をすべて削除 */
+    #page-home .cute-arrow {
+      display: none !important;
+    }
+
+    /* 順番：残金カードを一番上に */
     #page-home .cute-home > * {
       order: 20;
     }
@@ -20285,37 +20301,271 @@ if (
       order: 1;
     }
 
-    #page-home .cute-home > .cute-savings-card {
-      order: 2;
+    /* ホーム全体を同じ書体にする */
+    #page-home,
+    #page-home * {
+      font-family: ${FONT} !important;
     }
 
-    #page-home .cute-home > #homeMonthlyPurchaseCard {
-      order: 3;
+    /* 今月の残金カードの文字サイズをそろえる */
+    #page-home .cute-main-heading {
+      font-size: 13px !important;
+      font-weight: 800 !important;
     }
 
-    #page-home .cute-home > #cuteNextSchedule {
-      order: 4;
+    #page-home .cute-budget-row span {
+      font-size: 11px !important;
+      font-weight: 700 !important;
     }
 
-    #page-home .cute-home > #cuteMemoJump {
-      order: 5;
+    #page-home .cute-budget-row strong {
+      font-size: 15px !important;
+      font-weight: 800 !important;
     }
 
-    #page-home .cute-home > #cuteChecklistJump {
-      order: 6;
+    #page-home .cute-balance {
+      font-weight: 800 !important;
+    }
+
+    /* 新しいカード */
+    #page-home .hub-card {
+      display: flex !important;
+      align-items: center;
+      gap: 10px;
+
+      width: 100%;
+      min-width: 0;
+      min-height: 58px;
+      max-height: 96px;
+      margin: 0;
+      padding: 8px 14px;
+      flex: 1 1 auto;
+
+      box-sizing: border-box;
+      border: 1px solid #f5dce4;
+      border-radius: 19px;
+      background: #ffffff;
+      box-shadow:
+        0 4px 13px
+        rgba(213, 112, 147, 0.07);
+
+      color: #463c40;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #page-home .hub-card:active {
+      transform: scale(0.99);
+    }
+
+    #page-home .hub-icon {
+      display: grid;
+      place-items: center;
+      flex: 0 0 38px;
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    #page-home .hub-pink   { background: #ffe4ed; }
+    #page-home .hub-yellow { background: #fff1cf; }
+    #page-home .hub-blue   { background: #e7f3ff; }
+    #page-home .hub-lilac  { background: #f0e9ff; }
+    #page-home .hub-mint   { background: #e5f8ef; color: #56b98a; }
+
+    #page-home .hub-title {
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.2;
+      color: #463c40;
+      white-space: nowrap;
+    }
+
+    #page-home .hub-value {
+      margin-left: auto;
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.2;
+      color: #463c40;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #page-home .hub-edit {
+      display: grid;
+      place-items: center;
+      flex: 0 0 26px;
+      width: 26px;
+      height: 26px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: #ffe5ed;
+      color: #df7297;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    @media (max-height: 700px) {
+      #page-home .hub-card {
+        min-height: 54px;
+      }
+    }
+
+    /* 下のタブ：6つ並べる */
+    .bottom-nav {
+      grid-template-columns: repeat(6, 1fr) !important;
+    }
+
+    .bottom-nav .nav-button {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+
+    .bottom-nav .nav-label {
+      font-size: 8.5px !important;
+      letter-spacing: -0.03em;
     }
   `;
 
   document.head.appendChild(style);
 
 
-  // ---------- カードから各画面へ移動 ----------
+  // ---------- 画面移動 ----------
 
   function go_(page) {
     if (typeof switchPage === "function") {
       switchPage(page);
     }
   }
+
+
+  // ---------- ホームのカードを作る ----------
+
+  const CARDS = [
+    {
+      id: "hubSavings",
+      icon: "🐷",
+      color: "hub-yellow",
+      title: "現在の貯蓄",
+      value: "¥0",
+      page: "report",
+      edit: true
+    },
+    {
+      id: "hubPurchase",
+      icon: "🛒",
+      color: "hub-pink",
+      title: "今月の購入額",
+      value: "¥0",
+      page: "receipt"
+    },
+    {
+      id: "hubCalendar",
+      icon: "📅",
+      color: "hub-blue",
+      title: "カレンダー",
+      value: "―",
+      page: "calendar"
+    },
+    {
+      id: "hubMemo",
+      icon: "📝",
+      color: "hub-lilac",
+      title: "買い物メモ",
+      value: "0件",
+      page: "settings"
+    },
+    {
+      id: "hubChecklist",
+      icon: "✓",
+      color: "hub-mint",
+      title: "チェックリスト",
+      value: "0件",
+      page: "checklist"
+    }
+  ];
+
+  function buildHubCards_() {
+    const home =
+      document.querySelector(
+        "#page-home .cute-home"
+      );
+
+    if (!home) {
+      return;
+    }
+
+    CARDS.forEach(function (card) {
+      if (document.getElementById(card.id)) {
+        return;
+      }
+
+      const box =
+        document.createElement("div");
+
+      box.id = card.id;
+      box.className = "hub-card";
+      box.dataset.page = card.page;
+      box.setAttribute("role", "button");
+      box.tabIndex = 0;
+
+      const icon =
+        document.createElement("span");
+
+      icon.className =
+        "hub-icon " + card.color;
+
+      icon.textContent = card.icon;
+
+      const title =
+        document.createElement("span");
+
+      title.className = "hub-title";
+      title.textContent = card.title;
+
+      box.appendChild(icon);
+      box.appendChild(title);
+
+      // 修正ボタンは「現在の貯蓄」のすぐ右横に置く
+      if (card.edit) {
+        const edit =
+          document.createElement("button");
+
+        edit.type = "button";
+        edit.className = "hub-edit";
+        edit.setAttribute(
+          "aria-label",
+          "現在の貯蓄を修正"
+        );
+        edit.textContent = "✎";
+
+        box.appendChild(edit);
+      }
+
+      const value =
+        document.createElement("span");
+
+      value.className = "hub-value";
+      value.id = card.id + "Value";
+      value.textContent = card.value;
+
+      box.appendChild(value);
+
+      home.appendChild(box);
+    });
+  }
+
+  buildHubCards_();
+
+
+  // ---------- クリック ----------
 
   document.addEventListener(
     "click",
@@ -20329,27 +20579,24 @@ if (
         return;
       }
 
-      // 現在の貯蓄 → カテゴリ
-      if (target.closest("#cuteSavingsJump")) {
-        go_("report");
+      // 貯蓄の修正ボタン
+      if (target.closest("#hubSavings .hub-edit")) {
+        const legacy =
+          document.getElementById(
+            "currentSavingsEditButton"
+          );
+
+        if (legacy) {
+          legacy.click();
+        }
+
         return;
       }
 
-      // 今月の買い物額 → 日別
-      if (target.closest("#homeMonthlyPurchaseCard")) {
-        go_("receipt");
-        return;
-      }
+      const card = target.closest(".hub-card");
 
-      // 次の予定 → カレンダー
-      if (target.closest("#cuteNextSchedule")) {
-        go_("calendar");
-        return;
-      }
-
-      // 買い物メモ → メモ
-      if (target.closest("#cuteMemoJump")) {
-        go_("settings");
+      if (card) {
+        go_(card.dataset.page);
         return;
       }
 
@@ -20364,7 +20611,6 @@ if (
     }
   );
 
-  // 今月の残金カードは、キーボード操作でも移動できるようにする
   document.addEventListener(
     "keydown",
     function (event) {
@@ -20375,42 +20621,641 @@ if (
         return;
       }
 
+      const target = event.target;
+
       if (
-        event.target &&
-        event.target.id === "cuteBalanceCard"
+        !target ||
+        typeof target.closest !== "function"
       ) {
+        return;
+      }
+
+      if (target.closest(".hub-edit")) {
+        return;
+      }
+
+      if (target.id === "cuteBalanceCard") {
         event.preventDefault();
         go_("report");
+        return;
+      }
+
+      if (
+        target.classList &&
+        target.classList.contains("hub-card")
+      ) {
+        event.preventDefault();
+        go_(target.dataset.page);
       }
     }
   );
 
 
-  // ---------- 買い物メモの件数 ----------
+  // ---------- チェックリストのデータ ----------
 
-  function syncMemoCount_() {
-    const source =
+  function loadItems_() {
+    try {
+      const list =
+        JSON.parse(
+          localStorage.getItem(STORE_KEY) ||
+          "[]"
+        );
+
+      return Array.isArray(list) ? list : [];
+    }
+    catch (error) {
+      return [];
+    }
+  }
+
+  function saveItems_() {
+    try {
+      localStorage.setItem(
+        STORE_KEY,
+        JSON.stringify(items_)
+      );
+    }
+    catch (error) {
+      console.error(error);
+    }
+  }
+
+  let items_ = loadItems_();
+
+  function activeCount_() {
+    return items_.filter(
+      function (item) {
+        return !item.done;
+      }
+    ).length;
+  }
+
+
+  // ---------- チェックリストの画面 ----------
+
+  function cloneMemoStyles_() {
+    let css = "";
+
+    document
+      .querySelectorAll("style")
+      .forEach(function (node) {
+        const text = node.textContent || "";
+
+        if (
+          node.id === "homeHubV2Style" ||
+          text.indexOf("#page-settings") === -1 ||
+          text.indexOf("shopping") === -1
+        ) {
+          return;
+        }
+
+        css += text
+          .replace(
+            /#page-settings/g,
+            "#page-checklist"
+          )
+          .replace(
+            /#shoppingMemoInput/g,
+            "#checklistInput"
+          )
+          .replace(
+            /#shoppingMemoAddButton/g,
+            "#checklistAddButton"
+          )
+          .replace(
+            /#shoppingClearCompletedButton/g,
+            "#checklistClearButton"
+          );
+      });
+
+    if (css) {
+      const memoStyle =
+        document.createElement("style");
+
+      memoStyle.id = "checklistPageStyle";
+      memoStyle.textContent = css;
+
+      document.head.appendChild(memoStyle);
+    }
+  }
+
+  function buildChecklistPage_() {
+    if (document.getElementById("page-checklist")) {
+      return;
+    }
+
+    const app =
+      document.querySelector("main.app");
+
+    if (!app) {
+      return;
+    }
+
+    cloneMemoStyles_();
+
+    const page =
+      document.createElement("section");
+
+    page.className = "app-page";
+    page.id = "page-checklist";
+    page.setAttribute(
+      "data-page-panel",
+      "checklist"
+    );
+    page.hidden = true;
+
+    page.innerHTML = `
+      <div class="shopping-memo-title">
+
+        <div class="shopping-memo-title-icon">
+          <span class="material-symbols-rounded">
+            checklist
+          </span>
+        </div>
+
+        <div>
+          <small>CHECKLIST</small>
+          <strong>チェックリスト</strong>
+        </div>
+
+      </div>
+
+      <section class="shopping-input-card">
+
+        <h3>やることを追加</h3>
+
+        <p>
+          1件ずつ入力してください。
+        </p>
+
+        <div class="shopping-input-row">
+
+          <input
+            type="text"
+            id="checklistInput"
+            maxlength="80"
+            autocomplete="off"
+            placeholder="例：電気代の支払い"
+          >
+
+          <button
+            type="button"
+            id="checklistAddButton"
+          >
+            追加
+          </button>
+
+        </div>
+
+      </section>
+
+      <section class="shopping-list-card">
+
+        <div class="shopping-list-heading">
+
+          <strong>チェックリスト</strong>
+
+          <span id="checklistCount">
+            未完了 0件
+          </span>
+
+        </div>
+
+        <div id="checklistList"></div>
+
+      </section>
+    `;
+
+    const anchor =
+      app.querySelector(".update-status");
+
+    if (anchor) {
+      app.insertBefore(page, anchor);
+    }
+    else {
+      app.appendChild(page);
+    }
+
+    const input =
+      document.getElementById(
+        "checklistInput"
+      );
+
+    document
+      .getElementById("checklistAddButton")
+      .addEventListener(
+        "click",
+        addItem_
+      );
+
+    input.addEventListener(
+      "keydown",
+      function (event) {
+        if (
+          event.key === "Enter" &&
+          !event.isComposing
+        ) {
+          event.preventDefault();
+          addItem_();
+        }
+      }
+    );
+  }
+
+  function makeItemRow_(item) {
+    const row =
+      document.createElement("div");
+
+    row.className =
+      "shopping-item" +
+      (item.done ? " is-completed" : "");
+
+    const check =
+      document.createElement("button");
+
+    check.type = "button";
+    check.className = "shopping-check";
+    check.setAttribute(
+      "aria-label",
+      "完了状態を変更"
+    );
+
+    const checkIcon =
+      document.createElement("span");
+
+    checkIcon.className =
+      "material-symbols-rounded";
+    checkIcon.textContent = "check";
+    check.appendChild(checkIcon);
+
+    check.addEventListener(
+      "click",
+      function () {
+        item.done = !item.done;
+        saveItems_();
+        renderChecklist_();
+      }
+    );
+
+    const text =
+      document.createElement("div");
+
+    text.className = "shopping-item-text";
+    text.textContent = item.text;
+
+    const del =
+      document.createElement("button");
+
+    del.type = "button";
+    del.className = "shopping-delete";
+    del.setAttribute("aria-label", "削除");
+
+    const delIcon =
+      document.createElement("span");
+
+    delIcon.className =
+      "material-symbols-rounded";
+    delIcon.textContent = "close";
+    del.appendChild(delIcon);
+
+    del.addEventListener(
+      "click",
+      function () {
+        items_ = items_.filter(
+          function (other) {
+            return other.id !== item.id;
+          }
+        );
+
+        saveItems_();
+        renderChecklist_();
+      }
+    );
+
+    row.appendChild(check);
+    row.appendChild(text);
+    row.appendChild(del);
+
+    return row;
+  }
+
+  function renderChecklist_() {
+    const list =
+      document.getElementById(
+        "checklistList"
+      );
+
+    const count =
+      document.getElementById(
+        "checklistCount"
+      );
+
+    if (!list) {
+      return;
+    }
+
+    const active =
+      items_.filter(function (item) {
+        return !item.done;
+      });
+
+    const done =
+      items_.filter(function (item) {
+        return item.done;
+      });
+
+    if (count) {
+      count.textContent =
+        "未完了 " + active.length + "件";
+    }
+
+    list.innerHTML = "";
+
+    if (items_.length === 0) {
+      list.innerHTML = `
+        <div class="shopping-empty">
+
+          <span class="shopping-empty-icon">
+            ✓
+          </span>
+
+          <strong>
+            チェックリストは空です
+          </strong>
+
+          <p>
+            上の欄から1件ずつ追加できます
+          </p>
+
+        </div>
+      `;
+
+      syncHub_();
+      return;
+    }
+
+    active.forEach(function (item) {
+      list.appendChild(makeItemRow_(item));
+    });
+
+    if (done.length > 0) {
+      const title =
+        document.createElement("div");
+
+      title.className =
+        "shopping-completed-title";
+      title.textContent = "完了";
+
+      list.appendChild(title);
+
+      done.forEach(function (item) {
+        list.appendChild(makeItemRow_(item));
+      });
+
+      const actions =
+        document.createElement("div");
+
+      actions.className =
+        "shopping-memo-actions";
+
+      const clear =
+        document.createElement("button");
+
+      clear.type = "button";
+      clear.id = "checklistClearButton";
+      clear.textContent =
+        "完了をまとめて削除";
+
+      clear.addEventListener(
+        "click",
+        function () {
+          items_ = items_.filter(
+            function (item) {
+              return !item.done;
+            }
+          );
+
+          saveItems_();
+          renderChecklist_();
+        }
+      );
+
+      actions.appendChild(clear);
+      list.appendChild(actions);
+    }
+
+    syncHub_();
+  }
+
+  function addItem_() {
+    const input =
+      document.getElementById(
+        "checklistInput"
+      );
+
+    if (!input) {
+      return;
+    }
+
+    const text =
+      String(input.value || "").trim();
+
+    if (!text) {
+      return;
+    }
+
+    items_.unshift({
+      id:
+        Date.now().toString(36) +
+        Math.random().toString(36).slice(2, 7),
+      text: text.slice(0, 80),
+      done: false
+    });
+
+    input.value = "";
+
+    saveItems_();
+    renderChecklist_();
+    input.focus();
+  }
+
+  buildChecklistPage_();
+  renderChecklist_();
+
+
+  // ---------- 下のタブに「チェックリスト」を追加 ----------
+
+  function addChecklistTab_() {
+    const nav =
+      document.querySelector(".bottom-nav");
+
+    if (
+      !nav ||
+      nav.querySelector(
+        '[data-page="checklist"]'
+      )
+    ) {
+      return;
+    }
+
+    const button =
+      document.createElement("button");
+
+    button.className = "nav-button";
+    button.type = "button";
+    button.dataset.page = "checklist";
+
+    button.innerHTML = `
+      <span class="material-symbols-rounded">
+        checklist
+      </span>
+
+      <span class="nav-label">
+        チェックリスト
+      </span>
+    `;
+
+    button.addEventListener(
+      "click",
+      function () {
+        go_("checklist");
+      }
+    );
+
+    nav.appendChild(button);
+  }
+
+  addChecklistTab_();
+
+
+  // ---------- ページ切り替えに「チェックリスト」を対応させる ----------
+
+  function showChecklistPage_() {
+    currentPage = "checklist";
+
+    document
+      .querySelectorAll("[data-page-panel]")
+      .forEach(function (panel) {
+        panel.hidden = true;
+        panel.classList.remove("is-active");
+      });
+
+    const panel =
+      document.getElementById(
+        "page-checklist"
+      );
+
+    if (panel) {
+      panel.hidden = false;
+      panel.classList.add("is-active");
+    }
+
+    document
+      .querySelectorAll(".nav-button")
+      .forEach(function (button) {
+        const active =
+          button.dataset.page === "checklist";
+
+        button.classList.toggle(
+          "active",
+          active
+        );
+
+        button.setAttribute(
+          "aria-current",
+          active ? "page" : "false"
+        );
+      });
+
+    window.scrollTo(0, 0);
+
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+
+    renderChecklist_();
+  }
+
+  if (typeof switchPage === "function") {
+    const originalSwitchPage_ = switchPage;
+
+    switchPage = async function (page) {
+      if (page === "checklist") {
+        showChecklistPage_();
+        return;
+      }
+
+      const result =
+        await originalSwitchPage_(page);
+
+      if (page === "home") {
+        window.refreshHomeCards_();
+      }
+
+      return result;
+    };
+  }
+
+
+  // ---------- カードの数字を最新にする ----------
+
+  function setValue_(id, text) {
+    const node =
+      document.getElementById(id);
+
+    if (
+      node &&
+      text &&
+      node.textContent !== text
+    ) {
+      node.textContent = text;
+    }
+  }
+
+  function syncHub_() {
+    const saving =
+      document.getElementById("savingActual");
+
+    if (saving) {
+      setValue_(
+        "hubSavingsValue",
+        String(saving.textContent || "").trim()
+      );
+    }
+
+    const purchase =
+      document.getElementById(
+        "homeMonthlyPurchaseAmount"
+      );
+
+    if (purchase) {
+      setValue_(
+        "hubPurchaseValue",
+        String(purchase.textContent || "").trim()
+      );
+    }
+
+    const memo =
       document.getElementById(
         "shoppingMemoCount"
       );
 
-    const target =
-      document.getElementById(
-        "cuteMemoCount"
-      );
+    if (memo) {
+      const match =
+        String(memo.textContent || "")
+          .match(/(\d+)/);
 
-    if (!source || !target) {
-      return;
+      if (match) {
+        setValue_(
+          "hubMemoValue",
+          match[1] + "件"
+        );
+      }
     }
 
-    const match =
-      String(source.textContent || "")
-        .match(/(\d+)/);
-
-    if (match) {
-      target.textContent =
-        match[1] + "件";
-    }
+    setValue_(
+      "hubChecklistValue",
+      activeCount_() + "件"
+    );
   }
 
   function requestMemoLoad_() {
@@ -20424,257 +21269,56 @@ if (
     }
   }
 
-  const memoPage =
-    document.getElementById(
-      "page-settings"
-    );
-
-  if (memoPage) {
-    new MutationObserver(
-      syncMemoCount_
-    ).observe(
-      memoPage,
-      {
-        childList: true,
-        characterData: true,
-        subtree: true
-      }
-    );
-  }
-
-
-  // ---------- 次の予定 ----------
-
-  function pad2_(number) {
-    return String(number).padStart(2, "0");
-  }
-
-  function dateKey_(date) {
-    return (
-      date.getFullYear() +
-      "-" +
-      pad2_(date.getMonth() + 1) +
-      "-" +
-      pad2_(date.getDate())
-    );
-  }
-
-  function dayLabel_(key, today) {
-    const parts = key.split("-");
-
-    const date =
-      new Date(
-        Number(parts[0]),
-        Number(parts[1]) - 1,
-        Number(parts[2])
-      );
-
-    const diff =
-      Math.round(
-        (
-          date -
-          new Date(
-            today.getFullYear(),
-            today.getMonth(),
-            today.getDate()
-          )
-        ) /
-        86400000
-      );
-
-    if (diff === 0) {
-      return "今日";
-    }
-
-    if (diff === 1) {
-      return "明日";
-    }
-
-    const week =
-      ["日", "月", "火", "水", "木", "金", "土"];
-
-    return (
-      (date.getMonth() + 1) +
-      "/" +
-      date.getDate() +
-      "(" +
-      week[date.getDay()] +
-      ")"
-    );
-  }
-
-  async function fetchMonthSchedules_(year, month) {
-    const data =
-      await fetchJson(
-        `${API_BASE}?mode=googleSchedules&year=${year}&month=${month}`
-      );
-
-    if (!data || data.success !== true) {
-      throw new Error("予定を取得できません");
-    }
-
-    return Array.isArray(data.schedules)
-      ? data.schedules
-      : [];
-  }
-
-  function findNext_(schedules, now) {
-    const todayKey = dateKey_(now);
-
-    const nowTime =
-      pad2_(now.getHours()) +
-      ":" +
-      pad2_(now.getMinutes());
-
-    const upcoming =
-      schedules.filter(
-        function (schedule) {
-          const date =
-            String(schedule.date || "");
-
-          if (!date || date < todayKey) {
-            return false;
-          }
-
-          if (
-            date === todayKey &&
-            !schedule.allDay
-          ) {
-            const end =
-              String(schedule.end || "");
-
-            const start =
-              String(schedule.start || "");
-
-            if (end) {
-              return end > nowTime;
-            }
-
-            if (start) {
-              return start >= nowTime;
-            }
-          }
-
-          return true;
-        }
-      );
-
-    upcoming.sort(
-      function (a, b) {
-        const keyA =
-          String(a.date) + " " +
-          (a.allDay ? "00:00" : String(a.start || "99:99"));
-
-        const keyB =
-          String(b.date) + " " +
-          (b.allDay ? "00:00" : String(b.start || "99:99"));
-
-        return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
-      }
-    );
-
-    return upcoming[0] || null;
-  }
-
-  async function loadNextSchedule_() {
-    const text =
+  // 今日の予定があるかどうか
+  async function loadCalendarState_() {
+    const node =
       document.getElementById(
-        "cuteNextScheduleText"
+        "hubCalendarValue"
       );
 
-    if (!text) {
+    if (!node) {
       return;
     }
 
     try {
-      const now = new Date();
-
-      let schedules =
-        await fetchMonthSchedules_(
-          now.getFullYear(),
-          now.getMonth() + 1
+      const data =
+        await fetchJson(
+          `${API_BASE}?mode=todaySchedules`
         );
 
-      let next = findNext_(schedules, now);
-
-      if (!next) {
-        const nextMonth =
-          new Date(
-            now.getFullYear(),
-            now.getMonth() + 1,
-            1
-          );
-
-        schedules =
-          await fetchMonthSchedules_(
-            nextMonth.getFullYear(),
-            nextMonth.getMonth() + 1
-          );
-
-        next = findNext_(schedules, now);
+      if (!data || data.success !== true) {
+        throw new Error("予定を取得できません");
       }
 
-      if (!next) {
-        text.textContent =
-          "直近の予定はありません";
-
-        return;
-      }
-
-      const time =
-        next.allDay
-          ? "終日"
-          : (next.start || "");
-
-      text.textContent =
-        [
-          dayLabel_(String(next.date), now),
-          time,
-          next.title || "予定"
-        ]
-          .filter(Boolean)
-          .join(" ");
+      node.textContent =
+        Array.isArray(data.schedules) &&
+        data.schedules.length > 0
+          ? "予定あり"
+          : "予定なし";
     }
     catch (error) {
       console.error(error);
-
-      text.textContent =
-        "予定を取得できませんでした";
+      node.textContent = "―";
     }
   }
-
-
-  // ---------- まとめて更新 ----------
 
   window.refreshHomeCards_ =
     async function () {
       requestMemoLoad_();
 
-      setTimeout(syncMemoCount_, 1500);
+      setTimeout(syncHub_, 1500);
 
-      await loadNextSchedule_();
+      await loadCalendarState_();
+
+      syncHub_();
     };
 
-  // ホームに戻ったときにも更新する
-  if (typeof switchPage === "function") {
-    const originalSwitchPage_ = switchPage;
+  setInterval(syncHub_, 1000);
 
-    switchPage = async function (page) {
-      const result =
-        await originalSwitchPage_(page);
-
-      if (page === "home") {
-        syncMemoCount_();
-        window.refreshHomeCards_();
-      }
-
-      return result;
-    };
-  }
-
-  // 起動直後の読み込み
   setTimeout(
     window.refreshHomeCards_,
     1200
   );
+
+  syncHub_();
 })();
