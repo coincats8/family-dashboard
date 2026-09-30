@@ -24831,3 +24831,1274 @@ if (
       };
   }
 })();
+
+
+// =========================================================
+// カテゴリ画面をホームにする／カテゴリの修正ボタン
+// ・今までのホーム画面は表示しない（数字の計算だけ裏で使う）
+// ・カテゴリ画面が「ホーム」になり、下のタブの「カテゴリ」はなくなる
+// ・年月の横の ✎ で、予算・現在の貯蓄・カテゴリの名前／予算額／削除／追加を修正
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.categoryHomeAdded_) {
+    return;
+  }
+
+  window.categoryHomeAdded_ = true;
+
+  const FONT =
+    '"Inter", -apple-system, BlinkMacSystemFont, ' +
+    '"Hiragino Sans", "Yu Gothic", Meiryo, sans-serif';
+
+  const FALLBACK_CATEGORY = "その他";
+
+
+  // ---------- 見た目 ----------
+
+  const style =
+    document.createElement("style");
+
+  style.id = "categoryHomeStyle";
+
+  style.textContent = `
+    /* 今までのホーム画面は表示しない */
+    body #page-home,
+    body #page-home:not([hidden]) {
+      display: none !important;
+    }
+
+    /* 下のタブは5つ */
+    .bottom-nav {
+      grid-template-columns: repeat(5, 1fr) !important;
+    }
+
+    .bottom-nav .nav-label {
+      font-size: 9px !important;
+      letter-spacing: 0 !important;
+    }
+
+    /* 「表示月」の文字は出さず、年月の横に修正ボタン */
+    .category-month-center small {
+      display: none !important;
+    }
+
+    .category-month-center {
+      flex-direction: row !important;
+      gap: 8px;
+    }
+
+    #categoryEditButton {
+      display: grid;
+      place-items: center;
+      flex: 0 0 30px;
+      width: 30px;
+      height: 30px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: #ffe5ed;
+      color: #df7297;
+      font-family: ${FONT};
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #categoryEditButton:active {
+      transform: scale(0.94);
+    }
+
+    /* 修正の画面 */
+    #categoryEditOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 6200;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.32);
+      font-family: ${FONT};
+    }
+
+    #categoryEditOverlay .cm-sheet {
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      width: min(460px, 100%);
+      max-height: 90vh;
+      max-height: 90dvh;
+      border-radius: 26px 26px 0 0;
+      background: #ffffff;
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.18);
+      color: #463c40;
+    }
+
+    #categoryEditOverlay .cm-scroll {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 20px 18px 6px;
+    }
+
+    #categoryEditOverlay h3 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    #categoryEditOverlay .cm-lead {
+      margin: 0 0 14px;
+      color: #a78e97;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    #categoryEditOverlay .cm-section {
+      margin: 16px 0 8px;
+      color: #b08a99;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    #categoryEditOverlay .cm-field {
+      display: grid;
+      grid-template-columns: 96px minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    #categoryEditOverlay .cm-field > span {
+      color: #8f7a83;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    #categoryEditOverlay .cm-money,
+    #categoryEditOverlay .cm-budget-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-sizing: border-box;
+      height: 44px;
+      padding: 0 12px;
+      border: 1px solid #f0d5df;
+      border-radius: 13px;
+      background: #fffafc;
+    }
+
+    #categoryEditOverlay .cm-money:focus-within,
+    #categoryEditOverlay .cm-budget-wrap:focus-within,
+    #categoryEditOverlay .cm-name:focus {
+      border-color: #ed729a;
+      box-shadow: 0 0 0 3px rgba(237, 114, 154, 0.14);
+    }
+
+    #categoryEditOverlay .cm-money b,
+    #categoryEditOverlay .cm-budget-wrap b {
+      color: #b49aa3;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    #categoryEditOverlay input {
+      min-width: 0;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: #463c40;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    #categoryEditOverlay .cm-money input,
+    #categoryEditOverlay .cm-budget-wrap input {
+      flex: 1 1 auto;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #categoryEditOverlay .cm-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 104px 34px;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    #categoryEditOverlay .cm-name {
+      box-sizing: border-box;
+      width: 100%;
+      height: 44px;
+      padding: 0 12px;
+      border: 1px solid #f0d5df;
+      border-radius: 13px;
+      background: #fffafc;
+    }
+
+    #categoryEditOverlay .cm-budget-wrap {
+      padding: 0 8px;
+    }
+
+    #categoryEditOverlay .cm-budget-wrap input {
+      font-size: 15px;
+    }
+
+    #categoryEditOverlay .cm-del {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: #f7eef1;
+      color: #b0808f;
+      font-family: inherit;
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    #categoryEditOverlay .cm-del:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    #categoryEditOverlay .cm-row.is-deleted input {
+      color: #b8a3ab;
+      text-decoration: line-through;
+      background: #f7f2f4;
+    }
+
+    #categoryEditOverlay .cm-row.is-deleted .cm-del {
+      background: #ffe5ed;
+      color: #df7297;
+    }
+
+    #categoryEditOverlay .cm-note {
+      margin: 2px 0 8px;
+      color: #b8a3ab;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    #categoryEditOverlay .cm-add {
+      width: 100%;
+      height: 42px;
+      margin: 4px 0 6px;
+      border: 1px dashed #e6c6d3;
+      border-radius: 13px;
+      background: #fffafc;
+      color: #d9557f;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    #categoryEditOverlay .cm-actions {
+      display: grid;
+      grid-template-columns: 1fr 1.6fr;
+      gap: 10px;
+      padding:
+        10px 18px
+        calc(16px + env(safe-area-inset-bottom, 0px));
+      border-top: 1px solid #f6e2e9;
+      background: #ffffff;
+    }
+
+    #categoryEditOverlay .cm-actions button {
+      height: 50px;
+      border: 0;
+      border-radius: 15px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    #categoryEditOverlay .cm-cancel {
+      background: #f7eef1;
+      color: #8f7a83;
+    }
+
+    #categoryEditOverlay .cm-save {
+      background: linear-gradient(135deg, #f49ab6, #ed729a);
+      color: #ffffff;
+    }
+
+    #categoryEditOverlay .cm-actions button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+
+  // ---------- 下のタブ：「カテゴリ」をなくす ----------
+
+  function removeCategoryTab_() {
+    const tab =
+      document.querySelector(
+        '.bottom-nav [data-page="report"]'
+      );
+
+    if (tab) {
+      tab.remove();
+    }
+  }
+
+  removeCategoryTab_();
+
+
+  // ---------- 「ホーム」を押すとカテゴリ画面（今までのカテゴリ）を開く ----------
+
+  function markHomeTab_() {
+    document
+      .querySelectorAll(".nav-button")
+      .forEach(function (button) {
+        const active =
+          button.dataset.page === "home";
+
+        button.classList.toggle(
+          "active",
+          active
+        );
+
+        button.setAttribute(
+          "aria-current",
+          active ? "page" : "false"
+        );
+      });
+  }
+
+  if (typeof switchPage === "function") {
+    const originalSwitchPage_ = switchPage;
+
+    switchPage = async function (page) {
+      const target =
+        page === "home" ? "report" : page;
+
+      const result =
+        await originalSwitchPage_(target);
+
+      if (target === "report") {
+        markHomeTab_();
+      }
+
+      ensureEditButton_();
+
+      return result;
+    };
+  }
+
+  // 起動時に古いホームが開いていたら、カテゴリ画面へ切り替える
+  function openFirstPage_() {
+    const oldHome =
+      document.getElementById("page-home");
+
+    if (
+      oldHome &&
+      !oldHome.hidden &&
+      typeof switchPage === "function"
+    ) {
+      switchPage("report");
+    }
+  }
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+      setTimeout(openFirstPage_, 400);
+    }
+  );
+
+  if (document.readyState !== "loading") {
+    setTimeout(openFirstPage_, 400);
+  }
+
+
+  // ---------- 便利な関数 ----------
+
+  function toast_(message) {
+    if (typeof showToast === "function") {
+      showToast(message);
+    }
+  }
+
+  function textOf_(id) {
+    const node =
+      document.getElementById(id);
+
+    return node
+      ? String(node.textContent || "").trim()
+      : "";
+  }
+
+  function digits_(value) {
+    const only =
+      String(value || "")
+        .normalize("NFKC")
+        .replace(/[^0-9]/g, "");
+
+    return only ? Number(only) : 0;
+  }
+
+  function yen_(number) {
+    return (
+      "¥" +
+      Math.round(number).toLocaleString("ja-JP")
+    );
+  }
+
+  // 絵文字を除いた名前（家計データ側の名前と同じ作り方）
+  function cleanName_(value) {
+    return String(value || "")
+      .normalize("NFKC")
+      .replace(/[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu, "")
+      .replace(/[\uFE0E\uFE0F]/g, "")
+      .replace(/\s+/g, "")
+      .trim();
+  }
+
+
+  // ---------- 年月の横の修正ボタン ----------
+
+  function ensureEditButton_() {
+    const center =
+      document.querySelector(
+        "#categoryMonthSelector .category-month-center"
+      );
+
+    if (
+      !center ||
+      document.getElementById("categoryEditButton")
+    ) {
+      return;
+    }
+
+    const button =
+      document.createElement("button");
+
+    button.type = "button";
+    button.id = "categoryEditButton";
+    button.setAttribute(
+      "aria-label",
+      "予算・カテゴリを修正"
+    );
+    button.textContent = "✎";
+
+    button.addEventListener(
+      "click",
+      openSheet_
+    );
+
+    center.appendChild(button);
+  }
+
+  ensureEditButton_();
+  setInterval(ensureEditButton_, 1000);
+
+
+  // ---------- 修正の画面 ----------
+
+  let rows_ = [];
+  let rowSeq_ = 0;
+  let baseBudget_ = 0;
+  let baseSavings_ = 0;
+  let saving_ = false;
+
+  function closeSheet_() {
+    const overlay =
+      document.getElementById(
+        "categoryEditOverlay"
+      );
+
+    if (overlay) {
+      overlay.remove();
+    }
+  }
+
+  function readCategories_() {
+    const list =
+      typeof dashboardData !== "undefined" &&
+      dashboardData &&
+      Array.isArray(dashboardData.categories)
+        ? dashboardData.categories
+        : [];
+
+    return list
+      .map(function (category) {
+        const name =
+          String(
+            category.name ||
+            category.category ||
+            ""
+          ).trim();
+
+        const budget =
+          digits_(
+            category.budget === undefined ||
+            category.budget === null
+              ? 0
+              : category.budget
+          );
+
+        return { name: name, budget: budget };
+      })
+      .filter(function (category) {
+        return category.name !== "";
+      });
+  }
+
+  function newRow_(orig) {
+    rowSeq_ += 1;
+
+    return {
+      id: rowSeq_,
+      orig: orig
+        ? { name: orig.name, budget: orig.budget }
+        : null,
+      name: orig ? orig.name : "",
+      budget: orig ? orig.budget : 0,
+      deleted: false
+    };
+  }
+
+  function isProtected_(row) {
+    return (
+      Boolean(row.orig) &&
+      cleanName_(row.orig.name) ===
+        FALLBACK_CATEGORY
+    );
+  }
+
+  function buildRowNode_(row) {
+    const node =
+      document.createElement("div");
+
+    node.className = "cm-row";
+    node.dataset.rid = String(row.id);
+
+    const name =
+      document.createElement("input");
+
+    name.type = "text";
+    name.className = "cm-name";
+    name.maxLength = 24;
+    name.placeholder = "🍚 カテゴリ名";
+    name.value = row.name;
+    name.disabled = isProtected_(row);
+
+    name.addEventListener(
+      "input",
+      function () {
+        row.name = name.value;
+      }
+    );
+
+    const wrap =
+      document.createElement("div");
+
+    wrap.className = "cm-budget-wrap";
+
+    const mark =
+      document.createElement("b");
+
+    mark.textContent = "¥";
+
+    const budget =
+      document.createElement("input");
+
+    budget.type = "text";
+    budget.className = "cm-budget";
+    budget.inputMode = "numeric";
+    budget.placeholder = "未設定";
+    budget.value =
+      row.budget > 0 ? String(row.budget) : "";
+
+    budget.addEventListener(
+      "input",
+      function () {
+        budget.value =
+          budget.value
+            .normalize("NFKC")
+            .replace(/[^0-9]/g, "");
+
+        row.budget = digits_(budget.value);
+      }
+    );
+
+    budget.addEventListener(
+      "focus",
+      function () {
+        budget.select();
+      }
+    );
+
+    wrap.appendChild(mark);
+    wrap.appendChild(budget);
+
+    const del =
+      document.createElement("button");
+
+    del.type = "button";
+    del.className = "cm-del";
+    del.textContent = "🗑";
+    del.setAttribute("aria-label", "削除");
+    del.disabled = isProtected_(row);
+
+    del.addEventListener(
+      "click",
+      function () {
+        if (!row.orig) {
+          // まだ保存していない追加分は、その場で消す
+          rows_ = rows_.filter(function (other) {
+            return other.id !== row.id;
+          });
+
+          node.remove();
+          return;
+        }
+
+        row.deleted = !row.deleted;
+
+        node.classList.toggle(
+          "is-deleted",
+          row.deleted
+        );
+
+        name.disabled = row.deleted;
+        budget.disabled = row.deleted;
+        del.textContent = row.deleted ? "↩" : "🗑";
+
+        del.setAttribute(
+          "aria-label",
+          row.deleted ? "削除を取り消す" : "削除"
+        );
+      }
+    );
+
+    node.appendChild(name);
+    node.appendChild(wrap);
+    node.appendChild(del);
+
+    return node;
+  }
+
+  function openSheet_() {
+    if (
+      document.getElementById(
+        "categoryEditOverlay"
+      )
+    ) {
+      return;
+    }
+
+    baseBudget_ =
+      digits_(
+        textOf_("hubSummaryBudget") ||
+        textOf_("budgetMoney")
+      );
+
+    baseSavings_ =
+      digits_(
+        textOf_("hubSummarySavings") ||
+        textOf_("savingActual")
+      );
+
+    rows_ =
+      readCategories_().map(newRow_);
+
+    const overlay =
+      document.createElement("div");
+
+    overlay.id = "categoryEditOverlay";
+
+    overlay.innerHTML = `
+      <div class="cm-sheet" role="dialog" aria-modal="true">
+
+        <div class="cm-scroll">
+
+          <h3>予算・カテゴリの修正</h3>
+
+          <p class="cm-lead">
+            変えたいところだけ直して、保存を押してください。
+          </p>
+
+          <div class="cm-section">全体</div>
+
+          <label class="cm-field">
+            <span>毎月の予算</span>
+            <div class="cm-money">
+              <b>¥</b>
+              <input
+                type="text"
+                inputmode="numeric"
+                id="cmBudget"
+                autocomplete="off"
+              >
+            </div>
+          </label>
+
+          <label class="cm-field">
+            <span>現在の貯蓄</span>
+            <div class="cm-money">
+              <b>¥</b>
+              <input
+                type="text"
+                inputmode="numeric"
+                id="cmSavings"
+                autocomplete="off"
+              >
+            </div>
+          </label>
+
+          <div class="cm-section">
+            カテゴリ（名前 ｜ 予算額 ｜ 削除）
+          </div>
+
+          <div id="cmRows"></div>
+
+          <button type="button" class="cm-add">
+            ＋ カテゴリを追加
+          </button>
+
+          <p class="cm-note">
+            「その他」は名前の変更・削除ができません。
+            削除したカテゴリの明細は「その他」に移ります。
+          </p>
+
+        </div>
+
+        <div class="cm-actions">
+          <button type="button" class="cm-cancel">
+            キャンセル
+          </button>
+
+          <button type="button" class="cm-save">
+            保存
+          </button>
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const budgetInput =
+      overlay.querySelector("#cmBudget");
+
+    const savingsInput =
+      overlay.querySelector("#cmSavings");
+
+    budgetInput.value = String(baseBudget_);
+    savingsInput.value = String(baseSavings_);
+
+    [budgetInput, savingsInput].forEach(
+      function (input) {
+        input.addEventListener(
+          "input",
+          function () {
+            input.value =
+              input.value
+                .normalize("NFKC")
+                .replace(/[^0-9]/g, "");
+          }
+        );
+
+        input.addEventListener(
+          "focus",
+          function () {
+            input.select();
+          }
+        );
+      }
+    );
+
+    const rowsBox =
+      overlay.querySelector("#cmRows");
+
+    rows_.forEach(function (row) {
+      rowsBox.appendChild(buildRowNode_(row));
+    });
+
+    overlay
+      .querySelector(".cm-add")
+      .addEventListener(
+        "click",
+        function () {
+          const row = newRow_(null);
+
+          rows_.push(row);
+
+          const node = buildRowNode_(row);
+
+          rowsBox.appendChild(node);
+
+          node.querySelector(".cm-name").focus();
+        }
+      );
+
+    overlay.addEventListener(
+      "click",
+      function (event) {
+        if (event.target === overlay && !saving_) {
+          closeSheet_();
+        }
+      }
+    );
+
+    overlay
+      .querySelector(".cm-cancel")
+      .addEventListener(
+        "click",
+        function () {
+          if (!saving_) {
+            closeSheet_();
+          }
+        }
+      );
+
+    overlay
+      .querySelector(".cm-save")
+      .addEventListener(
+        "click",
+        function () {
+          saveAll_(overlay);
+        }
+      );
+  }
+
+
+  // ---------- 保存 ----------
+
+  async function postJson_(body) {
+    const response =
+      await fetch(
+        API_BASE,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "text/plain;charset=utf-8"
+          },
+          body: JSON.stringify(body)
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error("HTTP " + response.status);
+    }
+
+    const result = await response.json();
+
+    if (!result || result.success !== true) {
+      throw new Error(
+        (result && result.error) ||
+        "保存できませんでした"
+      );
+    }
+
+    return result;
+  }
+
+  async function saveCategoryBudget_(name, budget) {
+    const unset = !(budget > 0);
+
+    const result =
+      await fetchJson(
+        API_BASE +
+        "?action=saveCategoryBudget" +
+        "&category=" +
+        encodeURIComponent(cleanName_(name)) +
+        "&budget=" +
+        encodeURIComponent(unset ? "" : budget) +
+        "&unset=" +
+        (unset ? "1" : "0") +
+        "&_=" +
+        Date.now()
+      );
+
+    if (!result || result.success !== true) {
+      throw new Error(
+        (result && result.error) ||
+        "カテゴリの予算を保存できませんでした"
+      );
+    }
+  }
+
+  function showValueNow_(budget, savings) {
+    const set = function (id, text) {
+      const node =
+        document.getElementById(id);
+
+      if (node) {
+        node.textContent = text;
+      }
+    };
+
+    if (budget !== null) {
+      const used =
+        digits_(
+          textOf_("hubSummaryUsed") ||
+          textOf_("stripUsed")
+        );
+
+      const remaining = budget - used;
+
+      const remainingText =
+        (remaining < 0 ? "-" : "") +
+        yen_(Math.abs(remaining));
+
+      ["hubSummaryBudget", "stripBudget"]
+        .forEach(function (id) {
+          set(id, yen_(budget));
+        });
+
+      ["hubSummaryBalance", "stripBalance"]
+        .forEach(function (id) {
+          set(id, remainingText);
+        });
+    }
+
+    if (savings !== null) {
+      ["hubSummarySavings", "stripSavings", "savingActual", "reportSaving"]
+        .forEach(function (id) {
+          set(id, yen_(savings));
+        });
+    }
+  }
+
+  async function saveAll_(overlay) {
+    if (saving_) {
+      return;
+    }
+
+    const saveButton =
+      overlay.querySelector(".cm-save");
+
+    const cancelButton =
+      overlay.querySelector(".cm-cancel");
+
+    const newBudget =
+      digits_(
+        overlay.querySelector("#cmBudget").value
+      );
+
+    const newSavings =
+      digits_(
+        overlay.querySelector("#cmSavings").value
+      );
+
+    if (newBudget < 10000 || newBudget > 10000000) {
+      toast_("毎月の予算は1万円以上で入力してください");
+      return;
+    }
+
+    // 保存していない空の追加行は無視
+    const active =
+      rows_.filter(function (row) {
+        if (row.deleted) {
+          return true;
+        }
+
+        if (
+          !row.orig &&
+          String(row.name).trim() === "" &&
+          !(row.budget > 0)
+        ) {
+          return false;
+        }
+
+        return true;
+      });
+
+    const kept =
+      active.filter(function (row) {
+        return !row.deleted;
+      });
+
+    const emptyName =
+      kept.some(function (row) {
+        return cleanName_(row.name) === "";
+      });
+
+    if (emptyName) {
+      toast_("カテゴリ名を入力してください");
+      return;
+    }
+
+    const seen = new Set();
+
+    for (let i = 0; i < kept.length; i += 1) {
+      const key =
+        cleanName_(kept[i].name).toLowerCase();
+
+      if (seen.has(key)) {
+        toast_(
+          "同じ名前のカテゴリがあります：" +
+          kept[i].name
+        );
+        return;
+      }
+
+      seen.add(key);
+    }
+
+    if (
+      kept.some(function (row) {
+        return row.budget > 10000000;
+      })
+    ) {
+      toast_("カテゴリの予算は1000万円以下で入力してください");
+      return;
+    }
+
+    const deletions =
+      active.filter(function (row) {
+        return row.deleted && row.orig;
+      });
+
+    if (deletions.length > 0) {
+      const names =
+        deletions
+          .map(function (row) {
+            return row.orig.name;
+          })
+          .join("、");
+
+      const ok =
+        window.confirm(
+          "次のカテゴリを削除します。\n" +
+          names +
+          "\n\nこのカテゴリの明細は「" +
+          FALLBACK_CATEGORY +
+          "」に移ります。よろしいですか？"
+        );
+
+      if (!ok) {
+        return;
+      }
+    }
+
+    saving_ = true;
+    saveButton.disabled = true;
+    cancelButton.disabled = true;
+    saveButton.textContent = "保存中…";
+
+    let changed = false;
+    let shownBudget = null;
+    let shownSavings = null;
+
+    try {
+      // 1) 削除
+      for (let i = 0; i < deletions.length; i += 1) {
+        await postJson_({
+          action: "deleteCategory",
+          category: cleanName_(deletions[i].orig.name),
+          moveTo: FALLBACK_CATEGORY
+        });
+
+        changed = true;
+
+        rows_ = rows_.filter(function (row) {
+          return row.id !== deletions[i].id;
+        });
+      }
+
+      // 2) 名前の変更
+      const renames =
+        kept.filter(function (row) {
+          return (
+            row.orig &&
+            String(row.name).trim() !==
+              String(row.orig.name).trim()
+          );
+        });
+
+      for (let i = 0; i < renames.length; i += 1) {
+        const row = renames[i];
+
+        await postJson_({
+          action: "renameCategory",
+          from: cleanName_(row.orig.name),
+          to: String(row.name).trim()
+        });
+
+        changed = true;
+        row.orig.name = String(row.name).trim();
+      }
+
+      // 3) 追加
+      const additions =
+        kept.filter(function (row) {
+          return !row.orig;
+        });
+
+      for (let i = 0; i < additions.length; i += 1) {
+        const row = additions[i];
+
+        await postJson_({
+          action: "addCategory",
+          name: String(row.name).trim(),
+          budget: row.budget > 0 ? row.budget : 0
+        });
+
+        changed = true;
+
+        row.orig = {
+          name: String(row.name).trim(),
+          budget: row.budget > 0 ? row.budget : 0
+        };
+      }
+
+      // 4) 各カテゴリの予算額
+      const budgetRows =
+        kept.filter(function (row) {
+          return (
+            row.orig &&
+            (row.budget > 0 ? row.budget : 0) !==
+              (row.orig.budget > 0 ? row.orig.budget : 0)
+          );
+        });
+
+      for (let i = 0; i < budgetRows.length; i += 1) {
+        const row = budgetRows[i];
+
+        await saveCategoryBudget_(
+          row.name,
+          row.budget
+        );
+
+        changed = true;
+
+        row.orig.budget =
+          row.budget > 0 ? row.budget : 0;
+      }
+
+      // 5) 毎月の予算
+      if (newBudget !== baseBudget_) {
+        const result =
+          await fetchJson(
+            API_BASE +
+            "?action=saveMonthlyBudget" +
+            "&budget=" +
+            encodeURIComponent(newBudget) +
+            "&_=" +
+            Date.now()
+          );
+
+        if (!result || result.success !== true) {
+          throw new Error(
+            (result && result.error) ||
+            "予算を保存できませんでした"
+          );
+        }
+
+        changed = true;
+        baseBudget_ = newBudget;
+        shownBudget = newBudget;
+      }
+
+      // 6) 現在の貯蓄
+      if (newSavings !== baseSavings_) {
+        const response =
+          await fetch(
+            API_BASE +
+            "?action=saveCurrentSavings" +
+            "&amount=" +
+            encodeURIComponent(newSavings) +
+            "&_=" +
+            Date.now(),
+            {
+              method: "GET",
+              cache: "no-store"
+            }
+          );
+
+        const result = await response.json();
+
+        if (!result || result.success !== true) {
+          throw new Error(
+            (result && result.error) ||
+            "貯蓄を保存できませんでした"
+          );
+        }
+
+        const amount = Number(result.amount) || 0;
+
+        if (
+          typeof dashboardData !== "undefined" &&
+          dashboardData
+        ) {
+          if (!dashboardData.saving) {
+            dashboardData.saving = {};
+          }
+
+          dashboardData.saving.current = amount;
+          dashboardData.saving.actual = amount;
+        }
+
+        changed = true;
+        baseSavings_ = newSavings;
+        shownSavings = amount;
+      }
+
+      if (changed && typeof loadDashboard === "function") {
+        await loadDashboard();
+      }
+
+      showValueNow_(shownBudget, shownSavings);
+
+      toast_(changed ? "修正しました" : "変更はありません");
+
+      saving_ = false;
+      closeSheet_();
+    }
+    catch (error) {
+      console.error(error);
+
+      const message = String(error.message || error);
+
+      toast_(
+        "保存できませんでした：" +
+        message +
+        (
+          /unknown|未対応|不明|invalid action/i.test(message)
+            ? "（Apps Script の更新が必要です）"
+            : ""
+        )
+      );
+
+      // 途中まで保存できたものは、画面の数字にも反映する
+      if (changed && typeof loadDashboard === "function") {
+        try {
+          await loadDashboard();
+        }
+        catch (reloadError) {
+          console.error(reloadError);
+        }
+      }
+
+      showValueNow_(shownBudget, shownSavings);
+
+      saving_ = false;
+      saveButton.disabled = false;
+      cancelButton.disabled = false;
+      saveButton.textContent = "保存";
+    }
+  }
+})();
