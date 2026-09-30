@@ -19741,6 +19741,12 @@ if (
           }
         }
       }
+      if (
+        typeof window.refreshHomeCards_ ===
+        "function"
+      ) {
+        await window.refreshHomeCards_();
+      }
     } catch (error) {
       console.error(error);
     }
@@ -20234,4 +20240,441 @@ if (
   `;
 
   document.head.appendChild(style);
+})();
+
+
+
+// =========================================================
+// ホームのカード整理
+// ・AI診断カードを削除
+// ・カードから各画面へ移動
+// ・カードの順番を変更
+// ・「次の予定」「買い物メモの件数」を表示
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.homeCardsHubAdded_) {
+    return;
+  }
+
+  window.homeCardsHubAdded_ = true;
+
+
+  // ---------- 見た目：AI診断を消す・順番を変える ----------
+
+  const style =
+    document.createElement("style");
+
+  style.id = "homeCardsHubStyle";
+
+  style.textContent = `
+    /* AI診断カードは表示しない */
+    body #homeAiSummaryRow {
+      display: none !important;
+    }
+
+    /* カードの順番：残金 → 貯蓄 → 買い物額 → 予定 → メモ → チェックリスト */
+    #page-home .cute-home > * {
+      order: 20;
+    }
+
+    #page-home .cute-home > #cuteBalanceCard {
+      order: 1;
+    }
+
+    #page-home .cute-home > .cute-savings-card {
+      order: 2;
+    }
+
+    #page-home .cute-home > #homeMonthlyPurchaseCard {
+      order: 3;
+    }
+
+    #page-home .cute-home > #cuteNextSchedule {
+      order: 4;
+    }
+
+    #page-home .cute-home > #cuteMemoJump {
+      order: 5;
+    }
+
+    #page-home .cute-home > #cuteChecklistJump {
+      order: 6;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+
+  // ---------- カードから各画面へ移動 ----------
+
+  function go_(page) {
+    if (typeof switchPage === "function") {
+      switchPage(page);
+    }
+  }
+
+  document.addEventListener(
+    "click",
+    function (event) {
+      const target = event.target;
+
+      if (
+        !target ||
+        typeof target.closest !== "function"
+      ) {
+        return;
+      }
+
+      // 現在の貯蓄 → カテゴリ
+      if (target.closest("#cuteSavingsJump")) {
+        go_("report");
+        return;
+      }
+
+      // 今月の買い物額 → 日別
+      if (target.closest("#homeMonthlyPurchaseCard")) {
+        go_("receipt");
+        return;
+      }
+
+      // 次の予定 → カレンダー
+      if (target.closest("#cuteNextSchedule")) {
+        go_("calendar");
+        return;
+      }
+
+      // 買い物メモ → メモ
+      if (target.closest("#cuteMemoJump")) {
+        go_("settings");
+        return;
+      }
+
+      // 今月の残金 → カテゴリ（✎ボタンは除く）
+      if (target.closest("#cuteBalanceCard")) {
+        if (target.closest("button")) {
+          return;
+        }
+
+        go_("report");
+      }
+    }
+  );
+
+  // 今月の残金カードは、キーボード操作でも移動できるようにする
+  document.addEventListener(
+    "keydown",
+    function (event) {
+      if (
+        event.key !== "Enter" &&
+        event.key !== " "
+      ) {
+        return;
+      }
+
+      if (
+        event.target &&
+        event.target.id === "cuteBalanceCard"
+      ) {
+        event.preventDefault();
+        go_("report");
+      }
+    }
+  );
+
+
+  // ---------- 買い物メモの件数 ----------
+
+  function syncMemoCount_() {
+    const source =
+      document.getElementById(
+        "shoppingMemoCount"
+      );
+
+    const target =
+      document.getElementById(
+        "cuteMemoCount"
+      );
+
+    if (!source || !target) {
+      return;
+    }
+
+    const match =
+      String(source.textContent || "")
+        .match(/(\d+)/);
+
+    if (match) {
+      target.textContent =
+        match[1] + "件";
+    }
+  }
+
+  function requestMemoLoad_() {
+    const button =
+      document.getElementById(
+        "shoppingRefreshButton"
+      );
+
+    if (button) {
+      button.click();
+    }
+  }
+
+  const memoPage =
+    document.getElementById(
+      "page-settings"
+    );
+
+  if (memoPage) {
+    new MutationObserver(
+      syncMemoCount_
+    ).observe(
+      memoPage,
+      {
+        childList: true,
+        characterData: true,
+        subtree: true
+      }
+    );
+  }
+
+
+  // ---------- 次の予定 ----------
+
+  function pad2_(number) {
+    return String(number).padStart(2, "0");
+  }
+
+  function dateKey_(date) {
+    return (
+      date.getFullYear() +
+      "-" +
+      pad2_(date.getMonth() + 1) +
+      "-" +
+      pad2_(date.getDate())
+    );
+  }
+
+  function dayLabel_(key, today) {
+    const parts = key.split("-");
+
+    const date =
+      new Date(
+        Number(parts[0]),
+        Number(parts[1]) - 1,
+        Number(parts[2])
+      );
+
+    const diff =
+      Math.round(
+        (
+          date -
+          new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            today.getDate()
+          )
+        ) /
+        86400000
+      );
+
+    if (diff === 0) {
+      return "今日";
+    }
+
+    if (diff === 1) {
+      return "明日";
+    }
+
+    const week =
+      ["日", "月", "火", "水", "木", "金", "土"];
+
+    return (
+      (date.getMonth() + 1) +
+      "/" +
+      date.getDate() +
+      "(" +
+      week[date.getDay()] +
+      ")"
+    );
+  }
+
+  async function fetchMonthSchedules_(year, month) {
+    const data =
+      await fetchJson(
+        `${API_BASE}?mode=googleSchedules&year=${year}&month=${month}`
+      );
+
+    if (!data || data.success !== true) {
+      throw new Error("予定を取得できません");
+    }
+
+    return Array.isArray(data.schedules)
+      ? data.schedules
+      : [];
+  }
+
+  function findNext_(schedules, now) {
+    const todayKey = dateKey_(now);
+
+    const nowTime =
+      pad2_(now.getHours()) +
+      ":" +
+      pad2_(now.getMinutes());
+
+    const upcoming =
+      schedules.filter(
+        function (schedule) {
+          const date =
+            String(schedule.date || "");
+
+          if (!date || date < todayKey) {
+            return false;
+          }
+
+          if (
+            date === todayKey &&
+            !schedule.allDay
+          ) {
+            const end =
+              String(schedule.end || "");
+
+            const start =
+              String(schedule.start || "");
+
+            if (end) {
+              return end > nowTime;
+            }
+
+            if (start) {
+              return start >= nowTime;
+            }
+          }
+
+          return true;
+        }
+      );
+
+    upcoming.sort(
+      function (a, b) {
+        const keyA =
+          String(a.date) + " " +
+          (a.allDay ? "00:00" : String(a.start || "99:99"));
+
+        const keyB =
+          String(b.date) + " " +
+          (b.allDay ? "00:00" : String(b.start || "99:99"));
+
+        return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
+      }
+    );
+
+    return upcoming[0] || null;
+  }
+
+  async function loadNextSchedule_() {
+    const text =
+      document.getElementById(
+        "cuteNextScheduleText"
+      );
+
+    if (!text) {
+      return;
+    }
+
+    try {
+      const now = new Date();
+
+      let schedules =
+        await fetchMonthSchedules_(
+          now.getFullYear(),
+          now.getMonth() + 1
+        );
+
+      let next = findNext_(schedules, now);
+
+      if (!next) {
+        const nextMonth =
+          new Date(
+            now.getFullYear(),
+            now.getMonth() + 1,
+            1
+          );
+
+        schedules =
+          await fetchMonthSchedules_(
+            nextMonth.getFullYear(),
+            nextMonth.getMonth() + 1
+          );
+
+        next = findNext_(schedules, now);
+      }
+
+      if (!next) {
+        text.textContent =
+          "直近の予定はありません";
+
+        return;
+      }
+
+      const time =
+        next.allDay
+          ? "終日"
+          : (next.start || "");
+
+      text.textContent =
+        [
+          dayLabel_(String(next.date), now),
+          time,
+          next.title || "予定"
+        ]
+          .filter(Boolean)
+          .join(" ");
+    }
+    catch (error) {
+      console.error(error);
+
+      text.textContent =
+        "予定を取得できませんでした";
+    }
+  }
+
+
+  // ---------- まとめて更新 ----------
+
+  window.refreshHomeCards_ =
+    async function () {
+      requestMemoLoad_();
+
+      setTimeout(syncMemoCount_, 1500);
+
+      await loadNextSchedule_();
+    };
+
+  // ホームに戻ったときにも更新する
+  if (typeof switchPage === "function") {
+    const originalSwitchPage_ = switchPage;
+
+    switchPage = async function (page) {
+      const result =
+        await originalSwitchPage_(page);
+
+      if (page === "home") {
+        syncMemoCount_();
+        window.refreshHomeCards_();
+      }
+
+      return result;
+    };
+  }
+
+  // 起動直後の読み込み
+  setTimeout(
+    window.refreshHomeCards_,
+    1200
+  );
 })();
