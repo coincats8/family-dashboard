@@ -21986,7 +21986,8 @@ if (
 // ・内訳では「電気」「ガス」「水道」だけを見出しにし、同じ意味の言葉は重ねない
 // ・近いカテゴリをジャンルにまとめ、点線とジャンル名で区切る
 // ・各行を「件数 ｜ 金額 ｜ 予算額」の右合わせにし、長いときは幅に合わせて縮小
-// ・表示月の下に「今月の残金・予算・生活費・現在の貯蓄」を表示
+// ・表示月の下に「予算・生活費・残金・貯蓄」を中央そろえで表示
+//   （残金は、減るにつれて 青 → 黄 → 赤 の文字色に変わる）
 // ・件数と金額を右合わせで表示
 // app.jsの一番最後へ追加
 // =========================================================
@@ -22005,6 +22006,10 @@ if (
   const UTILITY_ICON = "💡";
 
   let utilityOpen_ = false;
+
+  // 残金の色：予算に対する残りの割合で、青 → 黄 → 赤 と変わる
+  const BALANCE_BLUE_FROM = 0.3;    // 30%以上残っていれば 青
+  const BALANCE_YELLOW_FROM = 0.1;  // 10%以上30%未満は 黄、10%未満と赤字は 赤
 
   // ジャンルの分け方（上から順に表示。名前に下の言葉が含まれていれば、そのジャンル）
   const GENRES = [
@@ -22311,6 +22316,7 @@ if (
       min-width: 0;
       padding: 0 7px;
       border-left: 1px solid #f6e2e9;
+      text-align: center;
     }
 
     #categorySummary .strip-item:first-child {
@@ -22325,6 +22331,7 @@ if (
       font-size: 11px;
       font-weight: 700;
       line-height: 1.3;
+      text-align: center;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -22337,11 +22344,21 @@ if (
       font-size: 15px;
       font-weight: 800;
       line-height: 1.3;
+      text-align: center;
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
 
-    #categorySummary .strip-value.is-danger {
+    /* 残金の色：青 → 黄 → 赤 */
+    #categorySummary .strip-value.is-blue {
+      color: #2f7df6;
+    }
+
+    #categorySummary .strip-value.is-yellow {
+      color: #d99a00;
+    }
+
+    #categorySummary .strip-value.is-red {
       color: #e5484d;
     }
 
@@ -23146,10 +23163,10 @@ if (
   // ---------- 表示月の下：今月の残金・予算・生活費・現在の貯蓄 ----------
 
   const STRIP_ITEMS = [
-    { id: "stripBalance", label: "今月の残金" },
     { id: "stripBudget", label: "予算" },
-    { id: "stripUsed", label: "今月の生活費" },
-    { id: "stripSavings", label: "現在の貯蓄" }
+    { id: "stripUsed", label: "生活費" },
+    { id: "stripBalance", label: "残金" },
+    { id: "stripSavings", label: "貯蓄" }
   ];
 
   function ensureStrip_() {
@@ -23322,13 +23339,34 @@ if (
       savingsText || "―"
     );
 
-    document
-      .getElementById("stripBalance")
-      .classList.toggle(
-        "is-danger",
-        String(balanceText || "").indexOf("-") !== -1
+    const balanceNode =
+      document.getElementById("stripBalance");
+
+    const negative =
+      String(balanceText || "").indexOf("-") !== -1;
+
+    const remainingNumber =
+      (negative ? -1 : 1) *
+      yenToNumber_(balanceText);
+
+    const level =
+      balanceLevel_(
+        remainingNumber,
+        yenToNumber_(budgetText)
       );
+
+    ["blue", "yellow", "red"].forEach(
+      function (name) {
+        balanceNode.classList.toggle(
+          "is-" + name,
+          name === level
+        );
+      }
+    );
   }
+
+  // 他のところ（修正画面など）から、すぐ最新にできるようにする
+  window.refreshCategoryStrip_ = updateStrip_;
 
   function textOf_(id) {
     const node =
@@ -23337,6 +23375,29 @@ if (
     return node
       ? String(node.textContent || "").trim()
       : "";
+  }
+
+  // 残金の色を決める（blue / yellow / red）
+  function balanceLevel_(remaining, budget) {
+    if (remaining < 0) {
+      return "red";
+    }
+
+    if (!(budget > 0)) {
+      return remaining > 0 ? "blue" : "red";
+    }
+
+    const ratio = remaining / budget;
+
+    if (ratio >= BALANCE_BLUE_FROM) {
+      return "blue";
+    }
+
+    if (ratio >= BALANCE_YELLOW_FROM) {
+      return "yellow";
+    }
+
+    return "red";
   }
 
 
@@ -25779,6 +25840,11 @@ if (
         .forEach(function (id) {
           set(id, yen_(savings));
         });
+    }
+
+    // 残金の色などもすぐ更新する
+    if (typeof window.refreshCategoryStrip_ === "function") {
+      window.refreshCategoryStrip_();
     }
   }
 
