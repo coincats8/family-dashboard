@@ -20100,8 +20100,8 @@ if (
       display: none !important;
     }
 
-    /* ホーム全体を、画面の高さいっぱいにする */
-    #page-home {
+    /* ホーム全体を、画面の高さいっぱいにする（ホーム表示中のみ） */
+    #page-home:not([hidden]) {
       display: flex !important;
       flex-direction: column !important;
 
@@ -20186,4 +20186,52 @@ if (
   ) {
     renderHome();
   }
+})();
+
+
+
+// =========================================================
+// 全画面のベース色をピンクに統一
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.pinkBaseThemeAdded_) {
+    return;
+  }
+
+  window.pinkBaseThemeAdded_ = true;
+
+  const style =
+    document.createElement("style");
+
+  style.id = "pinkBaseThemeStyle";
+
+  style.textContent = `
+    html {
+      background: #fff7fa !important;
+    }
+
+    body {
+      background-color: #fff7fa !important;
+
+      background-image:
+        radial-gradient(
+          circle at 100% 0%,
+          #ffe2ec 0 95px,
+          transparent 96px
+        ),
+        linear-gradient(
+          180deg,
+          #fff5f9 0%,
+          #fffafd 100%
+        ) !important;
+
+      background-repeat: no-repeat !important;
+    }
+  `;
+
+  document.head.appendChild(style);
 })();
