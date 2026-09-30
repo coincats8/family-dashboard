@@ -19461,7 +19461,8 @@ if (totalMoney) {
       if (label) {
         label.textContent =
           "今月の残金";
-      }
+    }
+  
     }
   
  const renderHomeBeforeCorrectTotals_ =
