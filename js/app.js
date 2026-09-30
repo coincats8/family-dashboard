@@ -22774,3 +22774,1037 @@ if (
 
   watchList_();
 })();
+
+
+// =========================================================
+// 日別：選択して削除
+// ・右上の「削除」を押すと選択モードになる
+// ・削除したい店・日付の行を選んで、まとめて削除できる
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.receiptDeleteAdded_) {
+    return;
+  }
+
+  window.receiptDeleteAdded_ = true;
+
+  let selecting_ = false;
+  let groups_ = [];
+  let mappingOk_ = false;
+  let busy_ = false;
+
+  const selectedKeys_ = new Set();
+
+
+  // ---------- 一覧と同じ分け方で、行と明細をひもづける ----------
+
+  function normalizeShop_(value) {
+    const shop =
+      String(value || "店名不明")
+        .normalize("NFKC")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const rules = [
+      { pattern: /^(maruetsu|マルエツ)\s*/i, name: "マルエツ" },
+      { pattern: /^(matsukiyolab|マツキヨlab|マツキヨラボ)\s*/i, name: "マツキヨLAB" },
+      { pattern: /^(matsukiyo|マツキヨ)\s*/i, name: "マツキヨ" },
+      { pattern: /^(matsumotokiyoshi|マツモトキヨシ)\s*/i, name: "マツモトキヨシ" },
+      { pattern: /^(amazon|アマゾン)\s*/i, name: "アマゾン" },
+      { pattern: /^(aeon|イオン)\s*/i, name: "イオン" },
+      { pattern: /^(seiyu|西友)\s*/i, name: "西友" },
+      { pattern: /^(familymart|family mart|ファミリーマート|ファミマ)\s*/i, name: "ファミリーマート" },
+      { pattern: /^(lawson|ローソン)\s*/i, name: "ローソン" },
+      { pattern: /^(seven.?eleven|7.?eleven|セブンイレブン|セブン-イレブン)\s*/i, name: "セブンイレブン" },
+      { pattern: /^(welcia|welcia|ウエルシア|ウェルシア)\s*/i, name: "ウエルシア" },
+      { pattern: /^(itoyokado|イトーヨーカドー|イトーヨーカ堂)\s*/i, name: "イトーヨーカドー" }
+    ];
+
+    for (let i = 0; i < rules.length; i += 1) {
+      const rule = rules[i];
+
+      if (rule.pattern.test(shop)) {
+        const branch =
+          shop.replace(rule.pattern, "").trim();
+
+        return branch
+          ? rule.name + " " + branch
+          : rule.name;
+      }
+    }
+
+    return shop;
+  }
+
+  function groupDate_(value) {
+    let date = null;
+
+    if (typeof parseDateValue === "function") {
+      date = parseDateValue(value);
+    }
+    else {
+      date = new Date(value);
+    }
+
+    if (!date || Number.isNaN(date.getTime())) {
+      return {
+        key: String(value || ""),
+        label: String(value || ""),
+        time: 0
+      };
+    }
+
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+
+    return {
+      key:
+        year + "-" +
+        String(month).padStart(2, "0") + "-" +
+        String(day).padStart(2, "0"),
+      label: month + "/" + day,
+      time: new Date(year, month - 1, day).getTime()
+    };
+  }
+
+  function shopKey_(value) {
+    return String(value || "店名不明")
+      .normalize("NFKC")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+  }
+
+  function buildGroups_(receipts) {
+    const map = new Map();
+
+    receipts.forEach(function (item) {
+      const date = groupDate_(item.date);
+
+      const shop =
+        String(
+          normalizeShop_(item.shop) || "店名不明"
+        ).trim();
+
+      const key =
+        date.key + "::" + shopKey_(shop);
+
+      if (!map.has(key)) {
+        map.set(key, {
+          key: key,
+          date: date,
+          shop: shop,
+          items: []
+        });
+      }
+
+      map.get(key).items.push(item);
+    });
+
+    return Array.from(map.values()).sort(
+      function (a, b) {
+        if (a.date.time !== b.date.time) {
+          return b.date.time - a.date.time;
+        }
+
+        return a.shop.localeCompare(b.shop, "ja");
+      }
+    );
+  }
+
+  function clean_(text) {
+    return String(text || "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  // 画面に出ている行と、自分で作った分け方が完全に一致するか確認する
+  function verify_(container, groups) {
+    const nodes =
+      container.querySelectorAll(
+        ".purchase-shop-group"
+      );
+
+    if (nodes.length !== groups.length) {
+      return false;
+    }
+
+    return groups.every(function (group, index) {
+      const node = nodes[index];
+
+      const date =
+        node.querySelector(".purchase-shop-date");
+
+      const shop =
+        node.querySelector(".purchase-shop-name");
+
+      const small =
+        node.querySelector(
+          ".purchase-shop-information small"
+        );
+
+      const match =
+        clean_(small && small.textContent)
+          .replace(/\s+/g, "")
+          .match(/^(\d+)商品/);
+
+      return (
+        Boolean(date && shop && match) &&
+        clean_(date.textContent) ===
+          group.date.label &&
+        clean_(shop.textContent) ===
+          clean_(group.shop) &&
+        Number(match[1]) === group.items.length
+      );
+    });
+  }
+
+
+  // ---------- 見た目 ----------
+
+  const style =
+    document.createElement("style");
+
+  style.id = "receiptDeleteStyle";
+
+  style.textContent = `
+    #receiptDeleteToggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: auto;
+      padding: 8px 13px;
+      border: 1px solid #f0d5df;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #d9557f;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #receiptDeleteToggle .material-symbols-rounded {
+      font-size: 17px;
+    }
+
+    #receiptDeleteToggle.is-active {
+      background: #fff0f5;
+    }
+
+    #page-receipt.del-active {
+      padding-bottom: 60px;
+    }
+
+    .purchase-shop-group {
+      position: relative;
+    }
+
+    .purchase-shop-group.del-mode::before {
+      content: "";
+      position: absolute;
+      z-index: 1;
+      left: 14px;
+      top: 50%;
+      width: 22px;
+      height: 22px;
+      margin-top: -11px;
+      box-sizing: border-box;
+      border: 2px solid #e6c6d3;
+      border-radius: 50%;
+      background: #ffffff;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 18px;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .purchase-shop-group.del-picked::before {
+      content: "✓";
+      border-color: #ed729a;
+      background: #ed729a;
+    }
+
+    .purchase-shop-group.del-mode
+    .purchase-shop-summary {
+      padding-left: 48px !important;
+    }
+
+    .purchase-shop-group.del-mode
+    .purchase-shop-arrow {
+      display: none !important;
+    }
+
+    .purchase-shop-group.del-picked {
+      background: #fff5f9;
+    }
+
+    /* 下の操作バー */
+    #receiptDeleteBar {
+      position: fixed;
+      z-index: 2500;
+      left: 50%;
+      bottom: calc(var(--home-bottom-space, 90px) + 2px);
+      transform: translateX(-50%);
+      display: none;
+      align-items: center;
+      gap: 10px;
+      box-sizing: border-box;
+      width: min(430px, calc(100% - 24px));
+      padding: 10px 12px;
+      border: 1px solid #f5d7e1;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.97);
+      box-shadow: 0 8px 26px rgba(216, 113, 148, 0.2);
+      font-family: inherit;
+    }
+
+    #receiptDeleteBar.is-show {
+      display: flex;
+    }
+
+    #receiptDeleteBar .del-all {
+      padding: 8px 4px;
+      border: 0;
+      background: transparent;
+      color: #8f7a83;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    #receiptDeleteBar .del-count {
+      flex: 1 1 auto;
+      color: #463c40;
+      font-size: 14px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    #receiptDeleteBar .del-go {
+      padding: 11px 20px;
+      border: 0;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #f49ab6, #e5484d);
+      color: #ffffff;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    #receiptDeleteBar .del-go:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    /* 確認の画面 */
+    #receiptDeleteConfirm {
+      position: fixed;
+      inset: 0;
+      z-index: 6100;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.32);
+      font-family: inherit;
+    }
+
+    #receiptDeleteConfirm .del-sheet {
+      box-sizing: border-box;
+      width: min(460px, 100%);
+      padding:
+        22px 20px
+        calc(20px + env(safe-area-inset-bottom, 0px));
+      border-radius: 26px 26px 0 0;
+      background: #ffffff;
+      color: #463c40;
+    }
+
+    #receiptDeleteConfirm h3 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    #receiptDeleteConfirm p {
+      margin: 0 0 4px;
+      color: #8f7a83;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    #receiptDeleteConfirm .del-actions {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    #receiptDeleteConfirm .del-actions button {
+      height: 50px;
+      border: 0;
+      border-radius: 15px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    #receiptDeleteConfirm .del-cancel {
+      background: #f7eef1;
+      color: #8f7a83;
+    }
+
+    #receiptDeleteConfirm .del-ok {
+      background: linear-gradient(135deg, #f49ab6, #e5484d);
+      color: #ffffff;
+    }
+
+    #receiptDeleteConfirm .del-actions button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+
+  // ---------- 部品 ----------
+
+  function toast_(message) {
+    if (typeof showToast === "function") {
+      showToast(message);
+    }
+  }
+
+  function listContainer_() {
+    return document.getElementById(
+      "receiptFullList"
+    );
+  }
+
+  function toggleButton_() {
+    return document.getElementById(
+      "receiptDeleteToggle"
+    );
+  }
+
+  function ensureToggleButton_() {
+    let button = toggleButton_();
+
+    if (button) {
+      return button;
+    }
+
+    const title =
+      document.querySelector(
+        "#page-receipt .page-section-title"
+      );
+
+    if (!title) {
+      return null;
+    }
+
+    button = document.createElement("button");
+    button.type = "button";
+    button.id = "receiptDeleteToggle";
+
+    button.innerHTML = `
+      <span class="material-symbols-rounded">delete</span>
+      <span class="del-label">削除</span>
+    `;
+
+    button.addEventListener(
+      "click",
+      function () {
+        if (selecting_) {
+          setSelecting_(false);
+          return;
+        }
+
+        if (!mappingOk_ || groups_.length === 0) {
+          toast_("選べる明細がありません");
+          return;
+        }
+
+        setSelecting_(true);
+      }
+    );
+
+    title.appendChild(button);
+
+    return button;
+  }
+
+  function ensureBar_() {
+    let bar =
+      document.getElementById("receiptDeleteBar");
+
+    if (bar) {
+      return bar;
+    }
+
+    bar = document.createElement("div");
+    bar.id = "receiptDeleteBar";
+
+    bar.innerHTML = `
+      <button type="button" class="del-all">
+        すべて選択
+      </button>
+
+      <span class="del-count">0件選択中</span>
+
+      <button type="button" class="del-go" disabled>
+        削除
+      </button>
+    `;
+
+    document.body.appendChild(bar);
+
+    bar.querySelector(".del-all")
+      .addEventListener(
+        "click",
+        function () {
+          const allPicked =
+            groups_.length > 0 &&
+            groups_.every(function (group) {
+              return selectedKeys_.has(group.key);
+            });
+
+          selectedKeys_.clear();
+
+          if (!allPicked) {
+            groups_.forEach(function (group) {
+              selectedKeys_.add(group.key);
+            });
+          }
+
+          decorate_();
+        }
+      );
+
+    bar.querySelector(".del-go")
+      .addEventListener(
+        "click",
+        openConfirm_
+      );
+
+    return bar;
+  }
+
+  function selectedGroups_() {
+    return groups_.filter(function (group) {
+      return selectedKeys_.has(group.key);
+    });
+  }
+
+  function updateBar_() {
+    const bar = ensureBar_();
+
+    const page =
+      document.getElementById("page-receipt");
+
+    const show =
+      selecting_ &&
+      Boolean(page) &&
+      !page.hidden;
+
+    bar.classList.toggle("is-show", show);
+
+    if (page) {
+      page.classList.toggle(
+        "del-active",
+        selecting_
+      );
+    }
+
+    const count = selectedGroups_().length;
+
+    bar.querySelector(".del-count").textContent =
+      count + "件選択中";
+
+    bar.querySelector(".del-go").disabled =
+      count === 0 || busy_;
+
+    const allPicked =
+      groups_.length > 0 &&
+      count === groups_.length;
+
+    bar.querySelector(".del-all").textContent =
+      allPicked ? "選択を解除" : "すべて選択";
+
+    const button = toggleButton_();
+
+    if (button) {
+      button.classList.toggle(
+        "is-active",
+        selecting_
+      );
+
+      button.querySelector(".del-label")
+        .textContent =
+          selecting_ ? "キャンセル" : "削除";
+
+      button.querySelector(
+        ".material-symbols-rounded"
+      ).textContent =
+        selecting_ ? "close" : "delete";
+    }
+  }
+
+  // 一覧の見た目（選択の丸）を今の状態に合わせる
+  function decorate_() {
+    const container = listContainer_();
+
+    if (container) {
+      const nodes =
+        container.querySelectorAll(
+          ".purchase-shop-group"
+        );
+
+      nodes.forEach(function (node, index) {
+        const group =
+          mappingOk_ ? groups_[index] : null;
+
+        if (!group) {
+          node.classList.remove(
+            "del-mode",
+            "del-picked"
+          );
+
+          return;
+        }
+
+        node.dataset.delKey = group.key;
+
+        node.classList.toggle(
+          "del-mode",
+          selecting_
+        );
+
+        node.classList.toggle(
+          "del-picked",
+          selecting_ &&
+            selectedKeys_.has(group.key)
+        );
+
+        if (selecting_) {
+          node.classList.remove("is-open");
+
+          const summary =
+            node.querySelector(
+              ".purchase-shop-summary"
+            );
+
+          if (summary) {
+            summary.setAttribute(
+              "aria-expanded",
+              "false"
+            );
+          }
+        }
+      });
+    }
+
+    updateBar_();
+  }
+
+  function setSelecting_(on) {
+    selecting_ = on;
+
+    if (!on) {
+      selectedKeys_.clear();
+    }
+
+    decorate_();
+  }
+
+
+  // ---------- 行のタップ（選択モード中は開かずに選ぶ） ----------
+
+  document.addEventListener(
+    "click",
+    function (event) {
+      if (!selecting_) {
+        return;
+      }
+
+      const target = event.target;
+
+      if (
+        !target ||
+        typeof target.closest !== "function"
+      ) {
+        return;
+      }
+
+      const summary =
+        target.closest(".purchase-shop-summary");
+
+      if (!summary) {
+        return;
+      }
+
+      const group =
+        summary.closest(".purchase-shop-group");
+
+      if (!group || !group.dataset.delKey) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const key = group.dataset.delKey;
+
+      if (selectedKeys_.has(key)) {
+        selectedKeys_.delete(key);
+      }
+      else {
+        selectedKeys_.add(key);
+      }
+
+      decorate_();
+    },
+    true
+  );
+
+
+  // ---------- 確認と削除 ----------
+
+  function yen_(number) {
+    return (
+      "¥" +
+      Math.round(number).toLocaleString("ja-JP")
+    );
+  }
+
+  function amountOf_(item) {
+    const amount = Number(item.amount);
+
+    if (Number.isFinite(amount) && amount > 0) {
+      return amount;
+    }
+
+    return (
+      (Number(item.unitPrice) || 0) *
+      Math.max(1, Number(item.quantity) || 1)
+    );
+  }
+
+  function closeConfirm_() {
+    const overlay =
+      document.getElementById(
+        "receiptDeleteConfirm"
+      );
+
+    if (overlay) {
+      overlay.remove();
+    }
+  }
+
+  function openConfirm_() {
+    const chosen = selectedGroups_();
+
+    if (chosen.length === 0 || busy_) {
+      return;
+    }
+
+    if (document.getElementById("receiptDeleteConfirm")) {
+      return;
+    }
+
+    let itemCount = 0;
+    let total = 0;
+
+    chosen.forEach(function (group) {
+      group.items.forEach(function (item) {
+        itemCount += 1;
+        total += amountOf_(item);
+      });
+    });
+
+    const overlay =
+      document.createElement("div");
+
+    overlay.id = "receiptDeleteConfirm";
+
+    overlay.innerHTML = `
+      <div class="del-sheet" role="dialog" aria-modal="true">
+
+        <h3></h3>
+
+        <p class="del-detail"></p>
+
+        <p>この操作は元に戻せません。</p>
+
+        <div class="del-actions">
+          <button type="button" class="del-cancel">
+            キャンセル
+          </button>
+
+          <button type="button" class="del-ok">
+            削除する
+          </button>
+        </div>
+
+      </div>
+    `;
+
+    overlay.querySelector("h3").textContent =
+      chosen.length + "件を削除しますか？";
+
+    overlay.querySelector(".del-detail")
+      .textContent =
+        "商品 " + itemCount + "点・合計 " + yen_(total);
+
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener(
+      "click",
+      function (event) {
+        if (event.target === overlay && !busy_) {
+          closeConfirm_();
+        }
+      }
+    );
+
+    overlay.querySelector(".del-cancel")
+      .addEventListener(
+        "click",
+        function () {
+          if (!busy_) {
+            closeConfirm_();
+          }
+        }
+      );
+
+    overlay.querySelector(".del-ok")
+      .addEventListener(
+        "click",
+        function () {
+          runDelete_(chosen, overlay);
+        }
+      );
+  }
+
+  async function runDelete_(chosen, overlay) {
+    const okButton =
+      overlay.querySelector(".del-ok");
+
+    const cancelButton =
+      overlay.querySelector(".del-cancel");
+
+    const items = [];
+
+    for (let g = 0; g < chosen.length; g += 1) {
+      for (let i = 0; i < chosen[g].items.length; i += 1) {
+        const item = chosen[g].items[i];
+        const row = Number(item.row);
+
+        if (!Number.isFinite(row) || row < 2) {
+          toast_("行の情報がない明細があるため、削除できません");
+          return;
+        }
+
+        items.push({
+          row: row,
+          shop: String(item.shop || ""),
+          productName: String(
+            item.productName ||
+            item.name ||
+            item.itemName ||
+            ""
+          ),
+          amount: Number(item.amount) || 0
+        });
+      }
+    }
+
+    busy_ = true;
+    okButton.disabled = true;
+    cancelButton.disabled = true;
+    okButton.textContent = "削除中…";
+    updateBar_();
+
+    try {
+      const response =
+        await fetch(
+          API_BASE,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "text/plain;charset=utf-8"
+            },
+            body: JSON.stringify({
+              action: "deletePurchaseItems",
+              items: items
+            })
+          }
+        );
+
+      if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+      }
+
+      const result = await response.json();
+
+      if (!result || result.success !== true) {
+        throw new Error(
+          (result && result.error) ||
+          "削除できませんでした"
+        );
+      }
+
+      const deleted = Number(result.deleted) || 0;
+      const skipped = Number(result.skipped) || 0;
+
+      closeConfirm_();
+      busy_ = false;
+      setSelecting_(false);
+
+      toast_(
+        deleted + "点の明細を削除しました" +
+        (
+          skipped > 0
+            ? "（変更されていた" + skipped + "点は削除していません）"
+            : ""
+        )
+      );
+
+      if (typeof refreshReceiptPage === "function") {
+        await refreshReceiptPage();
+      }
+
+      if (typeof loadDashboard === "function") {
+        await loadDashboard();
+      }
+    }
+    catch (error) {
+      console.error(error);
+
+      busy_ = false;
+      okButton.disabled = false;
+      cancelButton.disabled = false;
+      okButton.textContent = "削除する";
+      updateBar_();
+
+      const message = String(error.message || error);
+
+      toast_(
+        "削除できませんでした：" +
+        message +
+        (
+          /unknown|未対応|不明|invalid action/i.test(message)
+            ? "（Apps Script の更新が必要です）"
+            : ""
+        )
+      );
+    }
+  }
+
+
+  // ---------- 一覧が描かれるたびに、行と明細をひもづける ----------
+
+  if (typeof renderReceiptList === "function") {
+    const originalRenderReceiptList_ =
+      renderReceiptList;
+
+    renderReceiptList =
+      function (container, receipts, limit) {
+        const result =
+          originalRenderReceiptList_(
+            container,
+            receipts,
+            limit
+          );
+
+        if (
+          container &&
+          container.id === "receiptFullList"
+        ) {
+          try {
+            groups_ =
+              buildGroups_(
+                Array.isArray(receipts)
+                  ? receipts
+                  : []
+              );
+
+            mappingOk_ =
+              groups_.length > 0 &&
+              verify_(container, groups_);
+
+            if (!mappingOk_ && groups_.length > 0) {
+              console.warn(
+                "選択削除：一覧と明細を対応づけられませんでした"
+              );
+            }
+
+            const valid =
+              new Set(
+                groups_.map(function (group) {
+                  return group.key;
+                })
+              );
+
+            Array.from(selectedKeys_).forEach(
+              function (key) {
+                if (!valid.has(key)) {
+                  selectedKeys_.delete(key);
+                }
+              }
+            );
+
+            if (!mappingOk_) {
+              selecting_ = false;
+              selectedKeys_.clear();
+            }
+
+            ensureToggleButton_();
+            decorate_();
+          }
+          catch (error) {
+            console.error(error);
+            mappingOk_ = false;
+          }
+        }
+
+        return result;
+      };
+  }
+
+  // 日別以外の画面へ移ったら選択モードをやめる
+  if (typeof switchPage === "function") {
+    const originalSwitchPage_ = switchPage;
+
+    switchPage = async function (page) {
+      const result =
+        await originalSwitchPage_(page);
+
+      if (page !== "receipt" && selecting_) {
+        setSelecting_(false);
+      }
+      else {
+        ensureToggleButton_();
+        updateBar_();
+      }
+
+      return result;
+    };
+  }
+
+  ensureToggleButton_();
+  ensureBar_();
+})();
