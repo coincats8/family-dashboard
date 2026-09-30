@@ -21949,6 +21949,7 @@ if (
 // ・下のタブの順番：ホーム → カテゴリ → 日別 → …
 // ・電気／ガス／水道を「水道光熱費」に合体（押すと内訳が分かれて見える）
 // ・内訳では「電気」「ガス」「水道」だけを見出しにし、同じ意味の言葉は重ねない
+// ・近いカテゴリをジャンルにまとめ、点線とジャンル名で区切る
 // ・件数と金額を右合わせで表示
 // app.jsの一番最後へ追加
 // =========================================================
@@ -21967,6 +21968,43 @@ if (
   const UTILITY_ICON = "💡";
 
   let utilityOpen_ = false;
+
+  // ジャンルの分け方（上から順に表示。名前に下の言葉が含まれていれば、そのジャンル）
+  const GENRES = [
+    {
+      name: "住まい・固定費",
+      words: [
+        "家賃", "住居", "住宅", "ローン", "管理費",
+        "水道光熱", "電気", "ガス", "水道",
+        "通信", "スマホ", "携帯", "ネット",
+        "保険", "税", "駐車"
+      ]
+    },
+    {
+      name: "食べもの",
+      words: [
+        "食費", "外食", "食料", "飲料",
+        "カフェ", "弁当", "ランチ"
+      ]
+    },
+    {
+      name: "日用品・衣類",
+      words: [
+        "日用品", "子ども", "子供", "ベビー",
+        "洋服", "衣類", "衣料", "靴", "雑貨"
+      ]
+    },
+    {
+      name: "医療・健康",
+      words: [
+        "医療", "薬", "病院", "健康", "美容", "化粧"
+      ]
+    }
+  ];
+
+  const OTHER_GENRE = "その他";
+
+  const genreHeaders_ = new Map();
 
 
   // ---------- 下のタブ：カテゴリを日別より前にする ----------
@@ -22040,6 +22078,29 @@ if (
     /* 右端の「›」は表示しない */
     .report-history-chevron {
       display: none !important;
+    }
+
+    /* ジャンルの区切り：小さい名前 ＋ 点線 */
+    .genre-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 16px 2px 9px;
+      color: #b08a99;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .genre-header::after {
+      content: "";
+      flex: 1 1 auto;
+      border-top: 1.5px dotted #e6c6d3;
+    }
+
+    .report-purchase-intro + .genre-header {
+      margin-top: 6px;
     }
 
     /* ボタンを押したときの黒い枠は出さない */
@@ -22206,6 +22267,169 @@ if (
     ) {
       quantity.style.display = "none";
     }
+  }
+
+  // ジャンル判定用：絵文字や記号を除いた名前
+  function fullName_(text) {
+    return String(text || "")
+      .normalize("NFKC")
+      .replace(/[^\p{L}\p{N}]/gu, "");
+  }
+
+  function genreOf_(name) {
+    for (let i = 0; i < GENRES.length; i += 1) {
+      const hit =
+        GENRES[i].words.some(function (word) {
+          return name.indexOf(word) !== -1;
+        });
+
+      if (hit) {
+        return GENRES[i].name;
+      }
+    }
+
+    return OTHER_GENRE;
+  }
+
+  function headerFor_(genreName) {
+    let header = genreHeaders_.get(genreName);
+
+    if (!header) {
+      header = document.createElement("div");
+      header.className = "genre-header";
+      header.textContent = genreName;
+      genreHeaders_.set(genreName, header);
+    }
+
+    return header;
+  }
+
+  function isGroup_(node) {
+    return Boolean(
+      node.classList &&
+      node.classList.contains(
+        "report-history-group"
+      )
+    );
+  }
+
+  function isHeader_(node) {
+    return Boolean(
+      node.classList &&
+      node.classList.contains("genre-header")
+    );
+  }
+
+  // カテゴリをジャンルごとに並べ、ジャンル名と点線を入れる
+  function organizeGenres_() {
+    const list =
+      document.getElementById(
+        "reportCategoryList"
+      );
+
+    if (!list) {
+      return;
+    }
+
+    const groups =
+      Array.from(list.children)
+        .filter(isGroup_);
+
+    if (groups.length === 0) {
+      return;
+    }
+
+    const order =
+      GENRES.map(function (genre) {
+        return genre.name;
+      }).concat([OTHER_GENRE]);
+
+    const buckets = new Map();
+
+    order.forEach(function (name) {
+      buckets.set(name, []);
+    });
+
+    groups.forEach(function (group) {
+      const title =
+        group.querySelector(
+          ".report-history-title"
+        );
+
+      const totalNode =
+        group.querySelector(
+          ".report-history-total"
+        );
+
+      buckets
+        .get(
+          genreOf_(
+            fullName_(
+              title ? title.textContent : ""
+            )
+          )
+        )
+        .push({
+          node: group,
+          total: yenToNumber_(
+            totalNode
+              ? totalNode.textContent
+              : ""
+          )
+        });
+    });
+
+    const desired = [];
+
+    order.forEach(function (name) {
+      const items = buckets.get(name);
+
+      if (!items.length) {
+        return;
+      }
+
+      // ジャンルの中は、金額の大きい順
+      items.sort(function (a, b) {
+        return b.total - a.total;
+      });
+
+      desired.push(headerFor_(name));
+
+      items.forEach(function (item) {
+        desired.push(item.node);
+      });
+    });
+
+    const current =
+      Array.from(list.children).filter(
+        function (node) {
+          return isGroup_(node) || isHeader_(node);
+        }
+      );
+
+    // すでに同じ並びなら何もしない（無限ループ防止）
+    const same =
+      current.length === desired.length &&
+      current.every(function (node, index) {
+        return node === desired[index];
+      });
+
+    if (same) {
+      return;
+    }
+
+    current.forEach(function (node) {
+      if (
+        isHeader_(node) &&
+        desired.indexOf(node) === -1
+      ) {
+        node.remove();
+      }
+    });
+
+    desired.forEach(function (node) {
+      list.appendChild(node);
+    });
   }
 
   function countOf_(group) {
@@ -22506,6 +22730,7 @@ if (
 
     try {
       mergeUtilities_();
+      organizeGenres_();
     }
     catch (error) {
       console.error(error);
