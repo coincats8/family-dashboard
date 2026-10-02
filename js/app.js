@@ -27410,6 +27410,18 @@ if (
       font-weight: 700;
     }
 
+    .sync-problem {
+      flex: 1 1 auto;
+      color: #d6303a;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .sync-problem:empty {
+      display: none;
+    }
+
     .u-pill {
       display: inline-flex;
       align-items: center;
@@ -28206,6 +28218,20 @@ if (
   }
 
 
+  // 共有できていない理由を、一覧の上に小さく出す
+  const problemTexts_ = {};
+
+  function showProblem_(rootId, text) {
+    problemTexts_[rootId] = text;
+
+    const node =
+      document.querySelector("#" + rootId + " .sync-problem");
+
+    if (node) {
+      node.textContent = text;
+    }
+  }
+
   // =========================================================
   // シートと同期する一覧（チェックリスト・買い物メモ共通）
   // =========================================================
@@ -28224,8 +28250,22 @@ if (
       items: [],
       pending: [],
       syncing: false,
-      lastSync: 0
+      lastSync: 0,
+      problem: ""
     };
+
+    // 共有できていないときだけ、理由を画面に出す（うまくいけば消える）
+    function setProblem_(text) {
+      if (state.problem === text) {
+        return;
+      }
+
+      state.problem = text;
+
+      if (cfg.onStatus) {
+        cfg.onStatus(text);
+      }
+    }
 
     function readJson_(key, fallback) {
       try {
@@ -28340,7 +28380,22 @@ if (
         .test(String((error && error.message) || error));
     }
 
+    function problemText_(error) {
+      if (needSetup_(error)) {
+        return "共有できていません（スプレッドシートの設定が必要です）";
+      }
+
+      if (unsupported_(error)) {
+        return "共有できていません（Apps Script の更新が必要です）";
+      }
+
+      return "共有できていません（" +
+        String((error && error.message) || error).slice(0, 40) + "）";
+    }
+
     function notice_(error) {
+      setProblem_(problemText_(error));
+
       // チェックリストと買い物メモを合わせて、1回だけ知らせる
       if (sharedNoticeShown_) {
         return;
@@ -28393,6 +28448,9 @@ if (
 
           if (error.fromServer) {
             notice_(error);
+          }
+          else {
+            setProblem_("通信できません（つながったら自動で送ります）");
           }
 
           return false;
@@ -28507,6 +28565,8 @@ if (
 
         state.lastSync = Date.now();
 
+        setProblem_("");
+
         saveLocal_();
         cfg.onChange();
       }
@@ -28515,6 +28575,9 @@ if (
 
         if (error.fromServer) {
           notice_(error);
+        }
+        else if (state.pending.length > 0) {
+          setProblem_("通信できません（つながったら自動で送ります）");
         }
       }
       finally {
@@ -28625,6 +28688,9 @@ if (
         import: "importMemo"
       },
       legacyItems: legacyMemoItems_,
+      onStatus: function (text) {
+        showProblem_("memoV2", text);
+      },
       onChange: function () {
         renderMemo_();
       }
@@ -28892,6 +28958,7 @@ if (
     const toolbar = el_("div", "u-toolbar");
 
     toolbar.appendChild(el_("span", "memo-count", "未購入 0品"));
+    toolbar.appendChild(el_("span", "sync-problem", problemTexts_.memoV2 || ""));
 
     const list = el_("div", "u-card u-list memo-list");
 
@@ -28957,6 +29024,9 @@ if (
         import: "importChecklist"
       },
       readLocal: readOldChecklist_,
+      onStatus: function (text) {
+        showProblem_("checkV2", text);
+      },
       onChange: function () {
         renderChecklist_();
       }
@@ -29378,6 +29448,7 @@ if (
     const toolbar = el_("div", "u-toolbar");
 
     toolbar.appendChild(el_("span", "check-count", "未完了 0件"));
+    toolbar.appendChild(el_("span", "sync-problem", problemTexts_.checkV2 || ""));
 
     const list = el_("div", "u-card u-list check-list");
 
