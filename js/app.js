@@ -26164,6 +26164,7 @@ if (
 // =========================================================
 // 通信の安定化（一時的な「HTTP 404」で止まらないようにする）
 // ・読み込みが失敗したら自動でやり直す（保存は重複を防ぐためやり直さない）
+// ・ネットが切れている間は通信せずに待ち、つながったら自動で読み込み直す
 // ・同時に送る数を減らす（Apps Script の負担を下げる）
 // ・同じ内容の読み込みを1つにまとめ、購入明細は短時間だけ使い回す
 //   （使い回すのは、月などで絞り込む前の生のデータ）
@@ -26184,7 +26185,10 @@ if (
     Object.assign(
       {
         maxParallel: 2,
-        retryDelays: [800, 2000],
+        httpDelays: [800, 2000],
+        networkDelays: [1500, 4000, 9000],
+        onlineWait: 45000,
+        recoverDelay: 1200,
         timeout: 30000,
         ttl: { purchaseItems: 40000, googleSchedules: 15000 }
       },
@@ -26257,6 +26261,36 @@ if (
   function sleep_(ms) {
     return new Promise(function (resolve) {
       setTimeout(resolve, ms);
+    });
+  }
+
+  // ネットが切れているときは、つながるまで待つ（切れたまま通信してエラーを出さない）
+  function waitForOnline_(ms) {
+    if (
+      typeof navigator === "undefined" ||
+      navigator.onLine !== false
+    ) {
+      return Promise.resolve();
+    }
+
+    return new Promise(function (resolve) {
+      let finished = false;
+      let timer = null;
+
+      function finish() {
+        if (finished) {
+          return;
+        }
+
+        finished = true;
+
+        window.removeEventListener("online", finish);
+        clearTimeout(timer);
+        resolve();
+      }
+
+      window.addEventListener("online", finish);
+      timer = setTimeout(finish, ms);
     });
   }
 
@@ -26379,9 +26413,15 @@ if (
         const job =
           (async function () {
             let last = null;
+            let httpTries = 0;
+            let networkTries = 0;
 
-            for (let i = 0; i <= OPTIONS.retryDelays.length; i += 1) {
+            for (;;) {
+              let delay = 0;
+
               try {
+                await waitForOnline_(OPTIONS.onlineWait);
+
                 const outcome =
                   await limited_(function () {
                     return withTimeout_(
@@ -26407,25 +26447,33 @@ if (
 
                 last = outcome;
 
-                if (
-                  !retryableStatus_(outcome.status) ||
-                  i >= OPTIONS.retryDelays.length
-                ) {
+                if (!retryableStatus_(outcome.status)) {
                   break;
                 }
+
+                if (httpTries >= OPTIONS.httpDelays.length) {
+                  break;
+                }
+
+                delay = OPTIONS.httpDelays[httpTries];
+                httpTries += 1;
               }
               catch (error) {
                 last = { ok: false, error: error };
 
-                if (
-                  !retryableError_(error) ||
-                  i >= OPTIONS.retryDelays.length
-                ) {
+                if (!retryableError_(error)) {
                   break;
                 }
+
+                if (networkTries >= OPTIONS.networkDelays.length) {
+                  break;
+                }
+
+                delay = OPTIONS.networkDelays[networkTries];
+                networkTries += 1;
               }
 
-              await sleep_(OPTIONS.retryDelays[i]);
+              await sleep_(delay);
             }
 
             return last;
@@ -26475,8 +26523,16 @@ if (
           .toUpperCase();
 
       // 保存・POST：やり直さずにそのまま送り、使い回しのデータを捨てる
+      // （チェックリストの通信は、家計データに関係ないので捨てない）
       if (method === "POST" || isWrite_(url)) {
-        cache.clear();
+        const body =
+          init && typeof init.body === "string"
+            ? init.body
+            : "";
+
+        if (!/"action":"[A-Za-z]*Checklist[A-Za-z]*"/.test(body)) {
+          cache.clear();
+        }
 
         return baseFetch_(input, init);
       }
@@ -26492,6 +26548,76 @@ if (
       return baseFetch_(input, init);
     };
   }
+
+
+  // ---------- ネットが切れた／戻ったとき ----------
+
+  let offlineNoticeShown_ = false;
+  let recoverTimer_ = null;
+
+  async function recover_() {
+    try {
+      if (typeof loadDashboard === "function") {
+        await loadDashboard();
+      }
+
+      const page =
+        typeof currentPage !== "undefined"
+          ? currentPage
+          : "";
+
+      if (
+        page === "receipt" &&
+        typeof refreshReceiptPage === "function"
+      ) {
+        await refreshReceiptPage();
+      }
+
+      if (
+        page === "calendar" &&
+        typeof refreshCalendarPage === "function"
+      ) {
+        await refreshCalendarPage();
+      }
+
+      if (typeof window.refreshTabBadges_ === "function") {
+        window.refreshTabBadges_();
+      }
+    }
+    catch (error) {
+      console.error(error);
+    }
+  }
+
+  window.addEventListener(
+    "offline",
+    function () {
+      if (offlineNoticeShown_) {
+        return;
+      }
+
+      offlineNoticeShown_ = true;
+
+      if (typeof showToast === "function") {
+        showToast(
+          "ネットにつながっていません。つながったら自動で更新します"
+        );
+      }
+    }
+  );
+
+  window.addEventListener(
+    "online",
+    function () {
+      offlineNoticeShown_ = false;
+      cache.clear();
+
+      clearTimeout(recoverTimer_);
+
+      recoverTimer_ =
+        setTimeout(recover_, OPTIONS.recoverDelay);
+    }
+  );
 
 
   // ---------- 使われなくなった読み込みをやめる ----------
@@ -28028,6 +28154,9 @@ if (
 
 // =========================================================
 // メモ／チェックリスト／カレンダーの入力欄と、タブの件数
+// ・チェックリストと買い物メモは、スプレッドシートに記録して共有する
+//   （通信できないときは、この端末に溜めておき、つながったら送る）
+// ・シートを直接編集した内容も、アプリに反映される
 // （ui2 の続き。app.jsの一番最後へ追加）
 // =========================================================
 
@@ -28078,123 +28207,440 @@ if (
 
 
   // =========================================================
-  // メモ（内容と個数）
+  // シートと同期する一覧（チェックリスト・買い物メモ共通）
   // =========================================================
+  // cfg.storeKey      この端末の保存場所（すぐ表示するため・通信できないときのため）
+  // cfg.pendingKey    まだ送っていない変更の保存場所
+  // cfg.importedKey   「この端末の古いデータを、最初に1回だけ送った」印
+  // cfg.actions       { get, upsert, del, import }
+  // cfg.readLocal()   この端末に前の版のデータがあれば読み出す
+  // cfg.legacyItems() 最初の1回だけ取り込む古い保存先のデータ（無ければ省略）
+  // cfg.onChange()    一覧が変わったら画面を描き直す
 
-  let memoItems_ = [];
-  let memoLoading_ = false;
-  let memoLoadedAt_ = 0;
-  let memoShowDone_ = false;
-  let memoQuick_ = null;
+  let sharedNoticeShown_ = false;
 
-  async function memoRequest_(action, params) {
-    const query = new URLSearchParams();
+  function createSyncedList_(cfg) {
+    const state = {
+      items: [],
+      pending: [],
+      syncing: false,
+      lastSync: 0
+    };
 
-    query.set("action", action);
-
-    Object.keys(params || {}).forEach(function (key) {
-      query.set(key, String(params[key]));
-    });
-
-    query.set("_", String(Date.now()));
-
-    // 読み込み（get…）は失敗しても2回までやり直す。保存はやり直さない
-    const tries = /^get/.test(action) ? 3 : 1;
-
-    let last = null;
-
-    for (let i = 0; i < tries; i += 1) {
+    function readJson_(key, fallback) {
       try {
-        const response =
-          await fetch(
-            API_BASE + "?" + query.toString(),
-            { method: "GET", cache: "no-store" }
-          );
+        const value = JSON.parse(localStorage.getItem(key) || "null");
 
-        if (!response.ok) {
-          throw new Error("HTTP " + response.status);
-        }
-
-        const result = await response.json();
-
-        if (!result || result.success !== true) {
-          throw new Error(
-            (result && result.error) ||
-            "メモを保存できませんでした"
-          );
-        }
-
-        return result;
+        return value === null ? fallback : value;
       }
       catch (error) {
-        last = error;
-
-        if (i < tries - 1) {
-          await sleep_(600 * (i + 1));
-        }
+        return fallback;
       }
     }
 
-    throw last;
-  }
+    function writeJson_(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      }
+      catch (error) {
+        console.error(error);
+      }
+    }
 
-  function memoView_(item) {
-    const split = window.nlSplitQty_(item.text);
+    function copy_(item) {
+      return JSON.parse(JSON.stringify(item));
+    }
+
+    // ---- この端末に保存 ----
+
+    const stored = readJson_(cfg.storeKey, null);
+
+    state.items =
+      Array.isArray(stored)
+        ? stored
+        : (cfg.readLocal ? cfg.readLocal() : []);
+
+    state.pending = readJson_(cfg.pendingKey, []);
+
+    if (!Array.isArray(state.pending)) {
+      state.pending = [];
+    }
+
+    function saveLocal_() {
+      writeJson_(cfg.storeKey, state.items);
+    }
+
+    function savePending_() {
+      writeJson_(cfg.pendingKey, state.pending);
+    }
+
+    // ---- サーバーとの通信 ----
+
+    async function post_(body, retries) {
+      let last = null;
+
+      for (let i = 0; i <= retries; i += 1) {
+        try {
+          const response =
+            await fetch(
+              API_BASE,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "text/plain;charset=utf-8"
+                },
+                body: JSON.stringify(body)
+              }
+            );
+
+          if (!response.ok) {
+            throw new Error("HTTP " + response.status);
+          }
+
+          const result = await response.json();
+
+          if (!result || result.success !== true) {
+            const error =
+              new Error(
+                (result && result.error) ||
+                "保存できませんでした"
+              );
+
+            // サーバーが「できない」と返したときは、やり直さない
+            error.fromServer = true;
+
+            throw error;
+          }
+
+          return result;
+        }
+        catch (error) {
+          last = error;
+
+          if (error.fromServer) {
+            break;
+          }
+
+          if (i < retries) {
+            await sleep_(800 * (i + 1));
+          }
+        }
+      }
+
+      throw last;
+    }
+
+    function unsupported_(error) {
+      return /未対応|doPostOriginal_|Unknown action/i
+        .test(String((error && error.message) || error));
+    }
+
+    function needSetup_(error) {
+      return /SHEET_FILE_ID|1行目|スプレッドシートが見つかりません/
+        .test(String((error && error.message) || error));
+    }
+
+    function notice_(error) {
+      // チェックリストと買い物メモを合わせて、1回だけ知らせる
+      if (sharedNoticeShown_) {
+        return;
+      }
+
+      sharedNoticeShown_ = true;
+
+      if (needSetup_(error)) {
+        toast_(String(error.message || error));
+        return;
+      }
+
+      toast_(
+        "チェックリストと買い物メモをシートで共有するには" +
+        " Apps Script の更新が必要です" +
+        "（今はこの端末だけに保存されます）"
+      );
+    }
+
+    // 送る予定の変更を、順番にサーバーへ送る
+    async function flush_() {
+      while (state.pending.length > 0) {
+        const op = state.pending[0];
+
+        try {
+          if (op.type === "upsert") {
+            await post_(
+              { action: cfg.actions.upsert, item: op.item },
+              1
+            );
+          }
+          else {
+            await post_(
+              { action: cfg.actions.del, ids: op.ids },
+              1
+            );
+          }
+        }
+        catch (error) {
+          // サーバーが内容を受け付けなかった変更は、捨てて先へ進む
+          if (
+            error.fromServer &&
+            !unsupported_(error) &&
+            !needSetup_(error)
+          ) {
+            state.pending.shift();
+            savePending_();
+            continue;
+          }
+
+          if (error.fromServer) {
+            notice_(error);
+          }
+
+          return false;
+        }
+
+        state.pending.shift();
+        savePending_();
+      }
+
+      return true;
+    }
+
+    // サーバーの一覧に、まだ送っていない変更を重ねる
+    function applyPending_(list) {
+      let result = list.slice();
+
+      state.pending.forEach(function (op) {
+        if (op.type === "upsert") {
+          const index =
+            result.findIndex(function (item) {
+              return item.id === op.item.id;
+            });
+
+          if (index >= 0) {
+            result[index] = copy_(op.item);
+          }
+          else {
+            result.push(copy_(op.item));
+          }
+        }
+        else {
+          result =
+            result.filter(function (item) {
+              return op.ids.indexOf(item.id) === -1;
+            });
+        }
+      });
+
+      return result;
+    }
+
+    function queue_(op) {
+      if (op.type === "upsert") {
+        state.pending =
+          state.pending.filter(function (other) {
+            return !(
+              other.type === "upsert" &&
+              other.item.id === op.item.id
+            );
+          });
+      }
+      else {
+        state.pending =
+          state.pending.filter(function (other) {
+            return !(
+              other.type === "upsert" &&
+              op.ids.indexOf(other.item.id) !== -1
+            );
+          });
+      }
+
+      state.pending.push(op);
+      savePending_();
+    }
+
+    // ---- サーバーと同じ内容にそろえる ----
+
+    async function sync_(force) {
+      if (state.syncing) {
+        return;
+      }
+
+      if (!force && Date.now() - state.lastSync < 15000) {
+        return;
+      }
+
+      state.syncing = true;
+
+      try {
+        if (!(await flush_())) {
+          return;
+        }
+
+        let result = await post_({ action: cfg.actions.get }, 2);
+
+        // 最初の1回だけ：この端末や古い保存先にあった分を、シートへ引っ越す
+        if (readJson_(cfg.importedKey, false) !== true) {
+          let moving = state.items.slice();
+
+          if (cfg.legacyItems) {
+            const legacy = await cfg.legacyItems();
+
+            moving = moving.concat(legacy || []);
+          }
+
+          if (moving.length > 0) {
+            await post_(
+              { action: cfg.actions.import, items: moving },
+              1
+            );
+
+            result = await post_({ action: cfg.actions.get }, 1);
+          }
+
+          writeJson_(cfg.importedKey, true);
+        }
+
+        state.items =
+          applyPending_(
+            Array.isArray(result.items) ? result.items : []
+          );
+
+        state.lastSync = Date.now();
+
+        saveLocal_();
+        cfg.onChange();
+      }
+      catch (error) {
+        console.error(error);
+
+        if (error.fromServer) {
+          notice_(error);
+        }
+      }
+      finally {
+        state.syncing = false;
+      }
+    }
 
     return {
-      id: item.id,
-      done: item.completed === true,
-      title: split.title || String(item.text || ""),
-      qty: split.qty,
-      raw: String(item.text || "")
+      items: function () {
+        return state.items;
+      },
+
+      pending: function () {
+        return state.pending;
+      },
+
+      sync: sync_,
+
+      // 追加・変更
+      upsert: function (item) {
+        item.updated = Date.now();
+
+        const index =
+          state.items.findIndex(function (other) {
+            return other.id === item.id;
+          });
+
+        if (index >= 0) {
+          state.items[index] = item;
+        }
+        else {
+          state.items.unshift(item);
+        }
+
+        saveLocal_();
+        queue_({ type: "upsert", item: copy_(item) });
+
+        setTimeout(function () { sync_(true); }, 50);
+      },
+
+      // 削除
+      remove: function (ids) {
+        state.items =
+          state.items.filter(function (item) {
+            return ids.indexOf(item.id) === -1;
+          });
+
+        saveLocal_();
+        queue_({ type: "delete", ids: ids.slice() });
+
+        setTimeout(function () { sync_(true); }, 50);
+      }
     };
   }
 
-  function memoText_(title, qty) {
-    const t = String(title || "").trim();
-    const q = String(qty || "").trim();
 
-    return q ? t + " " + q : t;
+  // =========================================================
+  // メモ（内容と個数）
+  // =========================================================
+
+  let memoShowDone_ = false;
+  let memoQuick_ = null;
+
+  // 前の版の買い物メモ（古い保存先）を、最初に1回だけ取り込む
+  async function legacyMemoItems_() {
+    const response =
+      await fetch(
+        API_BASE +
+        "?action=getShoppingMemo&_=" + Date.now(),
+        { method: "GET", cache: "no-store" }
+      );
+
+    if (!response.ok) {
+      throw new Error("HTTP " + response.status);
+    }
+
+    const result = await response.json();
+
+    // 古い保存先が無い／読めないときは、取り込むものなし
+    if (!result || result.success !== true) {
+      return [];
+    }
+
+    return (result.items || []).map(function (old) {
+      const split = window.nlSplitQty_(old.text);
+
+      return {
+        id: "L" + String(old.id),
+        title: split.title || String(old.text || ""),
+        qty: split.qty,
+        done: old.completed === true,
+        created: Date.now(),
+        updated: Date.now()
+      };
+    });
   }
+
+  const memoStore_ =
+    createSyncedList_({
+      label: "買い物メモ",
+      storeKey: "familyMemo_v2",
+      pendingKey: "familyMemoPending_v2",
+      importedKey: "familyMemoImported_v2",
+      actions: {
+        get: "getMemo",
+        upsert: "upsertMemoItem",
+        del: "deleteMemoItems",
+        import: "importMemo"
+      },
+      legacyItems: legacyMemoItems_,
+      onChange: function () {
+        renderMemo_();
+      }
+    });
 
   function updateMemoBadge_() {
     setBadge_(
       "settings",
-      memoItems_.filter(function (item) {
-        return item.completed !== true;
+      memoStore_.items().filter(function (item) {
+        return item.done !== true;
       }).length
     );
   }
 
-  async function loadMemo_(force) {
-    if (memoLoading_) {
-      return;
-    }
-
-    if (!force && Date.now() - memoLoadedAt_ < 20000) {
-      return;
-    }
-
-    memoLoading_ = true;
-
-    try {
-      const result = await memoRequest_("getShoppingMemo");
-
-      memoItems_ = Array.isArray(result.items) ? result.items : [];
-      memoLoadedAt_ = Date.now();
-
-      renderMemo_();
-    }
-    catch (error) {
-      console.error(error);
-    }
-    finally {
-      memoLoading_ = false;
-    }
-  }
-
-  function memoRow_(view) {
-    const row = el_("div", "u-row" + (view.done ? " is-done" : ""));
+  function memoRow_(item) {
+    const row = el_("div", "u-row" + (item.done ? " is-done" : ""));
 
     const check = el_("button", "u-check", "✓");
 
@@ -28203,38 +28649,28 @@ if (
 
     check.addEventListener(
       "click",
-      async function (event) {
+      function (event) {
         event.stopPropagation();
 
-        try {
-          const result =
-            await memoRequest_(
-              "toggleShoppingMemo",
-              { id: view.id, completed: !view.done }
-            );
-
-          memoItems_ = result.items || memoItems_;
-          renderMemo_();
-        }
-        catch (error) {
-          toast_(String(error.message || error));
-        }
+        item.done = !item.done;
+        memoStore_.upsert(item);
+        renderMemo_();
       }
     );
 
     const main = el_("div", "u-main");
 
-    main.appendChild(el_("div", "u-text", view.title));
+    main.appendChild(el_("div", "u-text", item.title));
 
     row.appendChild(check);
     row.appendChild(main);
 
-    if (view.qty) {
-      row.appendChild(el_("span", "u-qty", view.qty));
+    if (item.qty) {
+      row.appendChild(el_("span", "u-qty", item.qty));
     }
 
     row.addEventListener("click", function () {
-      openMemoSheet_(view);
+      openMemoSheet_(item);
     });
 
     return row;
@@ -28253,10 +28689,18 @@ if (
       return;
     }
 
-    const views = memoItems_.map(memoView_);
+    const all = memoStore_.items();
 
-    const active = views.filter(function (v) { return !v.done; });
-    const done = views.filter(function (v) { return v.done; });
+    // 追加した順（古いものが上）
+    const active =
+      all
+        .filter(function (v) { return !v.done; })
+        .sort(function (a, b) { return (a.created || 0) - (b.created || 0); });
+
+    const done =
+      all
+        .filter(function (v) { return v.done; })
+        .sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
 
     const count = root.querySelector(".memo-count");
 
@@ -28266,12 +28710,12 @@ if (
 
     list.textContent = "";
 
-    if (views.length === 0) {
+    if (all.length === 0) {
       list.appendChild(el_("div", "u-empty", "まだありません"));
     }
 
-    active.forEach(function (view) {
-      list.appendChild(memoRow_(view));
+    active.forEach(function (item) {
+      list.appendChild(memoRow_(item));
     });
 
     if (done.length > 0) {
@@ -28295,8 +28739,8 @@ if (
       list.appendChild(fold);
 
       if (memoShowDone_) {
-        done.forEach(function (view) {
-          list.appendChild(memoRow_(view));
+        done.forEach(function (item) {
+          list.appendChild(memoRow_(item));
         });
 
         const clear = el_("button", "u-fold", "購入済みをまとめて削除");
@@ -28307,21 +28751,16 @@ if (
 
         clear.addEventListener(
           "click",
-          async function () {
+          function () {
             if (!window.confirm("購入済みのメモをすべて削除しますか？")) {
               return;
             }
 
-            try {
-              const result =
-                await memoRequest_("clearCompletedShoppingMemo");
+            memoStore_.remove(
+              done.map(function (item) { return item.id; })
+            );
 
-              memoItems_ = result.items || [];
-              renderMemo_();
-            }
-            catch (error) {
-              toast_(String(error.message || error));
-            }
+            renderMemo_();
           }
         );
 
@@ -28332,13 +28771,13 @@ if (
     updateMemoBadge_();
   }
 
-  function openMemoSheet_(view) {
+  function openMemoSheet_(item) {
     U.openSheet_(
       "memoEditOverlay",
       "メモを修正",
       function (scroll, actions, close) {
-        const content = U.field_("内容", "text", view.title);
-        const qty = U.field_("個数", "text", view.qty, "例：2本");
+        const content = U.field_("内容", "text", item.title);
+        const qty = U.field_("個数", "text", item.qty, "例：2本");
 
         scroll.appendChild(content.wrap);
         scroll.appendChild(qty.wrap);
@@ -28357,89 +28796,29 @@ if (
 
         del.addEventListener(
           "click",
-          async function () {
-            del.disabled = true;
-
-            try {
-              const result =
-                await memoRequest_(
-                  "deleteShoppingMemo",
-                  { id: view.id }
-                );
-
-              memoItems_ = result.items || [];
-              renderMemo_();
-              close();
-            }
-            catch (error) {
-              del.disabled = false;
-              toast_(String(error.message || error));
-            }
+          function () {
+            memoStore_.remove([item.id]);
+            renderMemo_();
+            close();
           }
         );
 
         save.addEventListener(
           "click",
-          async function () {
+          function () {
             const title = content.input.value.trim();
-            const quantity = qty.input.value.trim();
 
             if (!title) {
               toast_("内容を入力してください");
               return;
             }
 
-            if (title === view.title && quantity === view.qty) {
-              close();
-              return;
-            }
+            item.title = title;
+            item.qty = qty.input.value.trim();
 
-            save.disabled = true;
-
-            try {
-              // 修正は「削除して、同じ位置ではなく新しく追加」で行う
-              const before =
-                new Set(memoItems_.map(function (i) { return String(i.id); }));
-
-              let result =
-                await memoRequest_(
-                  "deleteShoppingMemo",
-                  { id: view.id }
-                );
-
-              result =
-                await memoRequest_(
-                  "addShoppingMemo",
-                  { text: memoText_(title, quantity) }
-                );
-
-              memoItems_ = result.items || [];
-
-              // 購入済みだったメモは、購入済みのままにする
-              if (view.done) {
-                const created =
-                  memoItems_.find(function (i) {
-                    return !before.has(String(i.id));
-                  });
-
-                if (created) {
-                  result =
-                    await memoRequest_(
-                      "toggleShoppingMemo",
-                      { id: created.id, completed: true }
-                    );
-
-                  memoItems_ = result.items || memoItems_;
-                }
-              }
-
-              renderMemo_();
-              close();
-            }
-            catch (error) {
-              save.disabled = false;
-              toast_(String(error.message || error));
-            }
+            memoStore_.upsert(item);
+            renderMemo_();
+            close();
           }
         );
       }
@@ -28488,21 +28867,22 @@ if (
 
           return chips;
         },
-        onAdd: async function (state) {
+        onAdd: function (state) {
           const title = state.parsed.title || state.text.trim();
 
           if (!title) {
             return false;
           }
 
-          const result =
-            await memoRequest_(
-              "addShoppingMemo",
-              { text: memoText_(title, state.parsed.qty) }
-            );
+          memoStore_.upsert({
+            id: U.newId_(),
+            title: title.slice(0, 100),
+            qty: state.parsed.qty,
+            done: false,
+            created: Date.now(),
+            updated: Date.now()
+          });
 
-          memoItems_ = result.items || [];
-          memoLoadedAt_ = Date.now();
           renderMemo_();
 
           return true;
@@ -28529,68 +28909,65 @@ if (
   // チェックリスト（内容・期日・詳細）
   // =========================================================
 
-  let checkItems_ = [];
   let checkShowDone_ = false;
   let checkQuick_ = null;
 
-  function loadChecklist_() {
+  // 前の版でこの端末に保存していたチェックリストを引き継ぐ
+  function readOldChecklist_() {
     try {
-      const raw = localStorage.getItem(U.CHECK_KEY);
+      const old = localStorage.getItem(U.CHECK_KEY);
+      const older = localStorage.getItem(U.CHECK_KEY_OLD);
 
-      if (raw) {
-        const list = JSON.parse(raw);
+      const list = JSON.parse(old || older || "[]");
 
-        return Array.isArray(list) ? list : [];
+      if (!Array.isArray(list)) {
+        return [];
       }
 
-      // 前の版のチェックリストを引き継ぐ
-      const old = localStorage.getItem(U.CHECK_KEY_OLD);
+      return list.map(function (item) {
+        return {
+          id: item.id || U.newId_(),
+          text: String(item.text || ""),
+          due: item.due || "",
+          done: item.done === true,
+          assignee: item.assignee || "",
+          contact: item.contact || "",
+          note: item.note || "",
+          extras: Array.isArray(item.extras) ? item.extras : [],
+          created: item.created || Date.now(),
+          updated: item.updated || Date.now()
+        };
+      });
+    }
+    catch (error) {
+      return [];
+    }
+  }
 
-      if (old) {
-        const list = JSON.parse(old);
-
-        if (Array.isArray(list)) {
-          return list.map(function (item) {
-            return {
-              id: item.id || U.newId_(),
-              text: String(item.text || ""),
-              due: "",
-              done: item.done === true,
-              assignee: "",
-              contact: "",
-              note: "",
-              extras: [],
-              created: Date.now()
-            };
-          });
-        }
+  const checkStore_ =
+    createSyncedList_({
+      label: "チェックリスト",
+      storeKey: "familyChecklistItems_v3",
+      pendingKey: "familyChecklistPending_v1",
+      importedKey: "familyChecklistImported_v1",
+      actions: {
+        get: "getChecklist",
+        upsert: "upsertChecklistItem",
+        del: "deleteChecklistItems",
+        import: "importChecklist"
+      },
+      readLocal: readOldChecklist_,
+      onChange: function () {
+        renderChecklist_();
       }
-    }
-    catch (error) {
-      console.error(error);
-    }
-
-    return [];
-  }
-
-  function saveChecklist_() {
-    try {
-      localStorage.setItem(
-        U.CHECK_KEY,
-        JSON.stringify(checkItems_)
-      );
-    }
-    catch (error) {
-      console.error(error);
-    }
-
-    updateCheckBadge_();
-  }
+    });
 
   function updateCheckBadge_() {
     setBadge_(
       "checklist",
-      checkItems_.filter(function (item) { return !item.done; }).length
+      checkStore_.items().filter(function (item) {
+        return !item.done;
+      }).length
     );
   }
 
@@ -28665,7 +29042,8 @@ if (
         event.stopPropagation();
 
         item.done = !item.done;
-        saveChecklist_();
+
+        checkStore_.upsert(item);
         renderChecklist_();
       }
     );
@@ -28715,8 +29093,10 @@ if (
       return;
     }
 
-    const active = sortChecklist_(checkItems_.filter(function (i) { return !i.done; }));
-    const done = checkItems_.filter(function (i) { return i.done; });
+    const all = checkStore_.items();
+
+    const active = sortChecklist_(all.filter(function (i) { return !i.done; }));
+    const done = all.filter(function (i) { return i.done; });
 
     const count = root.querySelector(".check-count");
 
@@ -28726,7 +29106,7 @@ if (
 
     list.textContent = "";
 
-    if (checkItems_.length === 0) {
+    if (all.length === 0) {
       list.appendChild(el_("div", "u-empty", "まだありません"));
     }
 
@@ -28772,8 +29152,10 @@ if (
               return;
             }
 
-            checkItems_ = checkItems_.filter(function (i) { return !i.done; });
-            saveChecklist_();
+            checkStore_.remove(
+              done.map(function (i) { return i.id; })
+            );
+
             renderChecklist_();
           }
         );
@@ -28884,8 +29266,7 @@ if (
               return;
             }
 
-            checkItems_ = checkItems_.filter(function (i) { return i.id !== item.id; });
-            saveChecklist_();
+            checkStore_.remove([item.id]);
             renderChecklist_();
             close();
           }
@@ -28914,7 +29295,7 @@ if (
                 return { k: String(e.k).trim(), v: String(e.v).trim() };
               });
 
-            saveChecklist_();
+            checkStore_.upsert(item);
             renderChecklist_();
             close();
           }
@@ -28975,19 +29356,19 @@ if (
             return false;
           }
 
-          checkItems_.unshift({
+          checkStore_.upsert({
             id: U.newId_(),
-            text: title,
+            text: title.slice(0, 200),
             due: state.date || "",
             done: false,
             assignee: "",
             contact: "",
             note: "",
             extras: [],
-            created: Date.now()
+            created: Date.now(),
+            updated: Date.now()
           });
 
-          saveChecklist_();
           renderChecklist_();
 
           return true;
@@ -29207,10 +29588,9 @@ if (
     moveReceiptToolbar_();
   }
 
-  checkItems_ = loadChecklist_();
-
   ensureAll_();
   updateCheckBadge_();
+  updateMemoBadge_();
 
   if (typeof switchPage === "function") {
     const originalSwitchPage_ = switchPage;
@@ -29221,11 +29601,13 @@ if (
       ensureAll_();
 
       if (page === "settings") {
-        loadMemo_(false);
+        renderMemo_();
+        memoStore_.sync(false);
       }
 
       if (page === "checklist") {
         renderChecklist_();
+        checkStore_.sync(false);
       }
 
       return result;
@@ -29236,18 +29618,20 @@ if (
   setTimeout(ensureAll_, 800);
   setTimeout(ensureAll_, 2500);
 
-  // 件数の赤い丸のために、最初に一度読み込む
-  setTimeout(function () { loadMemo_(true); }, 2200);
+  // 起動後に、シートの内容へそろえる（少しずつ時間をずらす）
+  setTimeout(function () { checkStore_.sync(true); }, 1800);
+  setTimeout(function () { memoStore_.sync(true); }, 2400);
   setTimeout(refreshCalendarBadge_, 3200);
 
   // ときどき最新にする（画面を見ているときだけ）
   setInterval(
     function () {
       if (document.visibilityState === "visible") {
-        loadMemo_(true);
+        checkStore_.sync(false);
+        memoStore_.sync(false);
       }
     },
-    90000
+    60000
   );
 
   setInterval(
@@ -29263,7 +29647,8 @@ if (
     "visibilitychange",
     function () {
       if (document.visibilityState === "visible") {
-        loadMemo_(false);
+        checkStore_.sync(false);
+        memoStore_.sync(false);
         refreshCalendarBadge_();
       }
     }
@@ -29271,8 +29656,10 @@ if (
 
   // 画面の外から呼べるように
   window.refreshTabBadges_ = function () {
-    loadMemo_(true);
+    checkStore_.sync(true);
+    memoStore_.sync(true);
     refreshCalendarBadge_();
     updateCheckBadge_();
+    updateMemoBadge_();
   };
 })();
