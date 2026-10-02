@@ -23598,6 +23598,11 @@ if (
   let mappingOk_ = false;
   let busy_ = false;
 
+  // 編集画面の「削除」から、どの明細かを調べるために使う
+  window.__receiptGroups_ = function () {
+    return mappingOk_ ? groups_ : [];
+  };
+
   const selectedKeys_ = new Set();
 
 
@@ -29733,4 +29738,414 @@ if (
     updateCheckBadge_();
     updateMemoBadge_();
   };
+})();
+
+
+// =========================================================
+// 日別の「購入履歴を編集」の画面に、「削除」ボタンを追加
+// ・✎ を押した明細を覚えておき、編集画面の左下に「削除」を出す
+// ・削除は、日別の「選択して削除」と同じ仕組み（Apps Script が行を確認して消す）
+// app.jsの一番最後へ追加
+// =========================================================
+
+(function () {
+  "use strict";
+
+  if (window.editDeleteAdded_) {
+    return;
+  }
+
+  window.editDeleteAdded_ = true;
+
+  let pending_ = null;      // ✎ を押した直後の明細
+  let active_ = null;       // いま編集画面に出ている明細
+  let busy_ = false;
+
+
+  // ---------- 見た目 ----------
+
+  const style = document.createElement("style");
+
+  style.id = "editDeleteStyle";
+
+  style.textContent = `
+    #purchaseEditSheet .purchase-edit-buttons.has-delete {
+      grid-template-columns: auto 1fr 1.4fr !important;
+    }
+
+    #purchaseEditDelete {
+      height: 46px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 14px;
+      background: #ffe9ec;
+      color: #d6303a;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    #purchaseEditDelete:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    /* 保存ボタンと入力欄の色を、ほかの画面とそろえる */
+    #purchaseEditSheet .purchase-edit-save {
+      background: linear-gradient(135deg, #f49ab6, #ed729a) !important;
+      color: #ffffff !important;
+    }
+
+    #purchaseEditSheet input:focus,
+    #purchaseEditSheet select:focus {
+      border-color: #ed729a !important;
+      box-shadow: 0 0 0 3px rgba(237, 114, 154, 0.14) !important;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+
+  // ---------- 便利な関数 ----------
+
+  function toast_(message) {
+    if (typeof showToast === "function") {
+      showToast(message);
+    }
+  }
+
+  function clean_(text) {
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
+
+  function nameOf_(item) {
+    return clean_(
+      item.productName || item.name || item.itemName || ""
+    );
+  }
+
+  function sheet_() {
+    return document.getElementById("purchaseEditSheet");
+  }
+
+  function buttons_() {
+    const sheet = sheet_();
+
+    return sheet
+      ? sheet.querySelector(".purchase-edit-buttons")
+      : null;
+  }
+
+
+  // ---------- ✎ を押した明細を覚える ----------
+  // 日別の一覧は「店ごとのグループ」→「その中の明細」の順で並んでいる。
+  // 店のグループの番号と、明細の番号から、元の明細を取り出す。
+
+  document.addEventListener(
+    "click",
+    function (event) {
+      const target = event.target;
+
+      if (!target || typeof target.closest !== "function") {
+        return;
+      }
+
+      const button = target.closest(".purchase-compact-edit");
+
+      if (!button) {
+        // 日別以外から編集画面が開かれても、前の明細を使わない
+        if (!target.closest("#purchaseEditSheet")) {
+          pending_ = null;
+        }
+
+        return;
+      }
+
+      pending_ = null;
+
+      try {
+        const section = button.closest(".purchase-shop-group");
+        const details =
+          section && section.querySelector("[data-shop-group-details]");
+
+        const groups =
+          typeof window.__receiptGroups_ === "function"
+            ? window.__receiptGroups_()
+            : [];
+
+        if (!details || groups.length === 0) {
+          return;
+        }
+
+        const group = groups[Number(details.dataset.shopGroupDetails)];
+
+        const item =
+          group && group.items[Number(button.dataset.purchaseIndex)];
+
+        if (!item) {
+          return;
+        }
+
+        // 画面に出ている商品名と一致するときだけ使う
+        const article = button.closest(".purchase-compact-item");
+
+        const shown =
+          article
+            ? clean_(
+                (article.querySelector(".purchase-compact-name") || {})
+                  .textContent
+              )
+            : "";
+
+        const row = Number(item.row);
+
+        if (
+          !Number.isFinite(row) ||
+          row < 2 ||
+          (shown && shown !== nameOf_(item))
+        ) {
+          return;
+        }
+
+        pending_ = { item: item, at: Date.now() };
+      }
+      catch (error) {
+        console.error(error);
+      }
+    },
+    true
+  );
+
+
+  // ---------- 編集画面が開いた／閉じたとき ----------
+
+  function ensureButton_() {
+    const bar = buttons_();
+
+    if (!bar) {
+      return null;
+    }
+
+    let button = document.getElementById("purchaseEditDelete");
+
+    if (!button) {
+      button = document.createElement("button");
+
+      button.type = "button";
+      button.id = "purchaseEditDelete";
+      button.textContent = "削除";
+
+      button.addEventListener("click", deleteActive_);
+
+      bar.insertBefore(button, bar.firstChild);
+    }
+
+    return button;
+  }
+
+  function refreshButton_() {
+    const button = ensureButton_();
+    const bar = buttons_();
+
+    if (!button || !bar) {
+      return;
+    }
+
+    const show = Boolean(active_);
+
+    button.hidden = !show;
+    button.style.display = show ? "" : "none";
+
+    bar.classList.toggle("has-delete", show);
+  }
+
+  function onSheetState_() {
+    const sheet = sheet_();
+
+    if (!sheet) {
+      return;
+    }
+
+    const open = sheet.classList.contains("is-open");
+
+    if (!open) {
+      active_ = null;
+      busy_ = false;
+      refreshButton_();
+      return;
+    }
+
+    if (active_) {
+      return;
+    }
+
+    // 押した直後に開いたときだけ、その明細を使う
+    const candidate = pending_;
+
+    pending_ = null;
+
+    if (!candidate || Date.now() - candidate.at > 2000) {
+      active_ = null;
+      refreshButton_();
+      return;
+    }
+
+    active_ = candidate.item;
+    refreshButton_();
+
+    // 編集画面の商品名が、押した明細と同じか確かめる
+    setTimeout(
+      function () {
+        const nameInput = document.getElementById("purchaseEditName");
+
+        if (
+          active_ === candidate.item &&
+          nameInput &&
+          clean_(nameInput.value) !== nameOf_(candidate.item)
+        ) {
+          active_ = null;
+          refreshButton_();
+        }
+      },
+      60
+    );
+  }
+
+  const observer =
+    new MutationObserver(function () {
+      const sheet = sheet_();
+
+      if (!sheet) {
+        return;
+      }
+
+      // 編集画面の中身が作り直されても、ボタンを付け直す
+      if (buttons_() && !document.getElementById("purchaseEditDelete")) {
+        ensureButton_();
+        refreshButton_();
+      }
+
+      onSheetState_();
+    });
+
+  observer.observe(
+    document.body,
+    {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class"]
+    }
+  );
+
+
+  // ---------- 削除 ----------
+
+  async function deleteActive_() {
+    const item = active_;
+
+    if (!item || busy_) {
+      return;
+    }
+
+    const name = nameOf_(item);
+
+    if (
+      !window.confirm(
+        "「" + name + "」を削除しますか？\n" +
+        "この操作は元に戻せません。"
+      )
+    ) {
+      return;
+    }
+
+    busy_ = true;
+
+    const button = document.getElementById("purchaseEditDelete");
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "削除中…";
+    }
+
+    try {
+      const response =
+        await fetch(
+          API_BASE,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "text/plain;charset=utf-8"
+            },
+            body: JSON.stringify({
+              action: "deletePurchaseItems",
+              items: [
+                {
+                  row: Number(item.row),
+                  shop: String(item.shop || ""),
+                  productName: name,
+                  amount: Number(item.amount) || 0
+                }
+              ]
+            })
+          }
+        );
+
+      if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+      }
+
+      const result = await response.json();
+
+      if (!result || result.success !== true) {
+        throw new Error(
+          (result && result.error) || "削除できませんでした"
+        );
+      }
+
+      active_ = null;
+
+      const cancel = document.getElementById("purchaseEditCancel");
+
+      if (cancel) {
+        cancel.click();
+      }
+
+      toast_("削除しました");
+
+      if (typeof refreshReceiptPage === "function") {
+        await refreshReceiptPage();
+      }
+
+      if (typeof loadDashboard === "function") {
+        await loadDashboard();
+      }
+    }
+    catch (error) {
+      console.error(error);
+
+      const message = String(error.message || error);
+
+      toast_(
+        "削除できませんでした：" +
+        message +
+        (
+          /未対応|doPostOriginal_|Unknown action/i.test(message)
+            ? "（Apps Script の更新が必要です）"
+            : ""
+        )
+      );
+    }
+    finally {
+      busy_ = false;
+
+      const again = document.getElementById("purchaseEditDelete");
+
+      if (again) {
+        again.disabled = false;
+        again.textContent = "削除";
+      }
+    }
+  }
 })();
