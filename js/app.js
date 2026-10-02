@@ -23371,9 +23371,41 @@ if (
       textOf_("hubSummaryBudget") ||
       textOf_("budgetMoney");
 
-    const savingsText =
-      textOf_("hubSummarySavings") ||
-      textOf_("savingActual");
+    // 貯蓄は月ごと：いま表示している月の金額を出す（記録が無い月は「ー」）
+    const shownLabel =
+      textOf_("categoryMonthLabel");
+
+    const monthMatch =
+      /(\d{4})\s*年\s*(\d{1,2})\s*月/.exec(shownLabel);
+
+    const monthKey =
+      monthMatch
+        ? monthMatch[1] + "-" + ("0" + monthMatch[2]).slice(-2)
+        : (function () {
+            const now = new Date();
+
+            return (
+              now.getFullYear() + "-" +
+              ("0" + (now.getMonth() + 1)).slice(-2)
+            );
+          })();
+
+    let savingsText;
+
+    const monthly =
+      typeof window.savingsForMonth_ === "function"
+        ? window.savingsForMonth_(monthKey)
+        : undefined;
+
+    if (monthly === undefined) {
+      // まだ読み込めていない間は、今までの金額
+      savingsText =
+        textOf_("hubSummarySavings") ||
+        textOf_("savingActual");
+    }
+    else {
+      savingsText = monthly === null ? "ー" : yen_(monthly);
+    }
 
     let balanceText;
     let usedText;
@@ -25042,7 +25074,7 @@ if (
 // カテゴリ画面をホームにする／カテゴリの修正ボタン
 // ・今までのホーム画面は表示しない（数字の計算だけ裏で使う）
 // ・カテゴリ画面が「ホーム」になり、下のタブの「カテゴリ」はなくなる
-// ・年月の横の ✎ で、予算・現在の貯蓄・カテゴリの名前／予算額／削除／追加を修正
+// ・年月の横の ✎ で、予算・貯蓄（表示している月の分）・カテゴリの名前／予算額／削除／追加を修正
 // app.jsの一番最後へ追加
 // =========================================================
 
@@ -25522,7 +25554,43 @@ if (
   let rows_ = [];
   let rowSeq_ = 0;
   let baseBudget_ = 0;
-  let baseSavings_ = 0;
+  let baseSavings_ = 0;        // 数字。月ごとの貯蓄が未設定のときは null
+  let savingsMonthKey_ = "";   // 修正する月（例：2026-10）
+  let savingsMonthLabel_ = ""; // 修正する月（例：2026年10月）
+
+  // 月ごとの貯蓄の仕組み（無いときは、今までの1つの金額を使う）
+  function monthlySavings_() {
+    return (
+      typeof window.setSavingsForMonth_ === "function" &&
+      typeof window.savingsForMonth_ === "function"
+    );
+  }
+
+  function shownMonth_() {
+    const label =
+      String(
+        (document.getElementById("categoryMonthLabel") || {})
+          .textContent || ""
+      );
+
+    const match = /(\d{4})\s*年\s*(\d{1,2})\s*月/.exec(label);
+
+    if (match) {
+      return {
+        key: match[1] + "-" + ("0" + match[2]).slice(-2),
+        label: match[1] + "年" + Number(match[2]) + "月"
+      };
+    }
+
+    const now = new Date();
+
+    return {
+      key:
+        now.getFullYear() + "-" +
+        ("0" + (now.getMonth() + 1)).slice(-2),
+      label: now.getFullYear() + "年" + (now.getMonth() + 1) + "月"
+    };
+  }
   let saving_ = false;
 
   function closeSheet_() {
@@ -25718,11 +25786,27 @@ if (
         textOf_("budgetMoney")
       );
 
-    baseSavings_ =
-      digits_(
-        textOf_("hubSummarySavings") ||
-        textOf_("savingActual")
-      );
+    if (monthlySavings_()) {
+      const month = shownMonth_();
+
+      savingsMonthKey_ = month.key;
+      savingsMonthLabel_ = month.label;
+
+      const value = window.savingsForMonth_(month.key);
+
+      baseSavings_ =
+        typeof value === "number" ? value : null;
+    }
+    else {
+      savingsMonthKey_ = "";
+      savingsMonthLabel_ = "";
+
+      baseSavings_ =
+        digits_(
+          textOf_("hubSummarySavings") ||
+          textOf_("savingActual")
+        );
+    }
 
     rows_ =
       readCategories_().map(newRow_);
@@ -25759,7 +25843,7 @@ if (
           </label>
 
           <label class="cm-field">
-            <span>現在の貯蓄</span>
+            <span id="cmSavingsLabel">現在の貯蓄</span>
             <div class="cm-money">
               <b>¥</b>
               <input
@@ -25810,7 +25894,15 @@ if (
       overlay.querySelector("#cmSavings");
 
     budgetInput.value = String(baseBudget_);
-    savingsInput.value = String(baseSavings_);
+    savingsInput.value =
+      baseSavings_ === null ? "" : String(baseSavings_);
+
+    if (savingsMonthKey_) {
+      overlay.querySelector("#cmSavingsLabel").textContent =
+        "貯蓄（" + savingsMonthLabel_ + "分）";
+
+      savingsInput.placeholder = "未設定";
+    }
 
     [budgetInput, savingsInput].forEach(
       function (input) {
@@ -25979,7 +26071,7 @@ if (
         });
     }
 
-    if (savings !== null) {
+    if (savings !== null && !monthlySavings_()) {
       ["hubSummarySavings", "stripSavings", "savingActual", "reportSaving"]
         .forEach(function (id) {
           set(id, yen_(savings));
@@ -26008,10 +26100,14 @@ if (
         overlay.querySelector("#cmBudget").value
       );
 
+    // 月ごとの貯蓄：空にすると「その月の記録を消す（ー）」
+    const savingsRaw =
+      overlay.querySelector("#cmSavings").value.trim();
+
     const newSavings =
-      digits_(
-        overlay.querySelector("#cmSavings").value
-      );
+      savingsMonthKey_ && savingsRaw === ""
+        ? null
+        : digits_(savingsRaw);
 
     if (newBudget < 10000 || newBudget > 10000000) {
       toast_("毎月の予算は1万円以上で入力してください");
@@ -26110,6 +26206,7 @@ if (
     saveButton.textContent = "保存中…";
 
     let changed = false;
+    let savedMonthly = false;   // 月ごとの貯蓄だけ変えたときは、読み込み直さない
     let shownBudget = null;
     let shownSavings = null;
 
@@ -26223,8 +26320,17 @@ if (
         shownBudget = newBudget;
       }
 
-      // 6) 現在の貯蓄
-      if (newSavings !== baseSavings_) {
+      // 6) 貯蓄
+      if (savingsMonthKey_) {
+        // 月ごとに保存：この月だけが変わり、ほかの月は変わらない
+        if (newSavings !== baseSavings_) {
+          window.setSavingsForMonth_(savingsMonthKey_, newSavings);
+
+          savedMonthly = true;
+          baseSavings_ = newSavings;
+        }
+      }
+      else if (newSavings !== baseSavings_) {
         const response =
           await fetch(
             API_BASE +
@@ -26273,7 +26379,11 @@ if (
 
       showValueNow_(shownBudget, shownSavings);
 
-      toast_(changed ? "修正しました" : "変更はありません");
+      toast_(
+        changed || savedMonthly
+          ? "修正しました"
+          : "変更はありません"
+      );
 
       saving_ = false;
       closeSheet_();
@@ -27658,6 +27768,18 @@ if (
       color: #a78e97;
     }
 
+    .u-quick-extra {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .u-quick-extra .u-extra-input {
+      height: 40px;
+      font-size: 15px;
+    }
+
     .u-quick-dates {
       display: flex;
       align-items: center;
@@ -27832,32 +27954,46 @@ if (
       white-space: nowrap;
     }
 
-    /* チェックリスト：題名は2行まで折り返して全部読めるように */
-    .check-list .u-text {
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-      white-space: normal;
+    /* チェックリスト：場所／内容／日付と担当 の3行。1行ずつ、増やさない */
+    .check-list .u-row {
+      align-items: center;
+      padding-top: 10px;
+      padding-bottom: 10px;
+    }
+
+    .check-list .u-main {
+      overflow: hidden;
+    }
+
+    .check-list .u-fit {
+      display: block;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .check-list .u-place {
+      color: #d9557f;
+      font-size: 13px;
+      font-weight: 800;
       line-height: 1.35;
     }
 
-    .check-list .u-row {
-      align-items: flex-start;
-      padding-top: 11px;
-      padding-bottom: 11px;
-    }
-
-    .check-list .u-check {
-      margin-top: 1px;
+    .check-list .u-text {
+      display: block;
+      -webkit-line-clamp: unset;
+      white-space: nowrap;
+      font-size: 15px;
+      line-height: 1.4;
     }
 
     /* 登録日：題名の下に小さく（0000年0月0日） */
     .u-made {
-      margin-top: 3px;
-      color: #b8a3ab;
-      font-size: 11px;
+      margin-top: 2px;
+      color: #a78e97;
+      font-size: 12px;
       font-weight: 600;
-      line-height: 1.3;
+      line-height: 1.35;
     }
 
     .u-row.is-done .u-made {
@@ -28215,6 +28351,25 @@ if (
   function buildQuick_(config) {
     const card = el_("div", "u-card u-quick");
 
+    // 追加の入力欄（例：場所）。メインの入力欄の上に置く
+    let extraInput = null;
+
+    if (config.extraField) {
+      const wrap = el_("div", "u-quick-extra");
+
+      wrap.appendChild(el_("span", "u-date-label", config.extraField.label));
+
+      extraInput = el_("input", "u-quick-input u-extra-input");
+      extraInput.type = "text";
+      extraInput.placeholder = config.extraField.placeholder || "";
+      extraInput.autocomplete = "off";
+      extraInput.maxLength = config.extraField.maxLength || 40;
+      extraInput.setAttribute("enterkeyhint", "next");
+
+      wrap.appendChild(extraInput);
+      card.appendChild(wrap);
+    }
+
     const row = el_("div", "u-quick-row");
 
     const input = el_("input", "u-quick-input");
@@ -28319,7 +28474,12 @@ if (
 
       const dateValue = manual || parsed.date || "";
 
-      return { parsed: parsed, date: dateValue, text: input.value };
+      return {
+        parsed: parsed,
+        date: dateValue,
+        text: input.value,
+        extra: extraInput ? extraInput.value.trim() : ""
+      };
     }
 
     function refresh() {
@@ -28341,6 +28501,20 @@ if (
 
     input.addEventListener("input", refresh);
 
+    if (extraInput) {
+      extraInput.addEventListener("input", refresh);
+
+      extraInput.addEventListener(
+        "keydown",
+        function (event) {
+          if (event.key === "Enter" && !event.isComposing) {
+            event.preventDefault();
+            input.focus();
+          }
+        }
+      );
+    }
+
     if (dateInput) {
       dateInput.addEventListener("change", refresh);
     }
@@ -28360,6 +28534,10 @@ if (
 
         if (ok !== false) {
           input.value = "";
+
+          if (extraInput) {
+            extraInput.value = "";
+          }
 
           if (dateInput) {
             dateInput.value = "";
@@ -28747,6 +28925,13 @@ if (
               1
             );
           }
+          else if (op.type === "create") {
+            // すでにあれば何もしない（他の端末が先に作った分を上書きしない）
+            await post_(
+              { action: cfg.actions.import, items: [op.item] },
+              1
+            );
+          }
           else {
             await post_(
               { action: cfg.actions.del, ids: op.ids },
@@ -28788,7 +28973,17 @@ if (
       let result = list.slice();
 
       state.pending.forEach(function (op) {
-        if (op.type === "upsert") {
+        if (op.type === "create") {
+          const exists =
+            result.some(function (item) {
+              return item.id === op.item.id;
+            });
+
+          if (!exists) {
+            result.push(copy_(op.item));
+          }
+        }
+        else if (op.type === "upsert") {
           const index =
             result.findIndex(function (item) {
               return item.id === op.item.id;
@@ -28813,7 +29008,17 @@ if (
     }
 
     function queue_(op) {
-      if (op.type === "upsert") {
+      if (op.type === "create") {
+        // 同じ項目の「作る」が溜まっているときは、重ねない
+        state.pending =
+          state.pending.filter(function (other) {
+            return !(
+              other.type === "create" &&
+              other.item.id === op.item.id
+            );
+          });
+      }
+      else if (op.type === "upsert") {
         state.pending =
           state.pending.filter(function (other) {
             return !(
@@ -28916,6 +29121,34 @@ if (
 
       sync: sync_,
 
+      // 無いときだけ作る（あれば何もしない）
+      createIfMissing: function (item) {
+        const exists =
+          state.items.some(function (other) {
+            return other.id === item.id;
+          });
+
+        if (exists) {
+          return false;
+        }
+
+        item.updated = Date.now();
+
+        state.items.unshift(item);
+
+        saveLocal_();
+        queue_({ type: "create", item: copy_(item) });
+
+        setTimeout(function () { sync_(true); }, 50);
+
+        return true;
+      },
+
+      // サーバーと一度でも同期できたか（または、この端末に記録があるか）
+      ready: function () {
+        return state.lastSync > 0 || state.items.length > 0;
+      },
+
       // 追加・変更
       upsert: function (item) {
         item.updated = Date.now();
@@ -28953,6 +29186,146 @@ if (
     };
   }
 
+
+  // =========================================================
+  // 貯蓄（月ごと）
+  // ・月ごとに別々の金額を持つ。ある月を直しても、ほかの月は変わらない
+  // ・今月の分が無いときは、直前の月の金額を、今月の分としてコピーして持つ
+  // ・シートの「貯蓄」に、月ごとの行として記録される
+  // =========================================================
+
+  const savingsStore_ =
+    createSyncedList_({
+      label: "貯蓄",
+      storeKey: "familySavings_v1",
+      pendingKey: "familySavingsPending_v1",
+      importedKey: "familySavingsImported_v1",
+      actions: {
+        get: "getSavingsMonths",
+        upsert: "upsertSavingsMonth",
+        del: "deleteSavingsMonths",
+        import: "importSavingsMonths"
+      },
+      onStatus: function () {},
+      onChange: function () {
+        ensureSavingsThisMonth_();
+        refreshStrip_();
+      }
+    });
+
+  function refreshStrip_() {
+    if (typeof window.refreshCategoryStrip_ === "function") {
+      window.refreshCategoryStrip_();
+    }
+  }
+
+  function thisMonthKey_() {
+    const now = new Date();
+
+    return (
+      now.getFullYear() + "-" +
+      String(now.getMonth() + 1).padStart(2, "0")
+    );
+  }
+
+  function legacySavingsNow_() {
+    const text =
+      (document.getElementById("savingActual") || {}).textContent ||
+      (document.getElementById("hubSummarySavings") || {}).textContent ||
+      "";
+
+    const digits = String(text).replace(/[^0-9]/g, "");
+
+    return digits ? Number(digits) : 0;
+  }
+
+  // 今月の分を作る処理は、1回の起動で1回だけ（くり返して通信しないため）
+
+  // 今月の分が無ければ作る（直前の月のコピー。何も無ければ、今までの金額）
+  // ※ 作ろうとするのは、起動してから月ごとに1回だけ（くり返しを防ぐ）
+  let savingsEnsuredFor_ = "";
+
+  function ensureSavingsThisMonth_() {
+    if (!savingsStore_.ready()) {
+      return;
+    }
+
+    const current = thisMonthKey_();
+
+    if (savingsEnsuredFor_ === current) {
+      return;
+    }
+
+    const items = savingsStore_.items();
+
+    // 今月の分があれば、それで済み
+    if (items.some(function (item) { return item.id === current; })) {
+      savingsEnsuredFor_ = current;
+      return;
+    }
+
+    savingsEnsuredFor_ = current;
+
+    const earlier =
+      items
+        .filter(function (item) { return item.id < current; })
+        .sort(function (a, b) { return a.id < b.id ? 1 : -1; })[0];
+
+    let amount = 0;
+
+    if (earlier) {
+      amount = earlier.amount;
+    }
+    else if (items.length === 0) {
+      amount = legacySavingsNow_();
+    }
+
+    if (amount > 0 || earlier) {
+      savingsStore_.createIfMissing({
+        id: current,
+        month: current,
+        amount: amount,
+        updated: Date.now()
+      });
+    }
+  }
+
+  // その月の貯蓄（記録が無い月は null。まだ読み込めていないときは undefined）
+  window.savingsForMonth_ = function (monthKey) {
+    if (!savingsStore_.ready()) {
+      return undefined;
+    }
+
+    const found =
+      savingsStore_.items().find(function (item) {
+        return item.id === monthKey;
+      });
+
+    return found ? found.amount : null;
+  };
+
+  // その月の貯蓄を直す（null で、その月の記録を消す）
+  window.setSavingsForMonth_ = function (monthKey, amount) {
+    if (!/^\d{4}-\d{2}$/.test(String(monthKey))) {
+      return false;
+    }
+
+    if (amount === null || amount === undefined) {
+      savingsStore_.remove([monthKey]);
+    }
+    else {
+      savingsStore_.upsert({
+        id: monthKey,
+        month: monthKey,
+        amount: Math.max(0, Math.round(Number(amount) || 0)),
+        updated: Date.now()
+      });
+    }
+
+    refreshStrip_();
+
+    return true;
+  };
 
   // =========================================================
   // メモ（内容と個数）
@@ -29314,6 +29687,7 @@ if (
       return list.map(function (item) {
         return {
           id: item.id || U.newId_(),
+          place: item.place || "",
           text: String(item.text || ""),
           due: item.due || "",
           done: item.done === true,
@@ -29485,25 +29859,27 @@ if (
 
     const main = el_("div", "u-main");
 
-    main.appendChild(el_("div", "u-text", item.text));
-
-    // 登録日：題名の下に小さく（0000年0月0日）
-    if (item.created) {
-      main.appendChild(el_("div", "u-made", madeLabel_(item.created)));
+    // 1行目：場所
+    if (item.place) {
+      main.appendChild(el_("div", "u-fit u-place", item.place));
     }
 
-    const bits = [];
+    // 2行目：内容
+    main.appendChild(el_("div", "u-fit u-text", item.text));
+
+    // 3行目：登録日（0000年0月0日）と、担当の名前
+    const line3 = [];
+
+    if (item.created) {
+      line3.push(madeLabel_(item.created));
+    }
 
     if (item.assignee) {
-      bits.push("担当 " + item.assignee);
+      line3.push(item.assignee);
     }
 
-    if (item.contact) {
-      bits.push(item.contact);
-    }
-
-    if (bits.length) {
-      main.appendChild(el_("div", "u-sub", bits.join("　")));
+    if (line3.length) {
+      main.appendChild(el_("div", "u-fit u-made", line3.join("　")));
     }
 
     row.appendChild(check);
@@ -29517,6 +29893,57 @@ if (
     });
 
     return row;
+  }
+
+  // 1行に収まらないときは、文字を小さくして収める（行は増やさない）
+  const FIT_MIN = { "u-place": 10, "u-text": 10, "u-made": 9 };
+
+  function fitCheckLines_() {
+    const page = document.getElementById("page-checklist");
+
+    if (!page || page.hidden) {
+      return;
+    }
+
+    page.querySelectorAll(".check-list .u-fit").forEach(function (node) {
+      const kind = ["u-place", "u-text", "u-made"].find(function (name) {
+        return node.classList.contains(name);
+      });
+
+      node.style.fontSize = "";
+
+      if (node.clientWidth <= 0) {
+        return;
+      }
+
+      let size = parseFloat(window.getComputedStyle(node).fontSize) || 14;
+      const min = FIT_MIN[kind] || 9;
+
+      while (node.scrollWidth > node.clientWidth + 0.5 && size > min) {
+        size -= 0.5;
+        node.style.fontSize = size + "px";
+      }
+    });
+  }
+
+  let fitFrame2_ = 0;
+
+  function scheduleFitCheck_() {
+    if (fitFrame2_) {
+      return;
+    }
+
+    fitFrame2_ =
+      requestAnimationFrame(function () {
+        fitFrame2_ = 0;
+        fitCheckLines_();
+      });
+  }
+
+  window.addEventListener("resize", scheduleFitCheck_);
+
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(scheduleFitCheck_);
   }
 
   function renderChecklist_() {
@@ -29632,6 +30059,7 @@ if (
     }
 
     updateCheckBadge_();
+    scheduleFitCheck_();
   }
 
   function openCheckSheet_(item) {
@@ -29639,13 +30067,14 @@ if (
       "checkEditOverlay",
       "詳細",
       function (scroll, actions, close) {
+        const place = U.field_("場所", "text", item.place, "例：GMO");
         const text = U.field_("内容", "text", item.text);
         const due = U.field_("期日", "date", item.due);
-        const assignee = U.field_("担当", "text", item.assignee, "例：かな");
+        const assignee = U.field_("担当", "text", item.assignee, "例：さとる");
         const contact = U.field_("連絡先", "text", item.contact, "例：090-1234-5678");
         const note = U.field_("メモ", "textarea", item.note);
 
-        [text, due, assignee, contact, note].forEach(function (f) {
+        [place, text, due, assignee, contact, note].forEach(function (f) {
           scroll.appendChild(f.wrap);
         });
 
@@ -29749,6 +30178,7 @@ if (
               return;
             }
 
+            item.place = place.input.value.trim();
             item.text = title;
             item.due = due.input.value || "";
             item.assignee = assignee.input.value.trim();
@@ -29788,6 +30218,11 @@ if (
     checkQuick_ =
       U.buildQuick_({
         placeholder: "例：住民票を取りに行く 10/15まで",
+        extraField: {
+          label: "場所",
+          placeholder: "例：GMO（なくても大丈夫）",
+          maxLength: 40
+        },
         parseOptions: {},
         showDate: true,
         dateLabel: "締切日",
@@ -29800,6 +30235,10 @@ if (
         describe: function (state) {
           const chips = [];
           const p = state.parsed;
+
+          if (state.extra) {
+            chips.push({ label: "場所", value: state.extra });
+          }
 
           chips.push({ label: "内容", value: p.title || "（入力してください）" });
 
@@ -29829,6 +30268,7 @@ if (
 
           checkStore_.upsert({
             id: U.newId_(),
+            place: String(state.extra || "").slice(0, 60),
             text: title.slice(0, 200),
             due: state.date || "",
             done: false,
@@ -30092,6 +30532,7 @@ if (
 
   // 起動後に、シートの内容へそろえる（少しずつ時間をずらす）
   setTimeout(function () { checkStore_.sync(true); }, 1800);
+  setTimeout(function () { savingsStore_.sync(true); }, 2100);
   setTimeout(function () { memoStore_.sync(true); }, 2400);
   setTimeout(refreshCalendarBadge_, 3200);
 
@@ -30101,6 +30542,7 @@ if (
       if (document.visibilityState === "visible") {
         checkStore_.sync(false);
         memoStore_.sync(false);
+        savingsStore_.sync(false);
       }
     },
     60000
@@ -30121,6 +30563,7 @@ if (
       if (document.visibilityState === "visible") {
         checkStore_.sync(false);
         memoStore_.sync(false);
+        savingsStore_.sync(false);
         refreshCalendarBadge_();
       }
     }
@@ -30130,6 +30573,7 @@ if (
   window.refreshTabBadges_ = function () {
     checkStore_.sync(true);
     memoStore_.sync(true);
+    savingsStore_.sync(true);
     refreshCalendarBadge_();
     updateCheckBadge_();
     updateMemoBadge_();
