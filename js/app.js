@@ -27505,6 +27505,43 @@ if (
       min-height: 26px;
     }
 
+    .u-chip.is-empty {
+      background: #f6eff2;
+      color: #a78e97;
+    }
+
+    .u-quick-dates {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .u-date-label {
+      color: #8f7a83;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .u-preset {
+      height: 30px;
+      padding: 0 11px;
+      border: 1px solid #f0d5df;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #d9557f;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .u-preset:active {
+      background: #fff0f5;
+    }
+
     .u-date {
       box-sizing: border-box;
       height: 30px;
@@ -27655,6 +27692,86 @@ if (
       font-weight: 800;
       white-space: nowrap;
     }
+
+    /* チェックリスト：題名は2行まで折り返して全部読めるように */
+    .check-list .u-text {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      white-space: normal;
+      line-height: 1.35;
+    }
+
+    .check-list .u-row {
+      align-items: flex-start;
+      padding-top: 11px;
+      padding-bottom: 11px;
+    }
+
+    .check-list .u-check {
+      margin-top: 1px;
+    }
+
+    .check-list .u-due {
+      margin-top: 1px;
+    }
+
+    /* 締切日・登録日 */
+    .u-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 12px;
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    .u-meta-due {
+      color: #a78e97;
+    }
+
+    .u-meta-made {
+      color: #b8a3ab;
+      font-weight: 600;
+    }
+
+    .due-over .u-meta-due  { color: #d6303a; }
+    .due-today .u-meta-due { color: #d9560b; }
+    .due-soon .u-meta-due  { color: #b7791f; }
+    .due-week .u-meta-due  { color: #a08a00; }
+
+    .u-row.is-done .u-meta-due,
+    .u-row.is-done .u-meta-made {
+      color: #d5c6cc;
+    }
+
+    /* 期日ごとの見出し */
+    .u-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 14px 4px;
+      color: #a78e97;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .u-group::after {
+      content: "";
+      flex: 1 1 auto;
+      border-top: 1.5px dotted #e6c6d3;
+    }
+
+    .u-group:first-child {
+      padding-top: 8px;
+    }
+
+    .u-group-over  { color: #d6303a; }
+    .u-group-today { color: #d9560b; }
+    .u-group-soon  { color: #b7791f; }
+    .u-group-week  { color: #a08a00; }
 
     /* 期日の近さで色が変わる */
     .due-over  { border-left-color: #e5484d; }
@@ -27961,12 +28078,48 @@ if (
     const sub = el_("div", "u-quick-sub");
 
     let dateInput = null;
+    let dates = null;
 
     if (config.showDate) {
+      dates = el_("div", "u-quick-dates");
+
+      if (config.dateLabel) {
+        dates.appendChild(el_("span", "u-date-label", config.dateLabel));
+      }
+
       dateInput = el_("input", "u-date");
       dateInput.type = "date";
       dateInput.setAttribute("aria-label", config.dateLabel || "日付");
-      sub.appendChild(dateInput);
+      dates.appendChild(dateInput);
+
+      // ワンタップで日付を入れるボタン（今日・明日・1週間後 など）
+      (config.datePresets || []).forEach(function (preset) {
+        const button = el_("button", "u-preset", preset.label);
+
+        button.type = "button";
+
+        button.addEventListener(
+          "click",
+          function () {
+            const now = new Date();
+
+            const target =
+              preset.monthEnd
+                ? new Date(now.getFullYear(), now.getMonth() + 1, 0, 12)
+                : new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    now.getDate() + (preset.days || 0),
+                    12
+                  );
+
+            dateInput.value = window.nlKey_(target);
+            refresh();
+          }
+        );
+
+        dates.appendChild(button);
+      });
     }
 
     const chips = el_("span");
@@ -27989,6 +28142,11 @@ if (
     }
 
     card.appendChild(row);
+
+    if (dates) {
+      card.appendChild(dates);
+    }
+
     card.appendChild(sub);
 
     function current() {
@@ -28013,7 +28171,7 @@ if (
       chips.textContent = "";
 
       config.describe(state).forEach(function (chip) {
-        const node = el_("span", "u-chip");
+        const node = el_("span", "u-chip" + (chip.empty ? " is-empty" : ""));
 
         if (chip.label) {
           node.appendChild(el_("small", "", chip.label));
@@ -29074,8 +29232,22 @@ if (
       return { level: "week", label: "あと" + days + "日" };
     }
 
-    return { level: "far", label: window.nlLabel_(item.due) };
+    return { level: "far", label: "あと" + days + "日" };
   }
+
+  // 日付を「10/5(月)」の形で
+  function dayLabel_(ms) {
+    return window.nlLabel_(window.nlKey_(new Date(ms)));
+  }
+
+  const GROUP_LABELS = {
+    over: "期限切れ",
+    today: "今日まで",
+    soon: "もうすぐ（2日以内）",
+    week: "今週中（7日以内）",
+    far: "それ以降",
+    none: "期限なし"
+  };
 
   function sortChecklist_(list) {
     return list.slice().sort(function (a, b) {
@@ -29126,6 +29298,27 @@ if (
     const main = el_("div", "u-main");
 
     main.appendChild(el_("div", "u-text", item.text));
+
+    // 締切日・登録日
+    const meta = el_("div", "u-meta");
+
+    meta.appendChild(
+      el_(
+        "span",
+        "u-meta-due",
+        "締切 " + (item.due ? window.nlLabel_(item.due) : "なし")
+      )
+    );
+
+    meta.appendChild(
+      el_(
+        "span",
+        "u-meta-made",
+        "登録 " + (item.created ? dayLabel_(item.created) : "―")
+      )
+    );
+
+    main.appendChild(meta);
 
     const bits = [];
 
@@ -29185,7 +29378,35 @@ if (
       list.appendChild(el_("div", "u-empty", "まだありません"));
     }
 
-    active.forEach(function (item) {
+    // 期日の近さが2種類以上あるときだけ、見出しで区切る
+    const levels =
+      active.map(function (item) { return dueInfo_(item).level; });
+
+    const useGroups =
+      levels.filter(function (level, index) {
+        return levels.indexOf(level) === index;
+      }).length >= 2;
+
+    let lastLevel = "";
+
+    active.forEach(function (item, index) {
+      if (useGroups && levels[index] !== lastLevel) {
+        lastLevel = levels[index];
+
+        const count =
+          levels.filter(function (level) {
+            return level === lastLevel;
+          }).length;
+
+        list.appendChild(
+          el_(
+            "div",
+            "u-group u-group-" + lastLevel,
+            GROUP_LABELS[lastLevel] + "　" + count
+          )
+        );
+      }
+
       list.appendChild(checkRow_(item));
     });
 
@@ -29395,17 +29616,21 @@ if (
 
     checkQuick_ =
       U.buildQuick_({
-        placeholder: "例：電気代の支払い 10/5まで",
+        placeholder: "例：住民票を取りに行く 10/15まで",
         parseOptions: {},
         showDate: true,
-        dateLabel: "期日",
+        dateLabel: "締切日",
+        datePresets: [
+          { label: "今日", days: 0 },
+          { label: "明日", days: 1 },
+          { label: "1週間後", days: 7 },
+          { label: "月末", monthEnd: true }
+        ],
         describe: function (state) {
           const chips = [];
           const p = state.parsed;
 
-          if (p.title) {
-            chips.push({ label: "内容", value: p.title });
-          }
+          chips.push({ label: "内容", value: p.title || "（入力してください）" });
 
           if (state.date) {
             const days = U.daysUntil_(state.date);
@@ -29416,10 +29641,18 @@ if (
               : "（あと" + days + "日）";
 
             chips.push({
-              label: "期日",
+              label: "締切",
               value: window.nlLabel_(state.date) + extra
             });
           }
+          else {
+            chips.push({ label: "締切", value: "なし", empty: true });
+          }
+
+          chips.push({
+            label: "登録",
+            value: window.nlLabel_(U.todayKey_())
+          });
 
           return chips;
         },
