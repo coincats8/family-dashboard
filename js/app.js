@@ -21951,6 +21951,8 @@ if (
 // ・内訳では「電気」「ガス」「水道」だけを見出しにし、同じ意味の言葉は重ねない
 // ・近いカテゴリをジャンルにまとめ、点線とジャンル名で区切る
 // ・各行を「件数 ｜ 金額 ｜ 予算額」の右合わせにし、長いときは幅に合わせて縮小
+// ・予算が決まっているカテゴリは、使っていなくても自動で表示する
+//   （予算のないカテゴリは、使ったときだけ表示される）
 // ・表示月の下に「予算・生活費・残金・貯蓄」を中央そろえで表示
 //   （残金は、減るにつれて 青 → 黄 → 赤 の文字色に変わる）
 // ・件数と金額を右合わせで表示
@@ -22138,6 +22140,15 @@ if (
 
     .report-purchase-intro + .genre-header {
       margin-top: 6px;
+    }
+
+    /* 予算だけ決まっていて、まだ使っていない行 */
+    .report-history-group.is-budget-only .report-history-summary {
+      cursor: default;
+    }
+
+    .report-history-group.is-budget-only .report-history-total {
+      color: #c9b3bb !important;
     }
 
     /* ボタンを押したときの黒い枠は出さない */
@@ -22835,6 +22846,142 @@ if (
       : 0;
   }
 
+  // ---------- 予算が決まっているカテゴリを、自動で表示 ----------
+
+  function budgetCategories_() {
+    const categories =
+      typeof dashboardData !== "undefined" &&
+      dashboardData &&
+      Array.isArray(dashboardData.categories)
+        ? dashboardData.categories
+        : [];
+
+    const result = [];
+    const seen = new Set();
+
+    categories.forEach(function (category) {
+      const budget =
+        Number(
+          String(
+            category.budget === undefined || category.budget === null
+              ? 0
+              : category.budget
+          ).replace(/[^0-9.-]/g, "")
+        ) || 0;
+
+      const name =
+        String(category.name || category.category || "").trim();
+
+      const key = fullName_(name);
+
+      if (budget > 0 && key && !seen.has(key)) {
+        seen.add(key);
+        result.push({ name: name, key: key, base: plainName_(name) });
+      }
+    });
+
+    return result;
+  }
+
+  // まだ使っていない（購入のない）カテゴリの行
+  function makeBudgetRow_(name) {
+    const group = document.createElement("section");
+
+    group.className = "report-history-group is-budget-only";
+
+    const summary = document.createElement("button");
+
+    summary.type = "button";
+    summary.className = "report-history-summary";
+
+    const title = document.createElement("span");
+
+    title.className = "report-history-title";
+    title.textContent = name;
+
+    const total = document.createElement("span");
+
+    total.className = "report-history-total";
+    total.textContent = "¥0";
+
+    const count = document.createElement("span");
+
+    count.className = "report-history-count";
+    count.textContent = "0件";
+
+    summary.appendChild(title);
+    summary.appendChild(total);
+    summary.appendChild(count);
+
+    const body = document.createElement("div");
+
+    body.className = "report-history-body";
+
+    group.appendChild(summary);
+    group.appendChild(body);
+
+    return group;
+  }
+
+  function ensureBudgetRows_() {
+    const list =
+      document.getElementById("reportCategoryList");
+
+    if (!list) {
+      return;
+    }
+
+    const emptyNote =
+      Array.from(list.children).find(function (node) {
+        return (
+          node.classList &&
+          node.classList.contains("report-history-empty") &&
+          /まだありません/.test(node.textContent)
+        );
+      });
+
+    // 一覧がまだ読み込み中のときは、何もしない
+    if (!list.querySelector(".report-history-group") && !emptyNote) {
+      return;
+    }
+
+    const wanted = budgetCategories_();
+
+    if (wanted.length === 0) {
+      return;
+    }
+
+    const haveKeys = new Set();
+    const haveBases = new Set();
+
+    list
+      .querySelectorAll(
+        ".report-history-title, .utility-part-name"
+      )
+      .forEach(function (node) {
+        haveKeys.add(fullName_(node.textContent));
+        haveBases.add(plainName_(node.textContent));
+      });
+
+    let added = 0;
+
+    wanted.forEach(function (category) {
+      if (
+        haveKeys.has(category.key) ||
+        haveBases.has(category.base)
+      ) {
+        return;
+      }
+
+      list.appendChild(makeBudgetRow_(category.name));
+      added += 1;
+    });
+
+    if (added > 0 && emptyNote) {
+      emptyNote.remove();
+    }
+  }
+
   function mergeUtilities_() {
     const list =
       document.getElementById(
@@ -23487,6 +23634,7 @@ if (
     working_ = true;
 
     try {
+      ensureBudgetRows_();
       mergeUtilities_();
       organizeGenres_();
       updateHeaderCols_();
@@ -27684,15 +27832,6 @@ if (
       white-space: nowrap;
     }
 
-    .u-due {
-      flex: 0 0 auto;
-      padding: 4px 9px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 800;
-      white-space: nowrap;
-    }
-
     /* チェックリスト：題名は2行まで折り返して全部読めるように */
     .check-list .u-text {
       display: -webkit-box;
@@ -27712,37 +27851,60 @@ if (
       margin-top: 1px;
     }
 
-    .check-list .u-due {
-      margin-top: 1px;
-    }
-
-    /* 締切日・登録日 */
-    .u-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 2px 12px;
-      margin-top: 4px;
-      font-size: 12px;
-      font-weight: 700;
-      line-height: 1.4;
-    }
-
-    .u-meta-due {
-      color: #a78e97;
-    }
-
-    .u-meta-made {
+    /* 登録日：題名の下に小さく（0000年0月0日） */
+    .u-made {
+      margin-top: 3px;
       color: #b8a3ab;
+      font-size: 11px;
       font-weight: 600;
+      line-height: 1.3;
     }
 
-    .due-over .u-meta-due  { color: #d6303a; }
-    .due-today .u-meta-due { color: #d9560b; }
-    .due-soon .u-meta-due  { color: #b7791f; }
-    .due-week .u-meta-due  { color: #a08a00; }
+    .u-row.is-done .u-made {
+      color: #d5c6cc;
+    }
 
-    .u-row.is-done .u-meta-due,
-    .u-row.is-done .u-meta-made {
+    /* 締切日：右側に。年は小さく上、月/日は大きく。無いときは「ー」 */
+    .u-dl {
+      flex: 0 0 auto;
+      min-width: 52px;
+      margin-top: 1px;
+      text-align: center;
+      line-height: 1.15;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .u-dl-year {
+      display: block;
+      color: #b8a3ab;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .u-dl-day {
+      display: block;
+      color: #8f7a83;
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .u-dl-none {
+      display: block;
+      color: #d5c6cc;
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.5;
+    }
+
+    .due-over .u-dl-day  { color: #d6303a; }
+    .due-today .u-dl-day { color: #d9560b; }
+    .due-soon .u-dl-day  { color: #b7791f; }
+    .due-week .u-dl-day  { color: #a08a00; }
+
+    .u-row.is-done .u-dl-day,
+    .u-row.is-done .u-dl-none,
+    .u-row.is-done .u-dl-year {
       color: #d5c6cc;
     }
 
@@ -27779,11 +27941,6 @@ if (
     .due-soon  { border-left-color: #f5a623; }
     .due-week  { border-left-color: #f0d24c; }
 
-    .due-over .u-due  { background: #ffe3e3; color: #d6303a; }
-    .due-today .u-due { background: #ffe8d6; color: #d9560b; }
-    .due-soon .u-due  { background: #fff1cf; color: #b7791f; }
-    .due-week .u-due  { background: #fffbe0; color: #a08a00; }
-    .due-far .u-due   { background: #f6eff2; color: #a78e97; }
 
     .u-fold {
       display: flex;
@@ -29235,9 +29392,40 @@ if (
     return { level: "far", label: "あと" + days + "日" };
   }
 
-  // 日付を「10/5(月)」の形で
-  function dayLabel_(ms) {
-    return window.nlLabel_(window.nlKey_(new Date(ms)));
+  // 登録日を「2026年10月2日」の形で
+  function madeLabel_(ms) {
+    const d = new Date(ms);
+
+    return (
+      d.getFullYear() + "年" +
+      (d.getMonth() + 1) + "月" +
+      d.getDate() + "日"
+    );
+  }
+
+  // 締切日の表示（右側）
+  function deadlineBlock_(item) {
+    const box = el_("div", "u-dl");
+
+    if (!item.due) {
+      box.appendChild(el_("span", "u-dl-none", "ー"));
+
+      return box;
+    }
+
+    const parts = String(item.due).split("-");
+
+    box.appendChild(el_("span", "u-dl-year", parts[0]));
+
+    box.appendChild(
+      el_(
+        "span",
+        "u-dl-day",
+        Number(parts[1]) + "/" + Number(parts[2])
+      )
+    );
+
+    return box;
   }
 
   const GROUP_LABELS = {
@@ -29299,26 +29487,10 @@ if (
 
     main.appendChild(el_("div", "u-text", item.text));
 
-    // 締切日・登録日
-    const meta = el_("div", "u-meta");
-
-    meta.appendChild(
-      el_(
-        "span",
-        "u-meta-due",
-        "締切 " + (item.due ? window.nlLabel_(item.due) : "なし")
-      )
-    );
-
-    meta.appendChild(
-      el_(
-        "span",
-        "u-meta-made",
-        "登録 " + (item.created ? dayLabel_(item.created) : "―")
-      )
-    );
-
-    main.appendChild(meta);
+    // 登録日：題名の下に小さく（0000年0月0日）
+    if (item.created) {
+      main.appendChild(el_("div", "u-made", madeLabel_(item.created)));
+    }
 
     const bits = [];
 
@@ -29337,9 +29509,8 @@ if (
     row.appendChild(check);
     row.appendChild(main);
 
-    if (info.label && !item.done) {
-      row.appendChild(el_("span", "u-due", info.label));
-    }
+    // 締切日：右側に。年は小さく上、月/日は大きく。無いときは「ー」
+    row.appendChild(deadlineBlock_(item));
 
     row.addEventListener("click", function () {
       openCheckSheet_(item);
@@ -29640,19 +29811,11 @@ if (
               : days === 0 ? "（今日）"
               : "（あと" + days + "日）";
 
-            chips.push({
-              label: "締切",
-              value: window.nlLabel_(state.date) + extra
-            });
+            chips.push({ value: window.nlLabel_(state.date) + extra });
           }
           else {
-            chips.push({ label: "締切", value: "なし", empty: true });
+            chips.push({ value: "ー", empty: true });
           }
-
-          chips.push({
-            label: "登録",
-            value: window.nlLabel_(U.todayKey_())
-          });
 
           return chips;
         },
