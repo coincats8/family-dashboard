@@ -26432,6 +26432,7 @@ if (
 // ・同じ内容の読み込みを1つにまとめ、購入明細は短時間だけ使い回す
 //   （使い回すのは、月などで絞り込む前の生のデータ）
 // ・ホームを表示しなくなったため、使われない「今日の予定」の読み込みをやめる
+// ・合言葉：家計簿への通信に合言葉を付ける。要求されたら、入力画面を出す
 // app.jsの一番最後へ追加
 // =========================================================
 
@@ -26457,6 +26458,176 @@ if (
       },
       window.apiResilienceOptions || {}
     );
+
+  // ---------- 合言葉 ----------
+  // この端末にだけ保存する（コードには書かない）。
+  // Apps Script 側で合言葉が設定されたときだけ、必要になる。
+
+  const CODE_KEY = "familyAccessCode_v1";
+
+  function getCode_() {
+    try {
+      return localStorage.getItem(CODE_KEY) || "";
+    }
+    catch (error) {
+      return "";
+    }
+  }
+
+  function isApiUrl_(url) {
+    return (
+      typeof API_BASE !== "undefined" &&
+      String(url).indexOf(API_BASE) === 0
+    );
+  }
+
+  // 通信に合言葉を付ける（無いときは何もしない）
+  function withCode_(url, init) {
+    const code = getCode_();
+
+    if (!code || !isApiUrl_(url)) {
+      return { url: url, init: init };
+    }
+
+    const method =
+      String((init && init.method) || "GET").toUpperCase();
+
+    if (method === "POST") {
+      if (init && typeof init.body === "string") {
+        try {
+          const body = JSON.parse(init.body);
+
+          if (body && typeof body === "object" && !body.token) {
+            body.token = code;
+
+            return {
+              url: url,
+              init: Object.assign({}, init, { body: JSON.stringify(body) })
+            };
+          }
+        }
+        catch (error) {
+          // JSONでない本文には付けない
+        }
+      }
+
+      return { url: url, init: init };
+    }
+
+    if (/[?&]token=/.test(String(url))) {
+      return { url: url, init: init };
+    }
+
+    return {
+      url:
+        String(url) +
+        (String(url).indexOf("?") === -1 ? "?" : "&") +
+        "token=" + encodeURIComponent(code),
+      init: init
+    };
+  }
+
+  function isUnauthorizedText_(text) {
+    const value = String(text || "");
+
+    return (
+      value.length < 3000 &&
+      /"error"\s*:\s*"unauthorized"/.test(value)
+    );
+  }
+
+  // 合言葉の入力画面（1回だけ出す）
+  let promptOpen_ = false;
+
+  window.requestAccessCode_ = function () {
+    if (promptOpen_ || !document.body) {
+      return;
+    }
+
+    promptOpen_ = true;
+
+    const hadCode = Boolean(getCode_());
+
+    const overlay = document.createElement("div");
+
+    overlay.id = "accessCodeOverlay";
+
+    overlay.setAttribute(
+      "style",
+      "position:fixed;inset:0;z-index:9000;display:flex;" +
+      "align-items:center;justify-content:center;padding:20px;" +
+      "background:rgba(0,0,0,0.38);" +
+      "font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;"
+    );
+
+    overlay.innerHTML =
+      '<div style="box-sizing:border-box;width:min(380px,100%);' +
+      'padding:24px 20px 20px;border-radius:24px;background:#fff;' +
+      'color:#463c40;box-shadow:0 20px 60px rgba(0,0,0,0.25);">' +
+      '<div style="font-size:18px;font-weight:800;margin-bottom:6px;">合言葉を入力</div>' +
+      '<div id="accessCodeNote" style="font-size:12px;color:#a78e97;line-height:1.5;margin-bottom:14px;"></div>' +
+      '<input id="accessCodeInput" type="password" autocomplete="current-password" ' +
+      'style="box-sizing:border-box;width:100%;height:48px;padding:0 14px;' +
+      'border:1px solid #f0d5df;border-radius:14px;background:#fffafc;' +
+      'font-size:16px;outline:none;">' +
+      '<div style="display:grid;grid-template-columns:1fr 1.6fr;gap:10px;margin-top:16px;">' +
+      '<button id="accessCodeLater" type="button" style="height:46px;border:0;border-radius:14px;' +
+      'background:#f7eef1;color:#8f7a83;font-size:14px;font-weight:800;">あとで</button>' +
+      '<button id="accessCodeSave" type="button" style="height:46px;border:0;border-radius:14px;' +
+      'background:linear-gradient(135deg,#f49ab6,#ed729a);color:#fff;font-size:14px;font-weight:800;">保存</button>' +
+      '</div></div>';
+
+    overlay.querySelector("#accessCodeNote").textContent =
+      hadCode
+        ? "合言葉が違うようです。もう一度入力してください。"
+        : "この家計簿を開くには、合言葉が必要です。";
+
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector("#accessCodeInput");
+
+    function close() {
+      overlay.remove();
+      promptOpen_ = false;
+    }
+
+    function save() {
+      const value = String(input.value || "").trim();
+
+      if (!value) {
+        input.focus();
+        return;
+      }
+
+      try {
+        localStorage.setItem(CODE_KEY, value);
+      }
+      catch (error) {
+        console.error(error);
+      }
+
+      cache.clear();
+      close();
+
+      // 画面を読み込み直して、合言葉つきでやり直す
+      (window.reloadPage_ || function () { location.reload(); })();
+    }
+
+    overlay.querySelector("#accessCodeSave").addEventListener("click", save);
+    overlay.querySelector("#accessCodeLater").addEventListener("click", close);
+
+    input.addEventListener(
+      "keydown",
+      function (event) {
+        if (event.key === "Enter" && !event.isComposing) {
+          event.preventDefault();
+          save();
+        }
+      }
+    );
+
+    setTimeout(function () { input.focus(); }, 50);
+  };
 
   const cache = new Map();
   const inflight = new Map();
@@ -26645,6 +26816,13 @@ if (
 
       const text = await response.text();
 
+      // 合言葉が必要と言われたら、入力画面を出す（結果は保存しない）
+      if (isUnauthorizedText_(text)) {
+        window.requestAccessCode_();
+
+        return { ok: true, text: text, unauthorized: true };
+      }
+
       const head = String(text || "").trim();
 
       if (
@@ -26694,7 +26872,7 @@ if (
                   });
 
                 if (outcome.ok) {
-                  if (ttl > 0) {
+                  if (ttl > 0 && !outcome.unauthorized) {
                     cache.set(
                       key,
                       {
@@ -26775,7 +26953,40 @@ if (
       );
     }
 
-    window.fetch = function (input, init) {
+    // 保存・POST の返事に「合言葉が必要」とあれば、入力画面を出す
+    function watchUnauthorized_(promise) {
+      return promise.then(function (response) {
+        try {
+          if (response && typeof response.clone === "function") {
+            response
+              .clone()
+              .text()
+              .then(function (text) {
+                if (isUnauthorizedText_(text)) {
+                  window.requestAccessCode_();
+                }
+              })
+              .catch(function () {});
+          }
+        }
+        catch (error) {
+          // 見張りに失敗しても、通信そのものは止めない
+        }
+
+        return response;
+      });
+    }
+
+    window.fetch = function (inputRaw, initRaw) {
+      // 家計簿への通信には、合言葉を付ける
+      const withCode =
+        typeof inputRaw === "string"
+          ? withCode_(inputRaw, initRaw)
+          : { url: inputRaw, init: initRaw };
+
+      const input = withCode.url;
+      const init = withCode.init;
+
       const url =
         typeof input === "string"
           ? input
@@ -26793,11 +27004,13 @@ if (
             ? init.body
             : "";
 
-        if (!/"action":"[A-Za-z]*Checklist[A-Za-z]*"/.test(body)) {
+        if (!/"action":"[A-Za-z]*(Checklist|MemoItem|SavingsMonth|Memo)[A-Za-z]*"/.test(body)) {
           cache.clear();
         }
 
-        return baseFetch_(input, init);
+        return isApiUrl_(url)
+          ? watchUnauthorized_(baseFetch_(input, init))
+          : baseFetch_(input, init);
       }
 
       if (
@@ -26808,7 +27021,9 @@ if (
         return resilientRead_(url, init);
       }
 
-      return baseFetch_(input, init);
+      return isApiUrl_(url)
+        ? watchUnauthorized_(baseFetch_(input, init))
+        : baseFetch_(input, init);
     };
   }
 
