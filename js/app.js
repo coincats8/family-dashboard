@@ -31220,12 +31220,12 @@ const row = Number(
   0
 );
 
-const item =
-  Array.isArray(reportPurchaseItems_)
-    ? reportPurchaseItems_.find(function (entry) {
-        return Number(entry.row) === row;
-      })
-    : null;
+const item = {
+  row: row,
+  shop: document.getElementById("rpEditShop")?.value || "",
+  productName: document.getElementById("rpEditProduct")?.value || "-",
+  amount: Number(document.getElementById("rpEditPrice")?.value || 0)
+};
 
 if (!item) {
   console.error(
