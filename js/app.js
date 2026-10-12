@@ -8806,6 +8806,7 @@ loadDashboard =
 
     reportEditingItem_ =
       item;
+    el("rpEditSheet").dataset.row = item.row;
 
     el("rpEditName").value =
       rpProductName_(item);
