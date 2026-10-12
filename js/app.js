@@ -31466,3 +31466,54 @@ if (!item) {
     }
   }, true);
 })();
+
+// ===== 購入履歴編集：3ボタン横一列 + 保存ボタン修正 =====
+(function () {
+  function fixReportEditButtons() {
+    const cancelBtn = document.getElementById("rpEditCancel");
+    const deleteBtn = document.getElementById("rpEditDelete");
+    const saveBtn = document.getElementById("rpEditSave");
+
+    if (!cancelBtn || !deleteBtn || !saveBtn) return;
+
+    const parent = saveBtn.parentElement;
+
+    // 3ボタンを同じ場所へ
+    parent.appendChild(cancelBtn);
+    parent.appendChild(deleteBtn);
+    parent.appendChild(saveBtn);
+
+    // 横一列
+    parent.style.display = "grid";
+    parent.style.gridTemplateColumns = "1fr 1fr 1fr";
+    parent.style.gap = "8px";
+    parent.style.width = "100%";
+
+    [cancelBtn, deleteBtn, saveBtn].forEach(function (btn) {
+      btn.style.width = "100%";
+      btn.style.minWidth = "0";
+      btn.style.height = "44px";
+      btn.style.margin = "0";
+      btn.style.padding = "0 8px";
+      btn.style.borderRadius = "12px";
+      btn.style.fontSize = "13px";
+    });
+
+    // 保存ボタンを確実に既存保存処理へ接続
+    saveBtn.onclick = function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (typeof saveReportPurchaseEditor_ === "function") {
+        saveReportPurchaseEditor_();
+      }
+    };
+  }
+
+  // 編集画面を開いた後に適用
+  document.addEventListener("click", function () {
+    setTimeout(fixReportEditButtons, 50);
+  });
+
+  setTimeout(fixReportEditButtons, 500);
+})();
