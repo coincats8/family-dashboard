@@ -31387,3 +31387,84 @@ if (!item) {
 
   setTimeout(addReportDeleteButton_, 500);
 })();
+
+// ===== レポート編集：削除ボタンを動かす =====
+(function () {
+  document.addEventListener("click", async function (e) {
+    if (!e.target.closest("#rpEditDelete")) return;
+
+    const sheet = document.getElementById("rpEditSheet");
+    if (!sheet) return;
+
+    // 編集画面に表示されている値を取得
+    const productName =
+      document.getElementById("rpEditProduct")?.value ||
+      document.getElementById("rpEditName")?.value ||
+      "";
+
+    const shop =
+      document.getElementById("rpEditShop")?.value || "";
+
+    const amount =
+      Number(
+        document.getElementById("rpEditPrice")?.value ||
+        document.getElementById("rpEditAmount")?.value ||
+        0
+      );
+
+    // 元の編集ボタンから対象rowを取得
+    const openedRow =
+      Number(
+        sheet.dataset.row ||
+        sheet.getAttribute("data-row") ||
+        0
+      );
+
+    if (!openedRow) {
+      showToast?.("削除対象を取得できませんでした");
+      return;
+    }
+
+    if (!confirm("この明細を削除しますか？")) return;
+
+    const btn = e.target.closest("#rpEditDelete");
+    btn.disabled = true;
+    btn.textContent = "削除中…";
+
+    try {
+      const response = await fetch(API_BASE, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8"
+        },
+        body: JSON.stringify({
+          action: "deletePurchaseItems",
+          items: [{
+            row: openedRow,
+            shop: shop,
+            productName: productName,
+            amount: amount
+          }]
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result?.success !== true) {
+        throw new Error(result?.error || "削除に失敗しました");
+      }
+
+      document.getElementById("rpEditSheet")?.remove();
+
+      showToast?.("削除しました");
+
+      location.reload();
+
+    } catch (err) {
+      console.error(err);
+      showToast?.("削除できませんでした");
+      btn.disabled = false;
+      btn.textContent = "削除";
+    }
+  }, true);
+})();
