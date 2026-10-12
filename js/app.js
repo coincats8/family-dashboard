@@ -31204,3 +31204,160 @@ if (
     }
   }
 })();
+
+// =========================================================
+// レポート購入履歴：削除ボタン追加
+// =========================================================
+(function () {
+  "use strict";
+
+  async function deleteReportPurchaseItem_() {
+    const item = reportEditingItem_;
+
+    if (!item) {
+      return;
+    }
+
+    const name =
+      typeof rpProductName_ === "function"
+        ? rpProductName_(item)
+        : String(item.productName || item.name || "");
+
+    const shop = String(item.shop || "");
+    const amount = Number(item.amount) || 0;
+
+    const ok = window.confirm(
+      "この明細を削除しますか？\n\n" +
+      name +
+      (shop ? "\n" + shop : "") +
+      (amount ? "\n¥" + amount.toLocaleString("ja-JP") : "") +
+      "\n\n削除すると元に戻せません。"
+    );
+
+    if (!ok) {
+      return;
+    }
+
+    const button =
+      document.getElementById("rpEditDelete");
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "削除中…";
+    }
+
+    try {
+      const response = await fetch(API_BASE, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8"
+        },
+        body: JSON.stringify({
+          action: "deletePurchaseItems",
+          items: [
+            {
+              row: Number(item.row),
+              shop: shop,
+              productName: name,
+              amount: amount
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+      }
+
+      const result = await response.json();
+
+      if (!result || result.success !== true) {
+        throw new Error(
+          result?.error || "削除できませんでした"
+        );
+      }
+
+      closeReportPurchaseEditor_();
+
+      if (typeof showToast === "function") {
+        showToast("明細を削除しました");
+      }
+
+      if (typeof loadReportPurchaseHistory_ === "function") {
+        await loadReportPurchaseHistory_();
+      }
+
+      if (typeof refreshReceiptPage === "function") {
+        await refreshReceiptPage();
+      }
+
+      if (typeof loadDashboard === "function") {
+        await loadDashboard();
+      }
+    } catch (error) {
+      console.error(
+        "Report purchase delete error:",
+        error
+      );
+
+      if (typeof showToast === "function") {
+        showToast(
+          "削除できませんでした：" +
+          String(error.message || error)
+        );
+      }
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "削除";
+      }
+    }
+  }
+
+  function addReportDeleteButton_() {
+    const saveButton =
+      document.getElementById("rpEditSave");
+
+    if (
+      !saveButton ||
+      document.getElementById("rpEditDelete")
+    ) {
+      return;
+    }
+
+    const deleteButton =
+      document.createElement("button");
+
+    deleteButton.type = "button";
+    deleteButton.id = "rpEditDelete";
+    deleteButton.textContent = "削除";
+
+    deleteButton.style.height = "46px";
+    deleteButton.style.padding = "0 16px";
+    deleteButton.style.border = "0";
+    deleteButton.style.borderRadius = "14px";
+    deleteButton.style.background = "#ffe9ec";
+    deleteButton.style.color = "#d6303a";
+    deleteButton.style.fontWeight = "800";
+    deleteButton.style.cursor = "pointer";
+
+    deleteButton.addEventListener(
+      "click",
+      deleteReportPurchaseItem_
+    );
+
+    saveButton.parentElement.insertBefore(
+      deleteButton,
+      saveButton
+    );
+  }
+
+  document.addEventListener(
+    "click",
+    function () {
+      setTimeout(addReportDeleteButton_, 0);
+    }
+  );
+
+  setTimeout(addReportDeleteButton_, 500);
+})();
