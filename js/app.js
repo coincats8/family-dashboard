@@ -31212,7 +31212,33 @@ if (
   "use strict";
 
   async function deleteReportPurchaseItem_() {
-    const item = reportEditingItem_;
+    const sheet = document.getElementById("rpEditSheet");
+
+const row = Number(
+  sheet?.dataset?.row ||
+  sheet?.getAttribute("data-row") ||
+  0
+);
+
+const item =
+  Array.isArray(reportPurchaseItems_)
+    ? reportPurchaseItems_.find(function (entry) {
+        return Number(entry.row) === row;
+      })
+    : null;
+
+if (!item) {
+  console.error(
+    "削除対象の明細を取得できません",
+    { row: row }
+  );
+
+  if (typeof showToast === "function") {
+    showToast("削除対象の明細を取得できませんでした");
+  }
+
+  return;
+}
 
     if (!item) {
       return;
