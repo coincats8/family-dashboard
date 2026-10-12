@@ -31221,10 +31221,7 @@ const row = Number(
 );
 
 const item = {
-  row: row,
-  shop: document.getElementById("rpEditShop")?.value || "",
-  productName: document.getElementById("rpEditProduct")?.value || "-",
-  amount: Number(document.getElementById("rpEditPrice")?.value || 0)
+  row: row
 };
 
 if (!item) {
