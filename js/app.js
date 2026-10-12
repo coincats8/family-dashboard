@@ -31500,14 +31500,13 @@ if (!item) {
     });
 
     // 保存ボタンを確実に既存保存処理へ接続
-    saveBtn.onclick = function (e) {
-      e.preventDefault();
-      e.stopPropagation();
+        btn.style.fontSize = "13px";
+  });
 
-      if (typeof saveReportPurchaseEditor_ === "function") {
-        saveReportPurchaseEditor_();
-      }
-    };
+}
+
+// 編集画面を開いた後に適用
+document.addEventListener("click", function () {
   }
 
   // 編集画面を開いた後に適用
