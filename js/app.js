@@ -31498,13 +31498,7 @@ if (!item) {
       btn.style.borderRadius = "12px";
       btn.style.fontSize = "13px";
     });
-
 }
-
-// 編集画面を開いた後に適用
-document.addEventListener("click", function () {
-  }
-
   // 編集画面を開いた後に適用
   document.addEventListener("click", function () {
     setTimeout(fixReportEditButtons, 50);
