@@ -31499,10 +31499,6 @@ if (!item) {
       btn.style.fontSize = "13px";
     });
 
-    // 保存ボタンを確実に既存保存処理へ接続
-        btn.style.fontSize = "13px";
-  });
-
 }
 
 // 編集画面を開いた後に適用
