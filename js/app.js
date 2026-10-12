@@ -8955,7 +8955,6 @@ loadDashboard =
       );
 
     if (
-      !productName ||
       !shop ||
       !date ||
       !normalizedName ||
